@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import {
+  BoltIcon,
   BoxCubeIcon,
   CalenderIcon,
   ChevronDownIcon,
@@ -52,6 +53,11 @@ const navItems: NavItem[] = [
       { name: "Rider List", path: "/riders" },
       { name: "Add Rider", path: "/riders/add" },
     ],
+  },
+  {
+    icon: <BoltIcon />,
+    name: "E-Bikes",
+    path: "/ebikes",
   },
   {
     icon: <PlugInIcon />,
