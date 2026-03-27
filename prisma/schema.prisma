@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Rider {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String   @unique
+  email     String?  @unique
+  password  String
+  status    String   @default("active") // active, suspended
+  nid       String?
+  trips     Trip[]
+  orders    Order[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Vehicle {
+  id          Int      @id @default(autoincrement())
+  regNumber   String   @unique
+  model       String
+  type        String   @default("electric")
+  status      String   @default("available") // available, in_use, maintenance
+  battery     Int      @default(100)
+  image       String?
+  trips       Trip[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Trip {
+  id          Int           @id @default(autoincrement())
+  riderId     Int
+  vehicleId   Int
+  startTime   DateTime      @default(now())
+  endTime     DateTime?
+  status      String        @default("ongoing") // ongoing, completed, cancelled
+  distance    Float?        @default(0)
+  fare        Float?        @default(0)
+  startLoc    String?
+  endLoc      String?
+  rider       Rider         @relation(fields: [riderId], references: [id])
+  vehicle     Vehicle       @relation(fields: [vehicleId], references: [id])
+  locationLogs LocationLog[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  firstName String
+  lastName  String
+  email     String   @unique
+  phone     String   @unique
+  street    String?
+  city      String?
+  state     String?
+  zip       String?
+  image     String?
+  orders    Order[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LocationLog {
+  id        Int      @id @default(autoincrement())
+  tripId    Int
+  lat       Float
+  lng       Float
+  timestamp DateTime @default(now())
+  trip      Trip     @relation(fields: [tripId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id          Int      @id @default(autoincrement())
+  customerId  Int
+  customer    Customer @relation(fields: [customerId], references: [id])
+  riderId     Int?
+  rider       Rider?   @relation(fields: [riderId], references: [id])
+  status      String   @default("Pending") // Pending, On the way, Delivered, Canceled
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

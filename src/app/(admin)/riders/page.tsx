@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -12,57 +12,58 @@ import Select from "@/components/form/Select";
 import Link from "next/link";
 
 interface Rider {
-  id: string;
+  id: number;
   name: string;
   phone: string;
-  status: "Available" | "Busy" | "Offline";
-  totalDeliveries: number;
+  email: string | null;
+  status: string;
+  _count: {
+    trips: number;
+  };
 }
 
-const tableData: Rider[] = [
-  {
-    id: "RID-001",
-    name: "Mike Swift",
-    phone: "+1 987 654 321",
-    status: "Available",
-    totalDeliveries: 156,
-  },
-  {
-    id: "RID-002",
-    name: "Leo Bolt",
-    phone: "+1 987 654 322",
-    status: "Busy",
-    totalDeliveries: 89,
-  },
-  {
-    id: "RID-003",
-    name: "Sarah Dash",
-    phone: "+1 987 654 323",
-    status: "Available",
-    totalDeliveries: 124,
-  },
-  {
-    id: "RID-004",
-    name: "Tom Racer",
-    phone: "+1 987 654 324",
-    status: "Offline",
-    totalDeliveries: 45,
-  },
-  {
-    id: "RID-005",
-    name: "Anna Sprint",
-    phone: "+1 987 654 325",
-    status: "Available",
-    totalDeliveries: 210,
-  },
-];
-
 export default function RiderList() {
+  const [riders, setRiders] = useState<Rider[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const fetchRiders = async () => {
+    try {
+      const response = await fetch("/api/riders");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to fetch riders");
+      setRiders(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRiders();
+  }, []);
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this rider?")) return;
+
+    try {
+      const response = await fetch(`/api/riders/${id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to delete rider");
+      
+      setRiders((prev) => prev.filter((r) => r.id !== id));
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const statusOptions = [
-    { value: "Available", label: "Available" },
-    { value: "Busy", label: "Busy" },
-    { value: "Offline", label: "Offline" },
+    { value: "active", label: "Active" },
+    { value: "suspended", label: "Suspended" },
   ];
+
+  if (loading) return <div className="p-6">Loading riders...</div>;
 
   return (
     <div className="space-y-6">
@@ -87,6 +88,8 @@ export default function RiderList() {
         </div>
       </div>
 
+      {error && <div className="p-4 text-error-600 bg-error-50 rounded-lg">{error}</div>}
+
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
         <div className="max-w-full overflow-x-auto">
           <div className="min-w-[800px]">
@@ -94,7 +97,7 @@ export default function RiderList() {
               <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                 <TableRow>
                   <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                    Rider ID
+                    ID
                   </TableCell>
                   <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
                     Name
@@ -106,7 +109,7 @@ export default function RiderList() {
                     Status
                   </TableCell>
                   <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                    Total Deliveries
+                    Trips
                   </TableCell>
                   <TableCell isHeader className="px-5 py-3 font-medium text-gray-500 text-end text-theme-xs dark:text-gray-400">
                     Actions
@@ -114,10 +117,10 @@ export default function RiderList() {
                 </TableRow>
               </TableHeader>
               <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                {tableData.map((rider) => (
+                {riders.map((rider) => (
                   <TableRow key={rider.id}>
                     <TableCell className="px-5 py-4 text-start font-medium text-gray-800 text-theme-sm dark:text-white/90">
-                      {rider.id}
+                      #{rider.id}
                     </TableCell>
                     <TableCell className="px-5 py-4 text-start text-gray-500 text-theme-sm dark:text-gray-400">
                       {rider.name}
@@ -129,38 +132,42 @@ export default function RiderList() {
                       <Badge
                         size="sm"
                         color={
-                          rider.status === "Available"
+                          rider.status === "active"
                             ? "success"
-                            : rider.status === "Busy"
-                            ? "warning"
-                            : "dark"
+                            : "warning"
                         }
                       >
                         {rider.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-5 py-4 text-start text-gray-500 text-theme-sm dark:text-gray-400">
-                      {rider.totalDeliveries}
+                      {rider._count.trips}
                     </TableCell>
                     <TableCell className="px-5 py-4 text-end">
                       <div className="flex items-center justify-end gap-3">
-                        <button
-                          title={`Edit ${rider.name}`}
+                        <Link
+                          href={`/riders/${rider.id}/edit`}
                           className="text-brand-500 hover:text-brand-600 text-sm font-medium"
                         >
                           Edit
-                        </button>
-                        <Link
-                          href={`/riders/${rider.id}/report`}
-                          title={`View report for ${rider.name}`}
-                          className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
-                        >
-                          Report
                         </Link>
+                        <button
+                          onClick={() => handleDelete(rider.id)}
+                          className="text-error-500 hover:text-error-600 text-sm font-medium"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </TableCell>
                   </TableRow>
                 ))}
+                {riders.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="px-5 py-10 text-center text-gray-500">
+                      No riders found.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>

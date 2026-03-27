@@ -1,14 +1,18 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import ComponentCard from "@/components/common/ComponentCard";
 import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import Select from "@/components/form/Select";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
-export default function AddRider() {
+export default function EditRider() {
   const router = useRouter();
+  const params = useParams();
+  const id = params?.id as string;
+
   const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState("");
   const [form, setForm] = useState({
     name: "",
@@ -24,6 +28,31 @@ export default function AddRider() {
     { value: "suspended", label: "Suspended" },
   ];
 
+  useEffect(() => {
+    const fetchRider = async () => {
+      try {
+        const response = await fetch(`/api/riders/${id}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to fetch rider");
+
+        setForm({
+          name: data.name || "",
+          phone: data.phone || "",
+          email: data.email || "",
+          password: "",
+          nid: data.nid || "",
+          status: data.status || "active",
+        });
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setFetchLoading(false);
+      }
+    };
+
+    if (id) fetchRider();
+  }, [id]);
+
   const handleChange = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
@@ -34,14 +63,17 @@ export default function AddRider() {
     setError("");
 
     try {
-      const response = await fetch("/api/riders", {
-        method: "POST",
+      const body: any = { ...form };
+      if (!body.password) delete body.password; // Don't update password if blank
+
+      const response = await fetch(`/api/riders/${id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to create rider");
+      if (!response.ok) throw new Error(data.error || "Failed to update rider");
 
       router.push("/riders");
     } catch (err: any) {
@@ -51,14 +83,16 @@ export default function AddRider() {
     }
   };
 
+  if (fetchLoading) return <div className="p-6">Loading rider data...</div>;
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-white/90">
-          Add New Rider
+          Edit Rider
         </h2>
         <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">
-          Fill in the details to register a new rider in the system.
+          Update rider information. Leave password blank to keep the current one.
         </p>
       </div>
 
@@ -104,13 +138,12 @@ export default function AddRider() {
               />
             </div>
             <div>
-              <Label>Password <span className="text-error-500">*</span></Label>
+              <Label>New Password (optional)</Label>
               <Input
                 type="password"
-                placeholder="Set a password"
+                placeholder="Leave blank to keep current"
                 value={form.password}
                 onChange={(e) => handleChange("password", e.target.value)}
-                required
               />
             </div>
           </div>
@@ -126,10 +159,10 @@ export default function AddRider() {
               />
             </div>
             <div>
-              <Label>Initial Status</Label>
+              <Label>Status</Label>
               <Select
                 options={statusOptions}
-                placeholder="Select status"
+                placeholder={form.status}
                 onChange={(val) => handleChange("status", val)}
               />
             </div>
@@ -148,7 +181,7 @@ export default function AddRider() {
               disabled={loading}
               className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
             >
-              {loading ? "Adding..." : "Add Rider"}
+              {loading ? "Saving..." : "Save Changes"}
             </button>
           </div>
         </form>
