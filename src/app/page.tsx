@@ -37,7 +37,7 @@ export default function RootLandingPage() {
           </div>
         </section>
       </main>
-      <UserFooter />
+      {/* <UserFooter /> */}
     </div>
   );
 }

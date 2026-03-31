@@ -56,27 +56,6 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
         <UserHeader />
 
-        {/* Simulation Bar */}
-        {/* <div className="bg-brand-600 dark:bg-brand-900 border-b border-brand-500 py-2 px-4 sticky top-0 z-[100] shadow-md flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-white text-xs font-bold uppercase tracking-wider">Simulating As:</span>
-            <select 
-              value={activeUser?.id || ""} 
-              onChange={handleSelect}
-              className="bg-brand-700 dark:bg-brand-800 text-white text-xs font-bold rounded-lg border-brand-400 focus:outline-none focus:ring-1 focus:ring-white border px-2 py-1"
-            >
-              <option value="">Guest User / No Profile</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
-              ))}
-            </select>
-          </div> */}
-        {activeUser && (
-          <div className="text-white text-[10px] sm:text-xs">
-            📞 {activeUser.phone} | ✉️ {activeUser.email}
-          </div>
-        )}
-        {/* </div>} */}
 
         <main className="mx-auto w-full max-w-(--breakpoint-2xl) px-4 py-6 md:px-6">
           {showCurrentOrder ? <CurrentOrderBanner /> : null}

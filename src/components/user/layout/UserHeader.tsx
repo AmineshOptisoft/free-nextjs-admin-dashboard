@@ -13,12 +13,21 @@ export default function UserHeader() {
   const { user: activeUser } = useContext(UserContext) as any;
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [open, setOpen] = useState(false);
+  const [pendingPath, setPendingPath] = useState("");
   const showAuthButtons = (pathname === "/" || pathname === "/user") && !activeUser;
   const showUserIcon = pathname !== "/user" || activeUser;
 
-  const openModal = (mode: "login" | "signup") => {
+  const openModal = (mode: "login" | "signup", path?: string) => {
     setAuthMode(mode);
+    setPendingPath(path || "");
     setOpen(true);
+  };
+
+  const handleNavClick = (e: React.MouseEvent, path: string) => {
+    if (!activeUser) {
+      e.preventDefault();
+      openModal("login", path);
+    }
   };
 
   return (
@@ -38,18 +47,21 @@ export default function UserHeader() {
             </Link>
             <Link
               href="/user/orders"
+              onClick={(e) => handleNavClick(e, '/user/orders')}
               className="text-sm font-medium text-gray-600 hover:text-brand-600 dark:text-gray-300"
             >
               My Orders
             </Link>
             <Link
               href="/user/track"
+              onClick={(e) => handleNavClick(e, '/user/track')}
               className="text-sm font-medium text-gray-600 hover:text-brand-600 dark:text-gray-300"
             >
               Track
             </Link>
             <Link
               href="/user/profile"
+              onClick={(e) => handleNavClick(e, '/user/profile')}
               className="text-sm font-medium text-gray-600 hover:text-brand-600 dark:text-gray-300"
             >
               Profile
@@ -101,7 +113,7 @@ export default function UserHeader() {
           </div>
         </div>
       </header>
-      <UserAuthModal mode={authMode} open={open} onClose={() => setOpen(false)} />
+      <UserAuthModal mode={authMode} open={open} onClose={() => setOpen(false)} pendingPath={pendingPath} />
     </>
   );
 }

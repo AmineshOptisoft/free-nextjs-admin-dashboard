@@ -41,6 +41,7 @@
     "react-dropzone": "^14.3.8",
     "react-google-autocomplete": "^2.7.5",
     "react-leaflet": "^5.0.0",
+    "react-onesignal": "^3.5.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "swiper": "^11.2.10",

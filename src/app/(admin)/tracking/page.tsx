@@ -213,7 +213,13 @@ export default function Tracking() {
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Select Rider</label>
               <select
                 value={assignData.riderId}
-                onChange={(e) => setAssignData({ ...assignData, riderId: e.target.value })}
+                onChange={(e) => {
+                  const selectedRiderId = e.target.value;
+                  const selectedRider = liveRiders.find(r => r.riderId?.toString() === selectedRiderId);
+                  // Auto-set vehicle if rider has an assigned vehicle
+                  const autoVehicleId = selectedRider?.assignedVehicleId?.toString() || "";
+                  setAssignData({ riderId: selectedRiderId, vehicleId: autoVehicleId });
+                }}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm font-medium"
                 required
               >
@@ -221,24 +227,45 @@ export default function Tracking() {
                 {liveRiders.filter(r => r.status === 'free').map((r: any) => (
                   <option key={r.riderId} value={r.riderId}>
                     👤 {r.name && r.name !== "Unknown" ? r.name : `Unit #${r.riderId}`} — {r.area || "Signal Locked"}
+                    {r.assignedVehicleId ? " ⚡" : ""}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Select EV Vehicle</label>
-              <select
-                value={assignData.vehicleId}
-                onChange={(e) => setAssignData({ ...assignData, vehicleId: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm font-medium"
-                required
-              >
-                <option value="">— Choose Available EV —</option>
-                {vehicles.filter(v => v.status === 'available').map((v: any) => (
-                  <option key={v.id} value={v.id}>⚡ {v.regNumber} — {v.model}</option>
-                ))}
-              </select>
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">EV Vehicle</label>
+              {(() => {
+                const selectedRider = liveRiders.find(r => r.riderId?.toString() === assignData.riderId);
+                const assignedVehicle = vehicles.find(v => v.id?.toString() === selectedRider?.assignedVehicleId?.toString());
+
+                if (assignedVehicle) {
+                  return (
+                    <div className="flex items-center gap-3 p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700 rounded-xl">
+                      <span className="text-brand-500 text-lg">⚡</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-brand-700 dark:text-brand-300">{assignedVehicle.regNumber}</p>
+                        <p className="text-xs text-gray-500">{assignedVehicle.model} · 🔋{assignedVehicle.battery}%  — Auto-assigned</p>
+                      </div>
+                      <span className="text-xs font-bold text-brand-500 bg-brand-100 dark:bg-brand-900/40 px-2 py-0.5 rounded-full">Locked</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <select
+                    value={assignData.vehicleId}
+                    onChange={(e) => setAssignData({ ...assignData, vehicleId: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm font-medium"
+                    required
+                  >
+                    <option value="">— Choose Available EV —</option>
+                    {vehicles.filter(v => v.status === 'available').map((v: any) => (
+                      <option key={v.id} value={v.id}>⚡ {v.regNumber} — {v.model} 🔋{v.battery}%</option>
+                    ))}
+                  </select>
+                );
+              })()}
             </div>
           </div>
 

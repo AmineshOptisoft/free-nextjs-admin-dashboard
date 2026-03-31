@@ -143,8 +143,9 @@ export default function OrdersList() {
       </ComponentCard>
 
       {/* Assignment Modal */}
-      <Modal isOpen={assignModalOpen} onClose={() => setAssignModalOpen(false)} title="Assign Trip">
-        <form onSubmit={handleAssign} className="space-y-4">
+      <Modal isOpen={assignModalOpen} onClose={() => setAssignModalOpen(false)}>
+        <form onSubmit={handleAssign} className="space-y-4 p-4">
+          <h3 className="text-lg font-bold text-gray-800 dark:text-white">Assign Trip</h3>
           <div>
             <Label>Select Rider</Label>
             <select

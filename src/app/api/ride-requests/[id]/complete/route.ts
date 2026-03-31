@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishNotification } from '@/lib/redis-pub'
+import { sendPushNotification } from '@/lib/onesignal-server'
 
 // POST /api/ride-requests/[id]/complete
 // Rider marks the ride as complete after dropping customer. Payment is then collected.
@@ -93,6 +94,13 @@ export async function POST(
       amount: finalFare,
       customerName: `${order.customer.firstName} ${order.customer.lastName}`,
       message: `🏁 Trip completed: Ride #ORD-${orderId} finished. ₹${finalFare} collected.`
+    });
+
+    sendPushNotification({
+      title: "Ride Completed ✅",
+      message: `Your ride is complete! Thanks for riding with Kadi. Total Fare: ₹${finalFare}`,
+      url: `/user/orders`,
+      userIds: [order.customerId.toString()]
     });
 
     return NextResponse.json({

@@ -36,7 +36,7 @@ export default function SignInForm() {
       }
 
       // Success! Next.js route handler sets the cookie.
-      router.push("/"); // Redirect to dashboard
+      router.push("/admin"); // Redirect to admin dashboard
       router.refresh();
     } catch (err: any) {
       setError(err.message);
@@ -63,7 +63,7 @@ export default function SignInForm() {
               Sign In
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Enter {email === 'admin@evfleet.com' ? 'Super Admin' : 'your'} email and password to sign in!
+              Enter {email === 'admin@evfleet.com' ? 'Admin' : 'your'} email and password to sign in!
             </p>
           </div>
           <div>

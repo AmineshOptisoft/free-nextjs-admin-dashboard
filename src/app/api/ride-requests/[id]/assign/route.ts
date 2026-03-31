@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishNotification } from '@/lib/redis-pub'
+import { sendPushNotification } from '@/lib/onesignal-server'
 
 export async function POST(
   request: Request,
@@ -72,6 +73,12 @@ export async function POST(
       riderId: parseInt(riderId),
       vehicleId: parseInt(vehicleId),
       message: `🎯 Booking #ORD-${orderId} assigned to you!`
+    });
+
+    sendPushNotification({
+      title: "New Ride Assigned 🎯",
+      message: `You have been assigned to Order #ORD-${orderId}. Please review the pickup details.`,
+      url: `/rider/orders/${orderId}`,
     });
 
     return NextResponse.json({

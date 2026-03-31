@@ -15,9 +15,13 @@ export async function GET() {
         lastLng: true,
         lastArea: true,
         lastUpdated: true,
+        assignedVehicleId: true,
         assignedVehicle: {
           select: {
+             id: true,
              regNumber: true,
+             model: true,
+             battery: true,
              status: true
           }
         }
@@ -32,7 +36,9 @@ export async function GET() {
       lng: r.lastLng || 77.2090,
       area: r.lastArea || "Unknown",
       lastSeen: r.lastUpdated ? r.lastUpdated.getTime() : Date.now(),
-      status: r.assignedVehicle?.status === 'in_use' ? 'busy' : 'free'
+      status: r.assignedVehicle?.status === 'in_use' ? 'busy' : 'free',
+      assignedVehicleId: r.assignedVehicleId ?? null,
+      assignedVehicle: r.assignedVehicle ?? null,
     }))
 
     return NextResponse.json(formatted)

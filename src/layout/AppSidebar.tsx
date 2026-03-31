@@ -20,6 +20,34 @@ import {
 } from "../icons/index";
 import SidebarWidget from "./SidebarWidget";
 
+// Logo with fallback avatar
+function LogoAvatar({ size }: { size: number }) {
+  const [imgError, setImgError] = useState(false);
+  const fontSize = size >= 40 ? "text-xl" : "text-base";
+
+  if (imgError) {
+    return (
+      <span
+        style={{ width: size, height: size }}
+        className={`flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white font-extrabold shadow-md ${fontSize}`}
+      >
+        K
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src="/images/logo/Kadi-logo.png"
+      alt="Kadi Logo"
+      width={size}
+      height={size}
+      className="rounded-lg object-contain"
+      onError={() => setImgError(true)}
+    />
+  );
+}
+
 type NavItem = {
   name: string;
   icon: React.ReactNode;
@@ -281,23 +309,11 @@ const AppSidebar: React.FC = () => {
         <Link href="/admin">
           {isExpanded || isHovered || isMobileOpen ? (
             <div className="flex items-center gap-3">
-              <Image
-                src="/images/logo/Kadi-logo.png"
-                alt="Logo"
-                width={40}
-                height={40}
-                className="rounded-lg"
-              />
+              <LogoAvatar size={40} />
               <span className="text-2xl font-bold text-gray-900 dark:text-white">Kadi</span>
             </div>
           ) : (
-            <Image
-              src="/images/logo/Kadi-logo.png"
-              alt="Logo"
-              width={32}
-              height={32}
-              className="rounded-lg"
-            />
+            <LogoAvatar size={32} />
           )}
         </Link>
       </div>

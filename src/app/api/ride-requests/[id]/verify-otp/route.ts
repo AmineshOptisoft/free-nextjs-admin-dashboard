@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishNotification } from '@/lib/redis-pub'
+import { sendPushNotification } from '@/lib/onesignal-server'
 
 // POST /api/ride-requests/[id]/verify-otp
 // Rider arrives at pickup, customer shows OTP — rider verifies it to START the trip
@@ -78,7 +79,15 @@ export async function POST(
     await publishNotification('trip-started', {
       orderId,
       riderId: order.riderId!,
-      message: `🚕 Ride started: Order #ORD-${orderId} is now ONGOING.`
+      message: `OTP Verified! Trip to ${order.dropLoc} has started.`,
+      customer: `${order.customer.firstName} ${order.customer.lastName}`,
+      destination: order.dropLoc
+    })
+
+    sendPushNotification({
+      title: "Ride Started 🚗",
+      message: `OTP verified! Your ride with ${order.rider?.name} to ${order.dropLoc} is on the way.`,
+      url: `/user/track/${orderId}`,
     });
 
     return NextResponse.json({

@@ -36,6 +36,7 @@ export default function BookRidePage() {
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [customers, setCustomers] = useState<any[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [activeRideOrder, setActiveRideOrder] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -86,9 +87,19 @@ export default function BookRidePage() {
         email: activeUser.email,
         phone: activeUser.phone,
       }));
-      setStep(1);
+      setStep(2);
+
+      // Check if user already has an active ride
+      fetch(`/api/customers/${activeUser.id}/active-order`, {
+        cache: 'no-store'
+      })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.activeOrder) setActiveRideOrder(data.activeOrder);
+        })
+        .catch(() => {});
     } else {
-      setStep(0);
+      setStep(1);
     }
   }, [activeUser]);
 
@@ -114,7 +125,7 @@ export default function BookRidePage() {
         email: customer.email,
         phone: customer.phone,
       }));
-      setStep(1);
+      setStep(2);
     }
   };
 
@@ -163,6 +174,10 @@ export default function BookRidePage() {
         body: JSON.stringify(formData),
       });
       const data = await res.json();
+      if (res.status === 409 && data.error === 'active_ride') {
+        setActiveRideOrder(data.activeOrder);
+        return;
+      }
       if (!res.ok) setError(data.error || "Failed to place ride request.");
       else setSuccess(data);
     } catch {
@@ -171,6 +186,44 @@ export default function BookRidePage() {
       setLoading(false);
     }
   };
+
+  // ── Active Ride Block Screen ─────────────────────────────────────────────
+  if (activeRideOrder) {
+    return (
+      <div className="max-w-md mx-auto mt-8 space-y-4">
+        <div className="rounded-2xl border-2 border-orange-300 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700 p-6 text-center">
+          <div className="mx-auto mb-3 text-4xl">🛵</div>
+          <h2 className="text-xl font-bold text-orange-800 dark:text-orange-300">Ride Already Active!</h2>
+          <p className="mt-1 text-sm text-orange-600 dark:text-orange-400">
+            Aapki ek ride pehle se chal rahi hai. Nayi ride book karne se pehle ise complete karo.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-gray-400 uppercase">Order</span>
+            <span className="text-xs font-bold text-brand-600">#ORD-{activeRideOrder.id.toString().padStart(3,'0')}</span>
+          </div>
+          <div className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">
+            {activeRideOrder.status}
+          </div>
+          {activeRideOrder.pickupLoc && <p className="text-xs text-gray-500">📍 {activeRideOrder.pickupLoc}</p>}
+          {activeRideOrder.dropLoc && <p className="text-xs text-gray-500">🏁 {activeRideOrder.dropLoc}</p>}
+        </div>
+        <button
+          onClick={() => router.push(`/user/track/${activeRideOrder.id}`)}
+          className="w-full py-4 bg-brand-500 hover:bg-brand-600 text-white font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all"
+        >
+          Track Active Ride 🛰️
+        </button>
+        <button
+          onClick={() => setActiveRideOrder(null)}
+          className="w-full py-3 border border-gray-200 rounded-2xl text-sm font-medium text-gray-500 hover:bg-gray-50"
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
 
   if (success) {
     const { order, nearbyRiders } = success;
@@ -216,36 +269,29 @@ export default function BookRidePage() {
         {error && <div className="mb-6 p-4 text-sm text-red-600 bg-red-50 rounded-2xl border border-red-100">{error}</div>}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* {step === 0 && (
-             <div className="space-y-4">
-                <Label>Select Your Profile</Label>
-                <select value={selectedCustomerId} onChange={handleSelectCustomer} className="w-full h-12 px-4 rounded-xl border border-gray-200 dark:bg-gray-800 outline-none">
-                    <option value="">Choose profile...</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
-                </select>
-                <button type="button" onClick={() => setStep(1)} className="w-full text-brand-600 font-bold text-sm">Or Enter Manually ↓</button>
-             </div>
+          {step === 1 && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name</Label>
+                  <Input id="firstName" value={formData.firstName} onChange={handleChange} required placeholder="John" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input id="lastName" value={formData.lastName} onChange={handleChange} required placeholder="Doe" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone Number</Label>
+                <Input id="phone" type="tel" value={formData.phone} onChange={handleChange} required placeholder="9876543210" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
+                <Input id="email" type="email" value={formData.email} onChange={handleChange} placeholder="john@example.com (optional)" />
+              </div>
+              <button type="button" onClick={() => setStep(2)} className="w-full py-4 bg-brand-500 text-white font-bold rounded-2xl shadow-lg hover:bg-brand-600 transition-all">Confirm Details →</button>
+            </div>
           )}
-
-          {step === 1 && ( */}
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
-                <Input id="firstName" value={formData.firstName} onChange={handleChange} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
-                <Input id="lastName" value={formData.lastName} onChange={handleChange} required />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <Input id="phone" type="tel" value={formData.phone} onChange={handleChange} required />
-            </div>
-            <button type="button" onClick={() => setStep(2)} className="w-full py-4 bg-brand-500 text-white font-bold rounded-2xl shadow-lg hover:bg-brand-600 transition-all">Confirm Details →</button>
-          </div>
-          {/* )} */}
 
           {step === 2 && (
             <>

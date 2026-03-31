@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishNotification } from '@/lib/redis-pub'
+import { sendPushNotification } from '@/lib/onesignal-server'
 
 // POST /api/rider-app/accept
 // Rider self-accepts a pending ride near them
@@ -49,6 +50,13 @@ export async function POST(request: Request) {
       orderId: parseInt(orderId),
       riderId: parseInt(riderId),
       message: `✅ Ride accepted: Rider #${riderId} is heading to pick up Order #ORD-${orderId}.`
+    });
+
+    sendPushNotification({
+      title: "Rider En Route 🚘",
+      message: `Your ride has been accepted! Your driver is heading to your pickup location.`,
+      url: `/user/track/${orderId}`,
+      userIds: [order.customerId.toString()]
     });
 
     return NextResponse.json({

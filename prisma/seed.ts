@@ -14,7 +14,7 @@ async function main() {
       email: 'admin@evfleet.com',
       username: 'admin',
       password: hashedPassword,
-      name: 'Super Admin'
+      name: 'Admin'
     },
   })
 
