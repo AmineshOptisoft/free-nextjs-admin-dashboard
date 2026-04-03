@@ -6,7 +6,7 @@ import prisma from '@/lib/prisma'
 export async function GET() {
   try {
     const riders = await prisma.rider.findMany({
-      where: { status: 'active' },
+      where: { status: 0 },//'active'
       select: {
         id: true,
         name: true,
@@ -18,11 +18,11 @@ export async function GET() {
         assignedVehicleId: true,
         assignedVehicle: {
           select: {
-             id: true,
-             regNumber: true,
-             model: true,
-             battery: true,
-             status: true
+            id: true,
+            regNumber: true,
+            model: true,
+            battery: true,
+            status: true
           }
         }
       }
@@ -36,7 +36,7 @@ export async function GET() {
       lng: r.lastLng || 77.2090,
       area: r.lastArea || "Unknown",
       lastSeen: r.lastUpdated ? r.lastUpdated.getTime() : Date.now(),
-      status: r.assignedVehicle?.status === 'in_use' ? 'busy' : 'free',
+      status: r.assignedVehicle?.status === 2 ? 'busy' : 'free',//'in_use'
       assignedVehicleId: r.assignedVehicleId ?? null,
       assignedVehicle: r.assignedVehicle ?? null,
     }))

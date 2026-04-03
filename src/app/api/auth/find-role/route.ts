@@ -1,6 +1,30 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+/**
+ * @swagger
+ * /api/auth/find-role:
+ *   post:
+ *     summary: Find role by phone number
+ *     description: Checks if a phone number belongs to a Rider or a Customer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               phone:
+ *                 type: string
+ *                 example: "+1234567890"
+ *     responses:
+ *       200:
+ *         description: Successfully found role
+ *       400:
+ *         description: Phone number is required
+ *       500:
+ *         description: Internal Server Error
+ */
 export async function POST(request: Request) {
   try {
     const { phone } = await request.json()

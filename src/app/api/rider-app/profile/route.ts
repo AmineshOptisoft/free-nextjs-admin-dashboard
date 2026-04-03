@@ -1,6 +1,29 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+/**
+ * @swagger
+ * /api/rider-app/profile:
+ *   get:
+ *     tags:
+ *       - Rider Profile
+ *     summary: Get rider profile and stats
+ *     description: Fetch rider details, assigned vehicle, recent orders, trips, and performance stats (today's earnings, total earnings, etc.)
+ *     parameters:
+ *       - in: query
+ *         name: riderId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The rider's ID
+ *     responses:
+ *       200:
+ *         description: Rider profile fetched successfully
+ *       400:
+ *         description: riderId is required
+ *       404:
+ *         description: Rider not found
+ */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)

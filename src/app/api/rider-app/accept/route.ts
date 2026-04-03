@@ -5,6 +5,35 @@ import { sendPushNotification } from '@/lib/onesignal-server'
 
 // POST /api/rider-app/accept
 // Rider self-accepts a pending ride near them
+/**
+ * @swagger
+ * /api/rider-app/accept:
+ *   post:
+ *     tags:
+ *       - Rider Actions
+ *     summary: Accept a pending ride
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderId, riderId, vehicleId]
+ *             properties:
+ *               orderId:
+ *                 type: integer
+ *               riderId:
+ *                 type: integer
+ *               vehicleId:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Ride accepted
+ *       400:
+ *         description: Validation error or rider busy
+ *       404:
+ *         description: Order not found
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -21,13 +50,13 @@ export async function POST(request: Request) {
     })
 
     if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
-    if (order.status !== 'Pending') {
+    if (order.status !== 0) {//'Pending'
       return NextResponse.json({ error: 'This ride has already been accepted or is no longer available' }, { status: 400 })
     }
 
     // Check rider is free
     const riderBusy = await prisma.trip.findFirst({
-      where: { riderId: parseInt(riderId), status: 'ongoing' }
+      where: { riderId: parseInt(riderId), status: 3 }//'ongoing'
     })
     if (riderBusy) return NextResponse.json({ error: 'You are already on a trip' }, { status: 400 })
 
@@ -35,12 +64,12 @@ export async function POST(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       const updatedOrder = await tx.order.update({
         where: { id: parseInt(orderId) },
-        data: { riderId: parseInt(riderId), status: 'Accepted' },
+        data: { riderId: parseInt(riderId), status: 1 },//'Accepted'
         include: { customer: true }
       })
       await tx.vehicle.update({
         where: { id: parseInt(vehicleId) },
-        data: { status: 'in_use' }
+        data: { status: 2 }//'in_use'
       })
       return updatedOrder
     })

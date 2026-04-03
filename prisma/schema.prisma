@@ -17,55 +17,58 @@ model Admin {
 }
 
 model Rider {
-  id                Int      @id @default(autoincrement())
+  id                Int       @id @default(autoincrement())
   name              String
-  phone             String   @unique
-  email             String?  @unique
+  phone             String    @unique
+  email             String?   @unique
   password          String
-  status            String   @default("active") // active, suspended
+  status            Int       @default(0) // 0: Active, 1: Suspended, 2: Offline
   nid               String?
-  assignedVehicleId Int?     // Admin can permanently assign a vehicle
-  assignedVehicle   Vehicle? @relation("AssignedVehicle", fields: [assignedVehicleId], references: [id])
+  assignedVehicleId Int? // Admin can permanently assign a vehicle
+  assignedVehicle   Vehicle?  @relation("AssignedVehicle", fields: [assignedVehicleId], references: [id])
   trips             Trip[]
   orders            Order[]
-  lastLat           Float?   // Last known GPS latitude
-  lastLng           Float?   // Last known GPS longitude
-  lastArea          String?  // Last known neighborhood/locality
+  lastLat           Float? // Last known GPS latitude
+  lastLng           Float? // Last known GPS longitude
+  lastArea          String? // Last known neighborhood/locality
   lastUpdated       DateTime? // Timestamp of last signal
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  rating            Float?    @default(0)
+  resetOtpHash      String?
+  resetOtpExpiry    DateTime?
+  updatedAt         DateTime  @updatedAt
 }
 
 model Vehicle {
-  id              Int      @id @default(autoincrement())
-  regNumber       String   @unique
-  model           String
-  type            String   @default("electric")
-  status          String   @default("available") // available, in_use, maintenance
-  battery         Int      @default(100)
-  image           String?
-  trips           Trip[]
-  assignedRiders  Rider[]  @relation("AssignedVehicle")  // riders assigned to this vehicle
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  regNumber      String   @unique
+  model          String
+  type           String   @default("electric")
+  status         Int      @default(0) // 0: Available, 1: In Use, 2: Maintenance
+  battery        Int      @default(100)
+  image          String?
+  trips          Trip[]
+  assignedRiders Rider[]  @relation("AssignedVehicle") // riders assigned to this vehicle
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Trip {
-  id          Int           @id @default(autoincrement())
-  riderId     Int
-  vehicleId   Int
-  startTime   DateTime      @default(now())
-  endTime     DateTime?
-  status      String        @default("ongoing") // ongoing, completed, cancelled
-  distance    Float?        @default(0)
-  fare        Float?        @default(0)
-  startLoc    String?
-  endLoc      String?
-  rider       Rider         @relation(fields: [riderId], references: [id])
-  vehicle     Vehicle       @relation(fields: [vehicleId], references: [id])
+  id           Int           @id @default(autoincrement())
+  riderId      Int
+  vehicleId    Int
+  startTime    DateTime      @default(now())
+  endTime      DateTime?
+  status       Int           @default(0) // 0: Ongoing, 1: Completed, 2: Cancelled
+  distance     Float?        @default(0)
+  fare         Float?        @default(0)
+  startLoc     String?
+  endLoc       String?
+  rider        Rider         @relation(fields: [riderId], references: [id])
+  vehicle      Vehicle       @relation(fields: [vehicleId], references: [id])
   locationLogs LocationLog[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Customer {
@@ -74,11 +77,14 @@ model Customer {
   lastName  String
   email     String   @unique
   phone     String   @unique
+  password  String?
   street    String?
   city      String?
   state     String?
   zip       String?
   image     String?
+  resetOtpHash String?
+  resetOtpExpiry DateTime?
   orders    Order[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -95,14 +101,14 @@ model LocationLog {
 }
 
 model Order {
-  id          Int      @id @default(autoincrement())
-  customerId  Int
-  customer    Customer @relation(fields: [customerId], references: [id])
-  riderId     Int?
-  rider       Rider?   @relation(fields: [riderId], references: [id])
-  status      String   @default("Pending") // Pending, Accepted, Arrived, Started, Delivered, Canceled
-  date        DateTime @default(now())
-  
+  id         Int      @id @default(autoincrement())
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+  riderId    Int?
+  rider      Rider?   @relation(fields: [riderId], references: [id])
+  status     Int      @default(0) // 0: Pending, 1: Accepted, 2: Arrived, 3: Started, 4: Delivered, 5: Canceled
+  date       DateTime @default(now())
+
   // New ride request fields:
   pickupLat   Float?
   pickupLng   Float?
@@ -111,9 +117,9 @@ model Order {
   pickupLoc   String?
   dropLoc     String?
   otp         String?
-  paymentMode String?  @default("Cash")
+  paymentMode String? @default("Cash")
   amount      Float?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -3,6 +3,24 @@ import prisma from '@/lib/prisma'
 
 // GET /api/rider-app/pending-rides?riderId=X
 // Returns nearby pending ride orders for a rider
+/**
+ * @swagger
+ * /api/rider-app/pending-rides:
+ *   get:
+ *     tags:
+ *       - Rider Actions
+ *     summary: Get pending rides near rider
+ *     parameters:
+ *       - in: query
+ *         name: riderId
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: The ID of the rider requesting pending rides
+ *     responses:
+ *       200:
+ *         description: Successfully fetched pending rides
+ */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -11,7 +29,7 @@ export async function GET(request: Request) {
     // Check if rider is already on a trip
     if (riderId) {
       const ongoingTrip = await prisma.trip.findFirst({
-        where: { riderId, status: 'ongoing' },
+        where: { riderId, status: 3 },//'ongoing'
         include: {
           vehicle: true,
           locationLogs: { orderBy: { timestamp: 'desc' }, take: 1 }
@@ -21,7 +39,7 @@ export async function GET(request: Request) {
       if (ongoingTrip) {
         // Rider is busy — return their current order
         const activeOrder = await prisma.order.findFirst({
-          where: { riderId, status: { in: ['Accepted', 'Started'] } },
+          where: { riderId, status: { in: [1, 2] } },//'Accepted', 'Started'
           include: { customer: true },
           orderBy: { updatedAt: 'desc' }
         })
@@ -35,7 +53,7 @@ export async function GET(request: Request) {
 
     // Rider is free — return all Pending orders
     const pendingOrders = await prisma.order.findMany({
-      where: { status: 'Pending' },
+      where: { status: 0 },//'Pending'
       include: { customer: true },
       orderBy: { createdAt: 'desc' }
     })

@@ -26,12 +26,12 @@ export async function POST(
     if (!existingOrder) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
-    if (existingOrder.status !== 'Pending') {
+    if (existingOrder.status !== 0) {//'Pending'
       return NextResponse.json({ error: 'Only Pending orders can be assigned' }, { status: 400 })
     }
 
     const riderBusy = await prisma.trip.findFirst({
-      where: { riderId: parseInt(riderId), status: 'ongoing' }
+      where: { riderId: parseInt(riderId), status: 3 }//'ongoing'
     })
     if (riderBusy) {
       return NextResponse.json({ error: 'Selected rider is already on a trip' }, { status: 400 })
@@ -43,7 +43,7 @@ export async function POST(
     }
 
     const vehicleBusy = await prisma.trip.findFirst({
-      where: { vehicleId: parseInt(vehicleId), status: 'ongoing' }
+      where: { vehicleId: parseInt(vehicleId), status: 3 }//'ongoing'
     })
     if (vehicleBusy) {
       return NextResponse.json({ error: 'Selected vehicle is already on a trip with another rider' }, { status: 400 })
@@ -54,14 +54,14 @@ export async function POST(
         where: { id: orderId },
         data: {
           riderId: parseInt(riderId),
-          status: 'Accepted',
+          status: 1,//'Accepted',
         },
         include: { customer: true, rider: true }
       })
 
       await tx.vehicle.update({
         where: { id: parseInt(vehicleId) },
-        data: { status: 'in_use' }
+        data: { status: 2 }//'in_use'
       })
 
       return { order: updatedOrder, vehicleId: parseInt(vehicleId) }

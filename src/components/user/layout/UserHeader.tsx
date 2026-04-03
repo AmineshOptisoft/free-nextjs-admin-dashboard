@@ -10,11 +10,11 @@ import { useContext } from "react";
 
 export default function UserHeader() {
   const pathname = usePathname();
-  const { user: activeUser } = useContext(UserContext) as any;
+  const { user: activeUser, logout } = useContext(UserContext) as any;
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [open, setOpen] = useState(false);
   const [pendingPath, setPendingPath] = useState("");
-  const showAuthButtons = (pathname === "/" || pathname === "/user") && !activeUser;
+  const showAuthButtons = !activeUser && (pathname === "/" || pathname.startsWith("/user"));
   const showUserIcon = pathname !== "/user" || activeUser;
 
   const openModal = (mode: "login" | "signup", path?: string) => {
@@ -39,6 +39,13 @@ export default function UserHeader() {
           </Link>
 
           <nav className="hidden items-center gap-5 md:flex">
+            <Link
+              href="/user/dashboard"
+              onClick={(e) => handleNavClick(e, "/user/dashboard")}
+              className="text-sm font-medium text-gray-600 hover:text-brand-600 dark:text-gray-300"
+            >
+              Dashboard
+            </Link>
             <Link
               href="/user/book-ride"
               className="text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 font-bold"
@@ -98,6 +105,13 @@ export default function UserHeader() {
                   <p className="text-xs font-bold text-gray-800 dark:text-gray-100">{activeUser.firstName}</p>
                   <p className="text-[10px] text-brand-600 font-medium">Customer</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => logout()}
+                  className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                >
+                  Logout
+                </button>
               </div>
             ) : null}
 

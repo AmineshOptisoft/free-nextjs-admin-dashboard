@@ -1,0 +1,83 @@
+﻿restore_data.ts(10,29): error TS7006: Parameter 's' implicitly has an 'any' type.
+restore_data.ts(10,36): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ Pending: number; Accepted: number; Arrived: number; Started: number; Delivered: number; Canceled: number; }'.
+restore_data.ts(11,29): error TS7006: Parameter 's' implicitly has an 'any' type.
+restore_data.ts(11,36): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ active: number; suspended: number; offline: number; }'.
+restore_data.ts(12,31): error TS7006: Parameter 's' implicitly has an 'any' type.
+restore_data.ts(12,38): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ available: number; in_use: number; maintenance: number; }'.
+restore_data.ts(13,28): error TS7006: Parameter 's' implicitly has an 'any' type.
+restore_data.ts(13,35): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ ongoing: number; completed: number; cancelled: number; }'.
+restore_data.ts(26,45): error TS7006: Parameter 'v' implicitly has an 'any' type.
+restore_data.ts(35,41): error TS7006: Parameter 'r' implicitly has an 'any' type.
+restore_data.ts(44,47): error TS7006: Parameter 'c' implicitly has an 'any' type.
+restore_data.ts(53,39): error TS7006: Parameter 't' implicitly has an 'any' type.
+restore_data.ts(62,41): error TS7006: Parameter 'o' implicitly has an 'any' type.
+src/app/api/admin/dashboard-stats/route.ts(18,26): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/admin/dashboard-stats/route.ts(18,38): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/admin/dashboard-stats/route.ts(18,49): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/admin/dashboard-stats/route.ts(22,18): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Order"> | undefined'.
+src/app/api/admin/dashboard-stats/route.ts(25,18): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Order"> | undefined'.
+src/app/api/admin/dashboard-stats/route.ts(28,18): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Rider"> | undefined'.
+src/app/api/admin/dashboard-stats/route.ts(31,18): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Order"> | undefined'.
+src/app/api/admin/dashboard-stats/route.ts(47,21): error TS18048: 'totalRevenue._sum' is possibly 'undefined'.
+src/app/api/book-ride/route.ts(92,24): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/book-ride/route.ts(92,35): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/book-ride/route.ts(92,47): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/book-ride/route.ts(92,58): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/book-ride/route.ts(129,9): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/book-ride/route.ts(147,33): error TS2551: Property 'customer' does not exist on type '{ id: number; createdAt: Date; updatedAt: Date; status: number; riderId: number | null; customerId: number; date: Date; pickupLat: number | null; pickupLng: number | null; ... 6 more ...; amount: number | null; }'. Did you mean 'customerId'?
+src/app/api/book-ride/route.ts(147,64): error TS2551: Property 'customer' does not exist on type '{ id: number; createdAt: Date; updatedAt: Date; status: number; riderId: number | null; customerId: number; date: Date; pickupLat: number | null; pickupLng: number | null; ... 6 more ...; amount: number | null; }'. Did you mean 'customerId'?
+src/app/api/book-ride/route.ts(150,74): error TS2551: Property 'customer' does not exist on type '{ id: number; createdAt: Date; updatedAt: Date; status: number; riderId: number | null; customerId: number; date: Date; pickupLat: number | null; pickupLng: number | null; ... 6 more ...; amount: number | null; }'. Did you mean 'customerId'?
+src/app/api/book-ride/route.ts(157,28): error TS2551: Property 'customer' does not exist on type '{ id: number; createdAt: Date; updatedAt: Date; status: number; riderId: number | null; customerId: number; date: Date; pickupLat: number | null; pickupLng: number | null; ... 6 more ...; amount: number | null; }'. Did you mean 'customerId'?
+src/app/api/book-ride/route.ts(164,9): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Rider"> | undefined'.
+src/app/api/book-ride/route.ts(166,19): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Trip"> | undefined'.
+src/app/api/book-ride/route.ts(174,20): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Trip"> | undefined'.
+src/app/api/book-ride/route.ts(190,31): error TS2339: Property 'trips' does not exist on type '{ password: string; name: string; id: number; email: string | null; createdAt: Date; updatedAt: Date; phone: string; status: number; nid: string | null; assignedVehicleId: number | null; ... 4 more ...; rating: number | null; }'.
+src/app/api/book-ride/route.ts(216,31): error TS2551: Property 'customer' does not exist on type '{ id: number; createdAt: Date; updatedAt: Date; status: number; riderId: number | null; customerId: number; date: Date; pickupLat: number | null; pickupLng: number | null; ... 6 more ...; amount: number | null; }'. Did you mean 'customerId'?
+src/app/api/book-ride/route.ts(216,62): error TS2551: Property 'customer' does not exist on type '{ id: number; createdAt: Date; updatedAt: Date; status: number; riderId: number | null; customerId: number; date: Date; pickupLat: number | null; pickupLng: number | null; ... 6 more ...; amount: number | null; }'. Did you mean 'customerId'?
+src/app/api/book-ride/route.ts(217,29): error TS2551: Property 'customer' does not exist on type '{ id: number; createdAt: Date; updatedAt: Date; status: number; riderId: number | null; customerId: number; date: Date; pickupLat: number | null; pickupLng: number | null; ... 6 more ...; amount: number | null; }'. Did you mean 'customerId'?
+src/app/api/customer-app/auth/login/route.ts(24,60): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(password: string, hash: string): Promise<boolean>', gave the following error.
+    Argument of type 'string | null' is not assignable to parameter of type 'string'.
+      Type 'null' is not assignable to type 'string'.
+  Overload 2 of 2, '(password: string, hash: string, callback?: Callback<boolean> | undefined, progressCallback?: ProgressCallback | undefined): void', gave the following error.
+    Argument of type 'string | null' is not assignable to parameter of type 'string'.
+      Type 'null' is not assignable to type 'string'.
+src/app/api/customers/[id]/active-order/route.ts(21,24): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/customers/[id]/active-order/route.ts(21,35): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/customers/[id]/active-order/route.ts(21,47): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/customers/[id]/active-order/route.ts(21,58): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/location-logs/route.ts(15,18): error TS2367: This comparison appears to be unintentional because the types 'number' and 'string' have no overlap.
+src/app/api/ride-requests/[id]/assign/route.ts(29,9): error TS2367: This comparison appears to be unintentional because the types 'number' and 'string' have no overlap.
+src/app/api/ride-requests/[id]/assign/route.ts(34,44): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Trip"> | undefined'.
+src/app/api/ride-requests/[id]/assign/route.ts(46,48): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Trip"> | undefined'.
+src/app/api/ride-requests/[id]/assign/route.ts(57,11): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/ride-requests/[id]/assign/route.ts(64,17): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/ride-requests/[id]/assign/route.ts(85,38): error TS2551: Property 'rider' does not exist on type '{ id: number; createdAt: Date; updatedAt: Date; status: number; riderId: number | null; customerId: number; date: Date; pickupLat: number | null; pickupLng: number | null; ... 6 more ...; amount: number | null; }'. Did you mean 'riderId'?
+src/app/api/ride-requests/[id]/cancel/route.ts(29,9): error TS2367: This comparison appears to be unintentional because the types 'number' and 'string' have no overlap.
+src/app/api/ride-requests/[id]/cancel/route.ts(29,41): error TS2367: This comparison appears to be unintentional because the types 'number' and 'string' have no overlap.
+src/app/api/ride-requests/[id]/cancel/route.ts(36,15): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/ride-requests/[id]/cancel/route.ts(43,43): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Trip"> | undefined'.
+src/app/api/ride-requests/[id]/cancel/route.ts(48,20): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/ride-requests/[id]/cancel/route.ts(54,20): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/ride-requests/[id]/complete/route.ts(33,9): error TS2367: This comparison appears to be unintentional because the types 'number' and 'string' have no overlap.
+src/app/api/ride-requests/[id]/complete/route.ts(45,9): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Trip"> | undefined'.
+src/app/api/ride-requests/[id]/complete/route.ts(64,11): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/ride-requests/[id]/complete/route.ts(74,11): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/ride-requests/[id]/complete/route.ts(84,17): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/ride-requests/[id]/verify-otp/route.ts(34,9): error TS2367: This comparison appears to be unintentional because the types 'number' and 'string' have no overlap.
+src/app/api/ride-requests/[id]/verify-otp/route.ts(59,17): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/ride-requests/[id]/verify-otp/route.ts(67,11): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/rider-app/accept/route.ts(24,9): error TS2367: This comparison appears to be unintentional because the types 'number' and 'string' have no overlap.
+src/app/api/rider-app/accept/route.ts(30,44): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Trip"> | undefined'.
+src/app/api/rider-app/accept/route.ts(38,45): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/rider-app/accept/route.ts(43,17): error TS2322: Type 'string' is not assignable to type 'number | IntFieldUpdateOperationsInput | undefined'.
+src/app/api/rider-app/accept/route.ts(68,26): error TS2551: Property 'customer' does not exist on type '{ id: number; createdAt: Date; updatedAt: Date; status: number; riderId: number | null; customerId: number; date: Date; pickupLat: number | null; pickupLng: number | null; ... 6 more ...; amount: number | null; }'. Did you mean 'customerId'?
+src/app/api/rider-app/pending-rides/route.ts(14,27): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Trip"> | undefined'.
+src/app/api/rider-app/pending-rides/route.ts(24,44): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/rider-app/pending-rides/route.ts(24,56): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/api/rider-app/pending-rides/route.ts(38,16): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Order"> | undefined'.
+src/app/api/riders/live-status/route.ts(9,16): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Rider"> | undefined'.
+src/app/api/riders/live-status/route.ts(39,17): error TS2551: Property 'assignedVehicle' does not exist on type '{ password: string; name: string; id: number; email: string | null; createdAt: Date; updatedAt: Date; phone: string; status: number; nid: string | null; assignedVehicleId: number | null; ... 4 more ...; rating: number | null; }'. Did you mean 'assignedVehicleId'?
+src/app/api/riders/live-status/route.ts(41,26): error TS2551: Property 'assignedVehicle' does not exist on type '{ password: string; name: string; id: number; email: string | null; createdAt: Date; updatedAt: Date; phone: string; status: number; nid: string | null; assignedVehicleId: number | null; ... 4 more ...; rating: number | null; }'. Did you mean 'assignedVehicleId'?
+src/app/api/tracking/riders-status/route.ts(19,16): error TS2322: Type 'string' is not assignable to type 'number | IntFilter<"Trip"> | undefined'.
+src/app/api/tracking/riders-status/route.ts(40,11): error TS2367: This comparison appears to be unintentional because the types 'number' and 'string' have no overlap.

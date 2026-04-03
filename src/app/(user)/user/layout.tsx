@@ -10,7 +10,8 @@ import CurrentOrderBanner from "@/components/user/orders/CurrentOrderBanner";
 export const UserContext = createContext<{
   user: any | null;
   refreshUser: () => void;
-}>({ user: null, refreshUser: () => { } });
+  logout: () => void;
+}>({ user: null, refreshUser: () => {}, logout: () => {} });
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -29,6 +30,12 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   const refreshUser = () => {
     const id = localStorage.getItem("sim_customer_id");
     if (id) fetchUser(id); else setActiveUser(null);
+  };
+
+  const logout = () => {
+    localStorage.removeItem("sim_customer_id");
+    localStorage.removeItem("sim_customer_token");
+    setActiveUser(null);
   };
 
   useEffect(() => {
@@ -52,7 +59,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   };
 
   return (
-    <UserContext.Provider value={{ user: activeUser, refreshUser }}>
+    <UserContext.Provider value={{ user: activeUser, refreshUser, logout }}>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
         <UserHeader />
 

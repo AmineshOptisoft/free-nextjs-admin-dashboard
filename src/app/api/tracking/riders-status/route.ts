@@ -16,7 +16,7 @@ export async function GET() {
 
     // 2. Fetch all ongoing trips with their latest location logs
     const ongoingTrips = await prisma.trip.findMany({
-      where: { status: 'ongoing' },
+      where: { status: 3 },//'ongoing'
       include: {
         locationLogs: {
           orderBy: { timestamp: 'desc' },
@@ -37,7 +37,7 @@ export async function GET() {
     const busyRiders: any[] = [];
 
     riders.forEach(rider => {
-      if (rider.status !== 'active') return; // Skip suspended ones entirely if needed
+      if (rider.status !== 0) return; // Skip suspended ones entirely if needed
 
       if (busyRiderMap.has(rider.id)) {
         const trip = busyRiderMap.get(rider.id);

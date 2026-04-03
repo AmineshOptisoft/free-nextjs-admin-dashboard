@@ -30,7 +30,7 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    if (order.status !== 'Started') {
+    if (order.status !== 4) {//'Started'
       return NextResponse.json({ error: 'Only "Started" rides can be completed' }, { status: 400 })
     }
 
@@ -42,7 +42,7 @@ export async function POST(
     const currentTrip = await prisma.trip.findFirst({
       where: {
         riderId: order.riderId,
-        status: 'ongoing'
+        status: 3//'ongoing'
       },
       orderBy: { startTime: 'desc' }
     })
@@ -61,7 +61,7 @@ export async function POST(
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
         data: {
-          status: 'Delivered',
+          status: 5,//'Delivered',
           paymentMode: paymentMode || order.paymentMode || 'Cash',
           amount: finalFare,
         }
@@ -71,7 +71,7 @@ export async function POST(
       const updatedTrip = await tx.trip.update({
         where: { id: currentTrip.id },
         data: {
-          status: 'completed',
+          status: 6,//'completed',
           endTime: new Date(),
           distance: actualDistance,
           fare: finalFare,
@@ -81,7 +81,7 @@ export async function POST(
       // 3. Free the vehicle back to available
       await tx.vehicle.update({
         where: { id: currentTrip.vehicleId },
-        data: { status: 'available' }
+        data: { status: 1 }//'available'
       })
 
       return { order: updatedOrder, trip: updatedTrip }

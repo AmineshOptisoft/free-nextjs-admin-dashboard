@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { getSocket } from "@/lib/socket";
 import GlobalNotificationListener from "@/components/common/GlobalNotificationListener";
+import ForgotPasswordOtpForm from "@/components/auth/ForgotPasswordOtpForm";
 
 type RidePhase = "idle" | "accepted" | "otp" | "started" | "completed";
 type Tab = "rides" | "orders" | "trips" | "profile";
@@ -53,9 +54,13 @@ export default function RiderDashboard() {
 
   // Login state
   const [loginPhone, setLoginPhone] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [requiresPasswordSetup, setRequiresPasswordSetup] = useState(false);
   const [loginStep, setLoginStep] = useState<"phone" | "register" | "vehicle">("phone");
   const [regName, setRegName] = useState("");
   const [regPassword, setRegPassword] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   // ── Fetch riders and vehicles for login ─────────────────────────────────
   useEffect(() => {
@@ -87,12 +92,16 @@ export default function RiderDashboard() {
           setRiderId(found.id.toString());
           if (found.assignedVehicle) {
             setVehicleId(found.assignedVehicle.id.toString());
+          } else if (vehicles.length > 0) {
+            setVehicleId(vehicles[0].id.toString());
           }
           setLoginStep("vehicle");
+          // Skip login card on revisit and open dashboard directly.
+          setIsLoggedIn(true);
         }
       }
     }
-  }, [riders]);
+  }, [riders, vehicles]);
 
   // Fetch full rider profile including stats & history
   const fetchProfile = useCallback(async () => {
@@ -227,41 +236,98 @@ export default function RiderDashboard() {
   };
 
   // ── Login handlers ────────────────────────────────────────────────────────
-  const handlePhoneSubmit = (e: React.FormEvent) => {
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const found = riders.find((r: any) => r.phone === loginPhone);
-    if (found) {
+    setError("");
+
+    try {
+      const payload: Record<string, string> = {
+        phone: loginPhone,
+        password: loginPassword,
+      };
+      if (requiresPasswordSetup && newPassword) {
+        payload.newPassword = newPassword;
+      }
+
+      const res = await fetch("/api/rider-app/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data?.requiresPasswordSetup) {
+          setRequiresPasswordSetup(true);
+          setError("First time login: please set a new password.");
+          return;
+        }
+        if (data?.error?.includes("suspended")) {
+          setError("Your account is suspended. Contact admin.");
+          return;
+        }
+        // If rider does not exist, fall back to registration flow.
+        if (data?.error?.toLowerCase()?.includes("invalid credentials")) {
+          setLoginStep("register");
+          setError("Account not found or password incorrect. You can register if new.");
+          return;
+        }
+        setError(data?.error || "Login failed");
+        return;
+      }
+
       localStorage.setItem("sim_rider_phone", loginPhone);
-      setRiderId(found.id.toString());
-      if (found.assignedVehicle) setVehicleId(found.assignedVehicle.id.toString());
+      if (data?.token) localStorage.setItem("sim_rider_token", data.token);
+
+      const loggedRiderId = data?.rider?.id?.toString();
+      if (loggedRiderId) {
+        setRiderId(loggedRiderId);
+        const found = riders.find((r: any) => r.id.toString() === loggedRiderId);
+        if (found?.assignedVehicle) setVehicleId(found.assignedVehicle.id.toString());
+        else if (vehicles.length > 0) setVehicleId(vehicles[0].id.toString());
+      }
       setLoginStep("vehicle");
-    } else {
-      setLoginStep("register");
+      setRequiresPasswordSetup(false);
+      setNewPassword("");
+    } catch {
+      setError("Unable to login right now.");
     }
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     const res = await fetch("/api/riders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: regName, phone: loginPhone, password: regPassword, status: "active" })
+      body: JSON.stringify({ name: regName, phone: loginPhone, password: regPassword, status: 0 })
     });
     if (res.ok) {
       const newRider = await res.json();
       setRiders([...riders, newRider]);
       setRiderId(newRider.id.toString());
+      if (vehicles.length > 0) setVehicleId(vehicles[0].id.toString());
       localStorage.setItem("sim_rider_phone", loginPhone);
       setLoginStep("vehicle");
     } else {
-      alert("Failed to create profile. Ensure details are correct.");
+      const data = await res.json().catch(() => ({}));
+      const msg =
+        data?.error ||
+        "Failed to create profile. Ensure details are correct.";
+      setError(msg);
+      if (res.status === 409 || data?.code === "DUPLICATE_PHONE") {
+        setLoginStep("phone");
+      }
     }
   };
 
   const handleGoOffline = () => {
     setIsLoggedIn(false);
     localStorage.removeItem("sim_rider_phone");
+    localStorage.removeItem("sim_rider_token");
     setLoginStep("phone"); setLoginPhone(""); setRiderId("");
+    setLoginPassword(""); setNewPassword(""); setRequiresPasswordSetup(false);
+    setShowForgotPassword(false);
     setRiderProfile(null);
   };
 
@@ -279,24 +345,70 @@ export default function RiderDashboard() {
           </div>
           <div className="p-6 space-y-4">
             {loginStep === "phone" && (
-              <form onSubmit={handlePhoneSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enter Mobile Number</label>
-                  <input
-                    required type="tel" value={loginPhone}
-                    onChange={(e) => setLoginPhone(e.target.value)}
-                    placeholder="e.g. 9876543210"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  />
-                </div>
-                <button type="submit" className="w-full py-3 text-sm font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl">
-                  Continue
-                </button>
-              </form>
+              showForgotPassword ? (
+                <ForgotPasswordOtpForm
+                  role="rider"
+                  onCancel={() => setShowForgotPassword(false)}
+                  onSuccess={() => setShowForgotPassword(false)}
+                />
+              ) : (
+                <form onSubmit={handlePhoneSubmit} className="space-y-4">
+                  {error && (
+                    <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enter Mobile Number</label>
+                    <input
+                      required type="tel" value={loginPhone}
+                      onChange={(e) => setLoginPhone(e.target.value)}
+                      placeholder="e.g. 9876543210"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+                    <input
+                      required
+                      type="password"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Enter password"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    />
+                  </div>
+                  {requiresPasswordSetup && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Set New Password</label>
+                      <input
+                        required
+                        minLength={6}
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Minimum 6 characters"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                      />
+                    </div>
+                  )}
+                  <button type="submit" className="w-full py-3 text-sm font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl">
+                    {requiresPasswordSetup ? "Set Password & Continue" : "Login & Continue"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="w-full text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
+                  >
+                    Forgot password?
+                  </button>
+                </form>
+              )
             )}
 
             {loginStep === "register" && (
               <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                {error && (
+                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                )}
                 <p className="text-sm text-gray-500 mb-2">Profile not found for <strong>{loginPhone}</strong>. Please register.</p>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
@@ -330,32 +442,12 @@ export default function RiderDashboard() {
                     </div>
                   </div>
                 )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Your Vehicle</label>
-                  {currentRider?.assignedVehicle ? (
-                    <div className="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700 rounded-xl flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-brand-600 dark:text-brand-400 text-sm">{currentRider.assignedVehicle.regNumber}</p>
-                        <p className="text-xs text-gray-500">{currentRider.assignedVehicle.model} · Assigned</p>
-                      </div>
-                      <span className="text-xs font-bold text-brand-500">🔋{currentRider.assignedVehicle.battery}%</span>
-                    </div>
-                  ) : (
-                    <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:text-white">
-                      <option value="">Select Vehicle...</option>
-                      {vehicles.map((v: any) => (
-                        <option key={v.id} value={v.id}>{v.regNumber} — {v.model} 🔋{v.battery}%</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
                 <button
-                  disabled={!riderId || !vehicleId}
+                  disabled={!riderId}
                   onClick={() => setIsLoggedIn(true)}
                   className="w-full py-3 text-sm font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl disabled:opacity-40"
                 >
-                  Go Online 🟢
+                  Go Live 🟢
                 </button>
               </div>
             )}
@@ -376,7 +468,7 @@ export default function RiderDashboard() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
         {/* ── TOP BAR ──────────────────────────────────────────────────── */}
         <div className="sticky top-0 z-50 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3">
-          <div className="flex items-center justify-between max-w-lg mx-auto">
+          <div className="flex items-center justify-between max-w-7xl mx-auto w-full">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center text-brand-600 font-extrabold text-lg">
                 {selectedRider?.name?.charAt(0)?.toUpperCase() ?? "R"}
@@ -392,6 +484,12 @@ export default function RiderDashboard() {
                   <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />Live
                 </span>
               )}
+              <button
+                onClick={handleGoOffline}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Logout
+              </button>
               <button onClick={handleGoOffline}
                 className="px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50">
                 Go Offline
@@ -403,7 +501,7 @@ export default function RiderDashboard() {
         {/* ── STATS ROW ─────────────────────────────────────────────────── */}
         {riderProfile?.stats && (
           <div className="bg-gradient-to-r from-brand-600 to-brand-800 px-4 py-4">
-            <div className="max-w-lg mx-auto grid grid-cols-4 gap-3 text-center text-white">
+            <div className="max-w-7xl mx-auto w-full grid grid-cols-4 gap-3 text-center text-white">
               <div>
                 <p className="text-xl font-extrabold">₹{riderProfile.stats.todayEarnings.toFixed(0)}</p>
                 <p className="text-xs opacity-70">Today</p>
@@ -426,7 +524,7 @@ export default function RiderDashboard() {
 
         {/* ── TABS ──────────────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-[65px] z-40">
-          <div className="max-w-lg mx-auto flex">
+          <div className="max-w-7xl mx-auto w-full flex">
             {([
               { key: "rides", label: "🛵 Rides" },
               { key: "orders", label: "📋 Orders" },
@@ -448,7 +546,7 @@ export default function RiderDashboard() {
           </div>
         </div>
 
-        <div className="max-w-lg mx-auto p-4 space-y-4">
+        <div className="max-w-7xl mx-auto w-full p-4 space-y-4">
           {/* Messages */}
           {error && <div className="p-3 text-sm text-red-600 bg-red-50 rounded-xl dark:bg-red-900/30 dark:text-red-400">⚠️ {error}</div>}
           {successMsg && <div className="p-3 text-sm text-green-600 bg-green-50 rounded-xl dark:bg-green-900/30 dark:text-green-400">{successMsg}</div>}
@@ -471,45 +569,53 @@ export default function RiderDashboard() {
                       <p className="text-sm text-gray-400 mt-1">Polling every 5 seconds...</p>
                     </div>
                   ) : (
-                    pendingOrders.map((order) => (
-                      <div key={order.id} className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
-                        <div className="bg-gradient-to-r from-brand-500 to-brand-700 px-5 py-3 flex items-center justify-between text-white">
-                          <div>
-                            <p className="text-xs opacity-80">Estimated Fare</p>
-                            <p className="text-3xl font-extrabold">₹{order.amount ?? "—"}</p>
-                          </div>
-                          <div className="text-right text-sm opacity-90">
-                            <p>💳 {order.paymentMode || "Cash"}</p>
-                            <p className="text-xs opacity-70">#ORD-{order.id.toString().padStart(3, "0")}</p>
-                          </div>
-                        </div>
-                        <div className="p-4 space-y-3">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 font-bold">
-                              {order.customer?.firstName?.charAt(0) ?? "?"}
-                            </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {pendingOrders.map((order) => (
+                        <div key={order.id} className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm flex flex-col min-h-0">
+                          <div className="bg-gradient-to-r from-brand-500 to-brand-700 px-4 py-3 flex items-center justify-between text-white shrink-0">
                             <div>
-                              <p className="font-semibold text-gray-800 dark:text-white">{order.customer?.firstName} {order.customer?.lastName}</p>
-                              <p className="text-sm text-gray-400">{order.customer?.phone}</p>
+                              <p className="text-[10px] opacity-80 uppercase tracking-wide">Fare</p>
+                              <p className="text-2xl font-extrabold">₹{order.amount ?? "—"}</p>
+                            </div>
+                            <div className="text-right text-xs opacity-90">
+                              <p>💳 {order.paymentMode || "Cash"}</p>
+                              <p className="opacity-70">#ORD-{order.id.toString().padStart(3, "0")}</p>
                             </div>
                           </div>
-                          <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3 space-y-2 text-sm">
-                            <div className="flex items-start gap-2">
-                              <span className="text-green-500 mt-0.5">📍</span>
-                              <div><p className="text-xs text-gray-400">Pickup</p><p className="font-medium text-gray-800 dark:text-white">{order.pickupLoc || "Not specified"}</p></div>
+                          <div className="p-3 space-y-3 flex flex-col flex-1 min-h-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="h-9 w-9 shrink-0 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 font-bold text-sm">
+                                {order.customer?.firstName?.charAt(0) ?? "?"}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-sm text-gray-800 dark:text-white truncate">{order.customer?.firstName} {order.customer?.lastName}</p>
+                                <p className="text-xs text-gray-400 truncate">{order.customer?.phone}</p>
+                              </div>
                             </div>
-                            <div className="flex items-start gap-2">
-                              <span className="text-red-500 mt-0.5">🏁</span>
-                              <div><p className="text-xs text-gray-400">Drop</p><p className="font-medium text-gray-800 dark:text-white">{order.dropLoc || "Not specified"}</p></div>
+                            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-2 space-y-2 text-xs flex-1 min-h-0">
+                              <div className="flex items-start gap-1.5">
+                                <span className="text-green-500 shrink-0 mt-0.5">📍</span>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] text-gray-400">Pickup</p>
+                                  <p className="font-medium text-gray-800 dark:text-white line-clamp-3">{order.pickupLoc || "Not specified"}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-1.5">
+                                <span className="text-red-500 shrink-0 mt-0.5">🏁</span>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] text-gray-400">Drop</p>
+                                  <p className="font-medium text-gray-800 dark:text-white line-clamp-3">{order.dropLoc || "Not specified"}</p>
+                                </div>
+                              </div>
                             </div>
+                            <button onClick={() => handleAccept(order)} disabled={loading}
+                              className="w-full py-2.5 text-xs font-bold text-white bg-green-500 hover:bg-green-600 rounded-xl disabled:opacity-50 transition-colors shrink-0">
+                              {loading ? "Accepting..." : "✅ Accept Ride"}
+                            </button>
                           </div>
-                          <button onClick={() => handleAccept(order)} disabled={loading}
-                            className="w-full py-3 text-sm font-bold text-white bg-green-500 hover:bg-green-600 rounded-xl disabled:opacity-50 transition-colors">
-                            {loading ? "Accepting..." : "✅ Accept Ride"}
-                          </button>
                         </div>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
                 </div>
               )}

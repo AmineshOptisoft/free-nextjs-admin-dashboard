@@ -31,7 +31,7 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    if (order.status !== 'Accepted') {
+    if (order.status !== 1) {//'Accepted'
       return NextResponse.json({ error: 'OTP can only be verified for Accepted orders' }, { status: 400 })
     }
 
@@ -56,7 +56,7 @@ export async function POST(
       // Update order status to Started
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
-        data: { status: 'Started' }
+        data: { status: 4 }//'Started'
       })
 
       // Create the actual Trip record
@@ -64,7 +64,7 @@ export async function POST(
         data: {
           riderId: order.riderId!,
           vehicleId: vid,
-          status: 'ongoing',
+          status: 3,//'ongoing',
           startTime: new Date(),
           startLoc: order.pickupLoc || null,
           endLoc: order.dropLoc || null,

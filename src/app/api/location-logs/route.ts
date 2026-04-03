@@ -7,13 +7,13 @@ export async function POST(request: Request) {
     const { tripId, lat, lng } = data
 
     if (!tripId || lat === undefined || lng === undefined) {
-       return NextResponse.json({ error: 'tripId, lat, and lng are required' }, { status: 400 })
+      return NextResponse.json({ error: 'tripId, lat, and lng are required' }, { status: 400 })
     }
 
     // Verify trip exists and is ongoing
     const trip = await prisma.trip.findUnique({ where: { id: parseInt(tripId) } })
-    if (!trip || trip.status !== "ongoing") {
-        return NextResponse.json({ error: 'Invalid or inactive trip' }, { status: 400 })
+    if (!trip || trip.status !== 3) {//"ongoing"
+      return NextResponse.json({ error: 'Invalid or inactive trip' }, { status: 400 })
     }
 
     // Save location point to database

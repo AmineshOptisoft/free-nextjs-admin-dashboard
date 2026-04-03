@@ -26,6 +26,51 @@ function calculateFare(distanceKm: number): number {
   return Math.round(50 + 15 * distanceKm);
 }
 
+/**
+ * @swagger
+ * /api/book-ride:
+ *   post:
+ *     tags:
+ *       - Ride Booking
+ *     summary: Request a new ride
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [firstName, lastName, phone, pickupLat, pickupLng, dropLat, dropLng]
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               pickupLat:
+ *                 type: number
+ *               pickupLng:
+ *                 type: number
+ *               pickupLoc:
+ *                 type: string
+ *               dropLat:
+ *                 type: number
+ *               dropLng:
+ *                 type: number
+ *               dropLoc:
+ *                 type: string
+ *               paymentMode:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Ride request placed successfully
+ *       400:
+ *         description: Validation error
+ *       409:
+ *         description: Active ride already in progress
+ */
 export async function POST(request: Request) {
   try {
     const data = await request.json();
@@ -89,7 +134,8 @@ export async function POST(request: Request) {
     const activeOrder = await prisma.order.findFirst({
       where: {
         customerId: customer.id,
-        status: { in: ['Pending', 'Accepted', 'Arrived', 'Started'] }
+        // Active means still in-progress. Exclude Delivered (5) and Cancelled (6).
+        status: { in: [0, 1, 2, 3] }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -126,7 +172,7 @@ export async function POST(request: Request) {
     const newOrder = await prisma.order.create({
       data: {
         customerId: customer.id,
-        status: "Pending",
+        status: 0,//"Pending",
         date: new Date(),
         pickupLat: parseFloat(pickupLat),
         pickupLng: parseFloat(pickupLng),
@@ -161,9 +207,9 @@ export async function POST(request: Request) {
     // 5. Find nearby free riders (using Haversine on their latest location logs)
     const freeRiders = await prisma.rider.findMany({
       where: {
-        status: "active",
+        status: 1,//"active",
         trips: {
-          none: { status: "ongoing" }, // no ongoing trip = FREE
+          none: { status: 3 },//"ongoing" // no ongoing trip = FREE
         },
       },
       select: {
@@ -171,7 +217,7 @@ export async function POST(request: Request) {
         name: true,
         phone: true,
         trips: {
-          where: { status: "completed" },
+          where: { status: 4 },//"completed"
           orderBy: { endTime: "desc" },
           take: 1,
           include: {

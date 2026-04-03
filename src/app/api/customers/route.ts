@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
 
 export async function GET() {
   try {
@@ -16,23 +17,29 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { firstName, lastName, email, phone, street, city, state, zip, image } = body
+    const { firstName, lastName, email, phone, street, city, state, zip, image, password } = body
 
     if (!firstName || !lastName || !email || !phone) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
+
+    const hashedPassword =
+      password && String(password).length >= 6
+        ? await bcrypt.hash(String(password), 10)
+        : undefined
 
     const customer = await prisma.customer.create({
       data: {
         firstName,
         lastName,
         email,
-        phone,
+        phone: String(phone).trim().replace(/\s+/g, ''),
         street,
         city,
         state,
         zip,
-        image
+        image,
+        ...(hashedPassword ? { password: hashedPassword } : {}),
       }
     })
 

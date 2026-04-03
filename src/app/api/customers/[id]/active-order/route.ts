@@ -18,7 +18,8 @@ export async function GET(
     const activeOrder = await prisma.order.findFirst({
       where: {
         customerId,
-        status: { in: ['Pending', 'Accepted', 'Arrived', 'Started'] }
+        // Active rides only (not delivered/cancelled)
+        status: { in: [0, 1, 2, 3] }
       },
       orderBy: { createdAt: 'desc' }
     })

@@ -91,6 +91,7 @@ export default function OrderTrackingPage() {
     { label: "On Route", status: ["Started"] },
     { label: "Arrived", status: ["Delivered"] }
   ];
+  const isActiveMission = order?.status !== "Cancelled" && order?.status !== "Delivered";
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col overflow-hidden">
@@ -103,7 +104,9 @@ export default function OrderTrackingPage() {
               <h1 className="text-xl font-black text-gray-800 dark:text-white uppercase">Kadi Mission #ORD-{id}</h1>
               <div className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">{order?.status} ACTIVE</p>
+                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                  {order?.status} {isActiveMission ? "ACTIVE" : "CLOSED"}
+                </p>
               </div>
             </div>
           </div>

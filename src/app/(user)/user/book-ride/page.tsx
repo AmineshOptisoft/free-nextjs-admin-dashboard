@@ -5,6 +5,7 @@ import Label from "@/components/form/Label";
 import { useRouter } from "next/navigation";
 import { UserContext } from "../layout";
 import Autocomplete from "react-google-autocomplete";
+import UserAuthModal from "@/components/user/layout/UserAuthModal";
 
 // ─── Client-side Haversine ──────────────────────────────────────────────────
 function calcDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -32,6 +33,9 @@ export default function BookRidePage() {
   const router = useRouter();
   const { user: activeUser } = useContext(UserContext);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const [openAuth, setOpenAuth] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoError, setGeoError] = useState("");
 
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -43,6 +47,7 @@ export default function BookRidePage() {
     lastName: "",
     phone: "",
     email: "",
+    password: "",
     pickupLoc: "",
     pickupLat: "",
     pickupLng: "",
@@ -95,11 +100,12 @@ export default function BookRidePage() {
       })
         .then(res => res.ok ? res.json() : null)
         .then(data => {
-          if (data?.activeOrder) setActiveRideOrder(data.activeOrder);
+          // Always sync local state with server response to avoid stale "active ride" UI.
+          setActiveRideOrder(data?.activeOrder ?? null);
         })
         .catch(() => {});
     } else {
-      setStep(1);
+      setStep(0);
     }
   }, [activeUser]);
 
@@ -161,6 +167,90 @@ export default function BookRidePage() {
     setFormData((prev) => ({ ...prev, [e.target.id]: e.target.value }));
   };
 
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGeoError("Geolocation is not supported by your browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setCurrentLocation({ lat, lng });
+        // Pre-fill pickup with current location by default.
+        // User can still edit pickup manually anytime.
+        setFormData((prev) => ({
+          ...prev,
+          pickupLat: prev.pickupLat || String(lat),
+          pickupLng: prev.pickupLng || String(lng),
+          pickupLoc: prev.pickupLoc || `Current Location (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+        }));
+        setGeoError("");
+      },
+      () => {
+        setGeoError("Unable to fetch your location. Please enable location permission.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!currentLocation || !apiKey) return;
+    // If user already selected/typed a concrete pickup, do not override it.
+    setFormData((prev) => {
+      if (
+        prev.pickupLoc &&
+        !prev.pickupLoc.startsWith("Current Location (")
+      ) {
+        return prev;
+      }
+      return prev;
+    });
+
+    const controller = new AbortController();
+    const loadAddress = async () => {
+      try {
+        const { lat, lng } = currentLocation;
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`,
+          { signal: controller.signal }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const formatted = data?.results?.[0]?.formatted_address;
+        if (!formatted) return;
+
+        setFormData((prev) => {
+          // Keep user-entered value intact.
+          if (
+            prev.pickupLoc &&
+            !prev.pickupLoc.startsWith("Current Location (")
+          ) {
+            return prev;
+          }
+          return {
+            ...prev,
+            pickupLoc: formatted,
+          };
+        });
+      } catch {
+        // Silent fallback to coordinate label already set above.
+      }
+    };
+    loadAddress();
+    return () => controller.abort();
+  }, [currentLocation, apiKey]);
+
+  const useCurrentLocationAsPickup = () => {
+    if (!currentLocation) return;
+    setFormData((prev) => ({
+      ...prev,
+      pickupLat: String(currentLocation.lat),
+      pickupLng: String(currentLocation.lng),
+      pickupLoc: prev.pickupLoc || "Current Location",
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -188,6 +278,34 @@ export default function BookRidePage() {
   };
 
   // ── Active Ride Block Screen ─────────────────────────────────────────────
+  if (!activeUser) {
+    return (
+      <>
+        <div className="max-w-md mx-auto mt-8 space-y-4">
+          <div className="rounded-2xl border border-brand-200 bg-brand-50 dark:bg-brand-900/20 dark:border-brand-700 p-6 text-center">
+            <div className="mx-auto mb-3 text-4xl">🔐</div>
+            <h2 className="text-xl font-bold text-brand-800 dark:text-brand-300">Login Required</h2>
+            <p className="mt-1 text-sm text-brand-700 dark:text-brand-400">
+              Please log in as a customer before booking a ride.
+            </p>
+          </div>
+          <button
+            onClick={() => setOpenAuth(true)}
+            className="w-full py-4 bg-brand-500 hover:bg-brand-600 text-white font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all"
+          >
+            Login To Continue
+          </button>
+        </div>
+        <UserAuthModal
+          mode="login"
+          open={openAuth}
+          onClose={() => setOpenAuth(false)}
+          pendingPath="/user/book-ride"
+        />
+      </>
+    );
+  }
+
   if (activeRideOrder) {
     return (
       <div className="max-w-md mx-auto mt-8 space-y-4">
@@ -195,7 +313,7 @@ export default function BookRidePage() {
           <div className="mx-auto mb-3 text-4xl">🛵</div>
           <h2 className="text-xl font-bold text-orange-800 dark:text-orange-300">Ride Already Active!</h2>
           <p className="mt-1 text-sm text-orange-600 dark:text-orange-400">
-            Aapki ek ride pehle se chal rahi hai. Nayi ride book karne se pehle ise complete karo.
+            You already have an active ride. Please complete or cancel it before booking a new one.
           </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-5 space-y-3">
@@ -258,11 +376,56 @@ export default function BookRidePage() {
     );
   }
 
+  const pickupLatNum = parseFloat(formData.pickupLat);
+  const pickupLngNum = parseFloat(formData.pickupLng);
+  const dropLatNum = parseFloat(formData.dropLat);
+  const dropLngNum = parseFloat(formData.dropLng);
+
+  const hasPickup = !isNaN(pickupLatNum) && !isNaN(pickupLngNum);
+  const hasDrop = !isNaN(dropLatNum) && !isNaN(dropLngNum);
+
+  const mapUrl = hasPickup && hasDrop && apiKey
+    ? `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${pickupLatNum},${pickupLngNum}&destination=${dropLatNum},${dropLngNum}&mode=driving`
+    : hasPickup
+      ? `https://www.google.com/maps?q=${pickupLatNum},${pickupLngNum}&z=15&output=embed`
+      : currentLocation
+        ? `https://www.google.com/maps?q=${currentLocation.lat},${currentLocation.lng}&z=15&output=embed`
+        : "https://www.google.com/maps?q=26.9124,75.7873&z=12&output=embed";
+
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div>
         <h2 className="text-3xl font-black text-gray-800 dark:text-white uppercase tracking-tight">Book Your Kadi Ride</h2>
         <p className="mt-1 text-sm text-gray-500">Go green, go Kadi. Fast e-bikes at your doorstep.</p>
+      </div>
+
+      <div className="rounded-3xl border border-gray-100 bg-white p-4 dark:border-white/[0.05] dark:bg-white/[0.03] shadow-xl">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="text-sm font-bold text-gray-700 dark:text-gray-200">Live Map</p>
+          <button
+            type="button"
+            onClick={useCurrentLocationAsPickup}
+            disabled={!currentLocation}
+            className="px-3 py-2 text-xs font-bold rounded-lg bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            Use My Current Location
+          </button>
+        </div>
+        <div className="rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800">
+          <iframe
+            title="Ride map"
+            src={mapUrl}
+            className="w-full h-72"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+        </div>
+        {geoError && <p className="mt-2 text-xs text-red-500">{geoError}</p>}
+        {currentLocation && !geoError && (
+          <p className="mt-2 text-xs text-gray-500">
+            Current location: {currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)}
+          </p>
+        )}
       </div>
 
       <div className="rounded-3xl border border-gray-100 bg-white p-8 dark:border-white/[0.05] dark:bg-white/[0.03] shadow-2xl">
@@ -281,6 +444,7 @@ export default function BookRidePage() {
                   <Input id="lastName" value={formData.lastName} onChange={handleChange} required placeholder="Doe" />
                 </div>
               </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number</Label>
                 <Input id="phone" type="tel" value={formData.phone} onChange={handleChange} required placeholder="9876543210" />
@@ -288,6 +452,10 @@ export default function BookRidePage() {
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
                 <Input id="email" type="email" value={formData.email} onChange={handleChange} placeholder="john@example.com (optional)" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input id="password" type="password" value={formData.password} onChange={handleChange} required placeholder="Enter your password" />
               </div>
               <button type="button" onClick={() => setStep(2)} className="w-full py-4 bg-brand-500 text-white font-bold rounded-2xl shadow-lg hover:bg-brand-600 transition-all">Confirm Details →</button>
             </div>
