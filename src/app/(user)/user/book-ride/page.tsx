@@ -393,42 +393,77 @@ export default function BookRidePage() {
         : "https://www.google.com/maps?q=26.9124,75.7873&z=12&output=embed";
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-8xl mx-auto space-y-8 px-2 sm:px-4">
       <div>
         <h2 className="text-3xl font-black text-gray-800 dark:text-white uppercase tracking-tight">Book Your Kadi Ride</h2>
         <p className="mt-1 text-sm text-gray-500">Go green, go Kadi. Fast e-bikes at your doorstep.</p>
       </div>
 
-      <div className="rounded-3xl border border-gray-100 bg-white p-4 dark:border-white/[0.05] dark:bg-white/[0.03] shadow-xl">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <p className="text-sm font-bold text-gray-700 dark:text-gray-200">Live Map</p>
-          <button
-            type="button"
-            onClick={useCurrentLocationAsPickup}
-            disabled={!currentLocation}
-            className="px-3 py-2 text-xs font-bold rounded-lg bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
-          >
-            Use My Current Location
-          </button>
-        </div>
-        <div className="rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800">
+      {step === 2 && (
+        <div className="relative rounded-3xl overflow-hidden border border-gray-200 dark:border-gray-800 shadow-2xl min-h-[540px]">
           <iframe
             title="Ride map"
             src={mapUrl}
-            className="w-full h-72"
+            className="absolute inset-0 w-full h-full"
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
           />
-        </div>
-        {geoError && <p className="mt-2 text-xs text-red-500">{geoError}</p>}
-        {currentLocation && !geoError && (
-          <p className="mt-2 text-xs text-gray-500">
-            Current location: {currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)}
-          </p>
-        )}
-      </div>
+          <div className="absolute inset-0 bg-black/15 pointer-events-none" />
 
-      <div className="rounded-3xl border border-gray-100 bg-white p-8 dark:border-white/[0.05] dark:bg-white/[0.03] shadow-2xl">
+          <div className="relative z-10 p-4 md:p-6 flex flex-col h-full justify-between">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-bold text-white drop-shadow">Live Map</p>
+              <button
+                type="button"
+                onClick={useCurrentLocationAsPickup}
+                disabled={!currentLocation}
+                className="px-3 py-2 text-xs font-bold rounded-lg bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
+              >
+                Use My Current Location
+              </button>
+            </div>
+
+            <div className="rounded-2xl bg-black/35 backdrop-blur-md p-4 md:p-5 border border-white/20 shadow-xl space-y-3">
+              <div className="space-y-2">
+                <Label className="text-white">🏫 Pickup Location</Label>
+                <Autocomplete
+                  key={`pickup-${formData.pickupLoc}`}
+                  apiKey={apiKey}
+                  onPlaceSelected={handlePickupSelected}
+                  defaultValue={formData.pickupLoc}
+                  options={{ types: ["geocode", "establishment"], componentRestrictions: { country: "in" } }}
+                  className="w-full h-12 px-4 rounded-xl border border-white/40 bg-white/10 text-white placeholder:text-white/70 outline-none focus:border-brand-400 transition-all font-medium"
+                  placeholder="Where from? Search your area..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-white">📍 Destination Address</Label>
+                <Autocomplete
+                  apiKey={apiKey}
+                  onPlaceSelected={handleDropSelected}
+                  defaultValue={formData.dropLoc}
+                  options={{ types: ["geocode", "establishment"], componentRestrictions: { country: "in" } }}
+                  className="w-full h-12 px-4 rounded-xl border border-white/40 bg-white/10 text-white placeholder:text-white/70 outline-none focus:border-brand-400 transition-all font-medium"
+                  placeholder="Where to? Enter drop point..."
+                />
+              </div>
+
+              <select
+                id="paymentMode"
+                value={formData.paymentMode}
+                onChange={handleChange as any}
+                className="w-full h-12 px-4 rounded-xl border border-white/40 bg-white/10 text-white"
+              >
+                <option value="Cash">💵 Cash on Delivery</option>
+                <option value="UPI">📱 UPI Payment</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-3xl border border-transparent bg-transparent p-8 shadow-none">
         {error && <div className="mb-6 p-4 text-sm text-red-600 bg-red-50 rounded-2xl border border-red-100">{error}</div>}
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -463,32 +498,6 @@ export default function BookRidePage() {
 
           {step === 2 && (
             <>
-              {/* Pickup */}
-              <div className="space-y-2">
-                <Label>🏫 Pickup Location</Label>
-                <Autocomplete
-                  apiKey={apiKey}
-                  onPlaceSelected={handlePickupSelected}
-                  defaultValue={formData.pickupLoc}
-                  options={{ types: ["geocode", "establishment"], componentRestrictions: { country: "in" } }}
-                  className="w-full h-14 px-5 rounded-2xl border-2 border-gray-100 dark:bg-gray-800 outline-none focus:border-brand-500 transition-all font-medium"
-                  placeholder="Where from? Search your area..."
-                />
-              </div>
-
-              {/* Drop */}
-              <div className="space-y-2">
-                <Label>📍 Destination Address</Label>
-                <Autocomplete
-                  apiKey={apiKey}
-                  onPlaceSelected={handleDropSelected}
-                  defaultValue={formData.dropLoc}
-                  options={{ types: ["geocode", "establishment"], componentRestrictions: { country: "in" } }}
-                  className="w-full h-14 px-5 rounded-2xl border-2 border-gray-100 dark:bg-gray-800 outline-none focus:border-brand-500 transition-all font-medium"
-                  placeholder="Where to? Enter drop point..."
-                />
-              </div>
-
               {estimate && (
                 <div className="p-6 rounded-3xl bg-brand-500 text-white shadow-xl space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Estimated Fare</p>
@@ -501,11 +510,6 @@ export default function BookRidePage() {
                   </div>
                 </div>
               )}
-
-              <select id="paymentMode" value={formData.paymentMode} onChange={handleChange as any} className="w-full h-12 px-4 rounded-xl border border-gray-200 dark:bg-gray-800">
-                <option value="Cash">💵 Cash on Delivery</option>
-                <option value="UPI">📱 UPI Payment</option>
-              </select>
 
               <div className="flex gap-3">
                 <button type="button" onClick={() => setStep(1)} className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold">Back</button>
