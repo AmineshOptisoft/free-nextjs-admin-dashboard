@@ -1,6 +1,6 @@
 export type SavedAddress = {
   id: string;
-  label: "Home" | "Work" | "Other";
+  label: string;
   address: string;
   isDefault?: boolean;
 };

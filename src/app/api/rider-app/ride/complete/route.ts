@@ -42,6 +42,8 @@ import prisma from '@/lib/prisma';
  *       404:
  *         description: Order or trip not found
  */
+import { ORDER_STATUS, TRIP_STATUS, VEHICLE_STATUS } from '@/lib/constants';
+
 export async function POST(request: Request) {
   try {
     const { orderId, riderId, tripId, finalDistance, batteryUsed } = await request.json();
@@ -69,14 +71,14 @@ export async function POST(request: Request) {
       // 1. Update order to Delivered
       const updatedOrder = await tx.order.update({
         where: { id: parseInt(orderId) },
-        data: { status: 4, amount: fare } // 4 = Delivered
+        data: { status: ORDER_STATUS.DELIVERED, amount: fare }
       });
 
       // 2. Complete the trip
       const updatedTrip = await tx.trip.update({
         where: { id: parseInt(tripId) },
         data: {
-          status: 1, // 1 = Completed
+          status: TRIP_STATUS.COMPLETED,
           endTime: new Date(),
           distance: parseFloat(String(distance)),
           fare
@@ -90,7 +92,7 @@ export async function POST(request: Request) {
           const newBattery = Math.max(0, vehicle.battery - (batteryUsed || 10));
           await tx.vehicle.update({
             where: { id: trip.vehicleId },
-            data: { status: 0, battery: newBattery } // 0 = Available
+            data: { status: VEHICLE_STATUS.AVAILABLE, battery: newBattery }
           });
         }
       }

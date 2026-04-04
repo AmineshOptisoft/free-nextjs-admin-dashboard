@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { ORDER_STATUS } from '@/lib/constants'
 
 export async function GET(request: Request) {
   try {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       data: {
         customerId: parseInt(customerId),
         riderId: riderId ? parseInt(riderId) : null,
-        status: status || 'Pending',
+        status: status !== undefined ? parseInt(status) : ORDER_STATUS.PENDING,
         date: date ? new Date(date) : new Date(),
       },
       include: {

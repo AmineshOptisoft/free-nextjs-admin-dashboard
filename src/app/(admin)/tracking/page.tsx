@@ -18,6 +18,8 @@ const FleetMap = dynamic(() => import("@/components/admin/tracking/FleetMap"), {
   ),
 });
 
+import { ORDER_STATUS, VEHICLE_STATUS } from "@/lib/constants";
+
 export default function Tracking() {
   const [liveRiders, setLiveRiders] = useState<any[]>([]);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
@@ -42,7 +44,7 @@ export default function Tracking() {
       if (rRes.ok) setLiveRiders(await rRes.json());
       if (oRes.ok) {
         const allOrders = await oRes.json();
-        setPendingOrders(allOrders.filter((o: any) => o.status === "Pending"));
+        setPendingOrders(allOrders.filter((o: any) => o.status === ORDER_STATUS.PENDING));
       }
       if (vRes.ok) setVehicles(await vRes.json());
     } catch (err) {
@@ -260,7 +262,7 @@ export default function Tracking() {
                     required
                   >
                     <option value="">— Choose Available EV —</option>
-                    {vehicles.filter(v => v.status === 'available').map((v: any) => (
+                    {vehicles.filter(v => v.status === VEHICLE_STATUS.AVAILABLE).map((v: any) => (
                       <option key={v.id} value={v.id}>⚡ {v.regNumber} — {v.model} 🔋{v.battery}%</option>
                     ))}
                   </select>

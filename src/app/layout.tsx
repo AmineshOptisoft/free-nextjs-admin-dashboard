@@ -4,6 +4,7 @@ import "flatpickr/dist/flatpickr.css";
 import "leaflet/dist/leaflet.css";
 import { SidebarProvider } from '@/context/SidebarContext';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { UserProvider } from '@/context/UserContext';
 import OneSignalInit from '@/components/common/OneSignalInit';
 
 const outfit = Outfit({
@@ -19,10 +20,12 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${outfit.className} dark:bg-gray-900`}>
         <ThemeProvider>
-          <SidebarProvider>
-            <OneSignalInit />
-            {children}
-          </SidebarProvider>
+          <UserProvider>
+            <SidebarProvider>
+              <OneSignalInit />
+              {children}
+            </SidebarProvider>
+          </UserProvider>
         </ThemeProvider>
       </body>
     </html>

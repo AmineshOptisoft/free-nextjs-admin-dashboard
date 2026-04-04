@@ -37,6 +37,8 @@ import prisma from '@/lib/prisma';
  *       404:
  *         description: Order not found
  */
+import { ORDER_STATUS, TRIP_STATUS } from '@/lib/constants';
+
 export async function POST(request: Request) {
   try {
     const { orderId, riderId, vehicleId, otp } = await request.json();
@@ -64,8 +66,7 @@ export async function POST(request: Request) {
     }
 
     // Only Arrived (2) orders can be started
-    const arrivedStatuses = [2, 'Arrived'];
-    if (!arrivedStatuses.includes(order.status)) {
+    if (order.status !== ORDER_STATUS.ARRIVED) {
       return NextResponse.json({ error: 'Rider must arrive at pickup first before starting the ride' }, { status: 400 });
     }
 
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       const updatedOrder = await tx.order.update({
         where: { id: parseInt(orderId) },
-        data: { status: 3 } // 3 = Started
+        data: { status: ORDER_STATUS.STARTED } 
       });
 
       const trip = await tx.trip.create({
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
           riderId: parseInt(riderId),
           vehicleId: parseInt(vehicleId),
           startTime: new Date(),
-          status: 0, // 0 = Ongoing
+          status: TRIP_STATUS.ONGOING,
           startLoc: order.pickupLoc || null,
           endLoc: order.dropLoc || null
         }

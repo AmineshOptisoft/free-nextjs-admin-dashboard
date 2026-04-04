@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishNotification } from '@/lib/redis-pub'
 import { sendPushNotification } from '@/lib/onesignal-server'
+import { ORDER_STATUS, TRIP_STATUS, VEHICLE_STATUS } from '@/lib/constants'
 
 // POST /api/ride-requests/[id]/cancel
 export async function POST(
@@ -26,7 +27,7 @@ export async function POST(
     }
 
     // Terminal: 5 = Delivered (admin /ride-requests/complete), 6 = Cancelled (this route + customer-app cancel)
-    if (order.status === 5) {
+    if (order.status === ORDER_STATUS.DELIVERED) {
       return NextResponse.json(
         {
           error:
@@ -37,7 +38,7 @@ export async function POST(
       );
     }
 
-    if (order.status === 6) {
+    if (order.status === ORDER_STATUS.CANCELED) {
       return NextResponse.json({
         success: true,
         status: 'Cancelled',
@@ -48,25 +49,25 @@ export async function POST(
     // Update order status
     const updatedOrder = await prisma.order.update({
       where: { id: orderId },
-      data: { status: 6 },
+      data: { status: ORDER_STATUS.CANCELED },
     });
 
     // If a rider was assigned, their trip needs to be cancelled and their status freed
     if (order.riderId) {
       // Find ongoing trip for this rider
       const trip = await prisma.trip.findFirst({
-        where: { riderId: order.riderId, status: 3 }//'ongoing'
+        where: { riderId: order.riderId, status: TRIP_STATUS.ONGOING }
       });
       if (trip) {
         await prisma.trip.update({
           where: { id: trip.id },
-          data: { status: 6, endTime: new Date() }//'cancelled'
+          data: { status: TRIP_STATUS.CANCELLED, endTime: new Date() }
         });
 
         // Free up the vehicle
         await prisma.vehicle.update({
           where: { id: trip.vehicleId },
-          data: { status: 1 }//'available'
+          data: { status: VEHICLE_STATUS.AVAILABLE }
         });
       }
 

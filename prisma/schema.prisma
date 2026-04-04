@@ -82,6 +82,8 @@ model Customer {
   city      String?
   state     String?
   zip       String?
+  homeAddress String?
+  workAddress String?
   image     String?
   resetOtpHash String?
   resetOtpExpiry DateTime?

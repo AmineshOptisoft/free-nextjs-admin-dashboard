@@ -30,7 +30,7 @@ export async function PUT(
 
     const body = await request.json()
     
-    const { firstName, lastName, email, phone, street, city, state, zip, image } = body
+    const { firstName, lastName, email, phone, street, city, state, zip, homeAddress, workAddress, image } = body
     const data: any = {}
     
     if (firstName !== undefined) data.firstName = firstName
@@ -41,6 +41,8 @@ export async function PUT(
     if (city !== undefined) data.city = city
     if (state !== undefined) data.state = state
     if (zip !== undefined) data.zip = zip
+    if (homeAddress !== undefined) data.homeAddress = homeAddress
+    if (workAddress !== undefined) data.workAddress = workAddress
     if (image !== undefined) data.image = image
 
     const customer = await prisma.customer.update({ where: { id }, data })

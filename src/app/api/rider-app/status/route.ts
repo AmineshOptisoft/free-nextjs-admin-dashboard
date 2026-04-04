@@ -33,6 +33,8 @@ import prisma from '@/lib/prisma';
  *       404:
  *         description: Rider not found
  */
+import { RIDER_STATUS } from '@/lib/constants';
+
 export async function PATCH(request: Request) {
   try {
     const { riderId, status } = await request.json();
@@ -41,7 +43,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'riderId and status are required' }, { status: 400 });
     }
 
-    if (![0, 2].includes(status)) {
+    if (![RIDER_STATUS.ACTIVE, RIDER_STATUS.OFFLINE].includes(status)) {
       return NextResponse.json({ error: 'Status must be 0 (Online) or 2 (Offline)' }, { status: 400 });
     }
 
@@ -50,7 +52,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Rider not found' }, { status: 404 });
     }
 
-    if (rider.status === 1) {
+    if (rider.status === RIDER_STATUS.SUSPENDED) {
       return NextResponse.json({ error: 'Your account is suspended. Contact admin.' }, { status: 403 });
     }
 
@@ -59,7 +61,7 @@ export async function PATCH(request: Request) {
       data: { status, lastUpdated: new Date() }
     });
 
-    const statusLabel = status === 0 ? 'Online' : 'Offline';
+    const statusLabel = status === RIDER_STATUS.ACTIVE ? 'Online' : 'Offline';
     return NextResponse.json({
       message: `Rider is now ${statusLabel}`,
       rider: { id: updatedRider.id, name: updatedRider.name, status: updatedRider.status }

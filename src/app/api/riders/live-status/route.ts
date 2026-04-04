@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+import { RIDER_STATUS, VEHICLE_STATUS } from '@/lib/constants'
+
 // GET /api/riders/live-status
-// Fetches the last known location and status of ALL active riders
 export async function GET() {
   try {
     const riders = await prisma.rider.findMany({
-      where: { status: 0 },//'active'
+      where: { status: RIDER_STATUS.ACTIVE },
       select: {
         id: true,
         name: true,
@@ -36,7 +37,7 @@ export async function GET() {
       lng: r.lastLng || 77.2090,
       area: r.lastArea || "Unknown",
       lastSeen: r.lastUpdated ? r.lastUpdated.getTime() : Date.now(),
-      status: r.assignedVehicle?.status === 2 ? 'busy' : 'free',//'in_use'
+      status: r.assignedVehicle?.status === VEHICLE_STATUS.IN_USE ? 'busy' : 'free',
       assignedVehicleId: r.assignedVehicleId ?? null,
       assignedVehicle: r.assignedVehicle ?? null,
     }))

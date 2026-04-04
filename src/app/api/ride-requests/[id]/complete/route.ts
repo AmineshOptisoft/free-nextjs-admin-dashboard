@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishNotification } from '@/lib/redis-pub'
 import { sendPushNotification } from '@/lib/onesignal-server'
+import { ORDER_STATUS, TRIP_STATUS, VEHICLE_STATUS } from '@/lib/constants'
 
 // POST /api/ride-requests/[id]/complete
 // Rider marks the ride as complete after dropping customer. Payment is then collected.
@@ -30,7 +31,7 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    if (order.status !== 4) {//'Started'
+    if (order.status !== ORDER_STATUS.STARTED) {
       return NextResponse.json({ error: 'Only "Started" rides can be completed' }, { status: 400 })
     }
 
@@ -42,7 +43,7 @@ export async function POST(
     const currentTrip = await prisma.trip.findFirst({
       where: {
         riderId: order.riderId,
-        status: 3//'ongoing'
+        status: TRIP_STATUS.ONGOING
       },
       orderBy: { startTime: 'desc' }
     })
@@ -61,7 +62,7 @@ export async function POST(
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
         data: {
-          status: 5,//'Delivered',
+          status: ORDER_STATUS.DELIVERED,
           paymentMode: paymentMode || order.paymentMode || 'Cash',
           amount: finalFare,
         }
@@ -71,7 +72,7 @@ export async function POST(
       const updatedTrip = await tx.trip.update({
         where: { id: currentTrip.id },
         data: {
-          status: 6,//'completed',
+          status: TRIP_STATUS.COMPLETED,
           endTime: new Date(),
           distance: actualDistance,
           fare: finalFare,
@@ -81,7 +82,7 @@ export async function POST(
       // 3. Free the vehicle back to available
       await tx.vehicle.update({
         where: { id: currentTrip.vehicleId },
-        data: { status: 1 }//'available'
+        data: { status: VEHICLE_STATUS.AVAILABLE }
       })
 
       return { order: updatedOrder, trip: updatedTrip }

@@ -5,7 +5,7 @@ import Link from "next/link";
 import HeroSection from "@/components/user/landing/HeroSection";
 import HowItWorksSection from "@/components/user/landing/HowItWorksSection";
 import FeaturesSection from "@/components/user/landing/FeaturesSection";
-import { UserContext } from "./layout";
+import { UserContext } from "@/context/UserContext";
 import ForgotPasswordOtpForm from "@/components/auth/ForgotPasswordOtpForm";
 
 function normPhone(p: string) {
@@ -257,7 +257,7 @@ export default function UserLandingPage() {
           ) : (
             <form onSubmit={handleRegisterSubmit} className="space-y-4 max-w-md">
               <p className="text-sm text-gray-500">
-                Account nahi mila <strong>{loginPhone}</strong>. Naya account banayein.
+                Account is not registered with <strong>{loginPhone}</strong>. Create a new account.
               </p>
               <div className="flex gap-3">
                 <input

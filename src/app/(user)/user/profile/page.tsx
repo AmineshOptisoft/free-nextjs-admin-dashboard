@@ -3,7 +3,7 @@
 import React, { useContext } from "react";
 import AddressCard from "@/components/user/profile/AddressCard";
 import Link from "next/link";
-import { UserContext } from "../layout";
+import { UserContext } from "@/context/UserContext";
 
 export default function UserProfilePage() {
   const { user: activeUser } = useContext(UserContext);
@@ -48,13 +48,13 @@ export default function UserProfilePage() {
       {/* Info Card */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="flex items-center gap-4 mb-6">
-           <div className="h-16 w-16 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-2xl font-bold">
-             {activeUser.firstName.charAt(0)}
-           </div>
-           <div>
-             <h3 className="text-xl font-bold text-gray-800 dark:text-white">{activeUser.firstName} {activeUser.lastName}</h3>
-             <p className="text-sm text-gray-400">Customer ID: #CUST-{activeUser.id.toString().padStart(3, "0")}</p>
-           </div>
+          <div className="h-16 w-16 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 text-2xl font-bold">
+            {activeUser.firstName.charAt(0)}
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-gray-800 dark:text-white">{activeUser.firstName} {activeUser.lastName}</h3>
+            <p className="text-sm text-gray-400">Customer ID: #CUST-{activeUser.id.toString().padStart(3, "0")}</p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 pt-6 border-t border-gray-100 dark:border-gray-800">
@@ -76,19 +76,37 @@ export default function UserProfilePage() {
       </div>
 
       {/* Address Section */}
-      <div className="space-y-4">
+      {activeUser.homeAddress || activeUser.workAddress || activeUser.street ? <div className="space-y-4">
         <h3 className="text-lg font-bold text-gray-800 dark:text-white/90">
-          Saved Address
+          Saved Addresses
         </h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {activeUser.homeAddress ? (
             <AddressCard address={{
-                id: activeUser.id,
-                label: "Home",
-                address: `${activeUser.street || ""}, ${activeUser.city || ""}, ${activeUser.state || ""} ${activeUser.zip || ""}`.trim().replace(/^,/, ""),
-                isDefault: true
+              id: activeUser.id.toString(),
+              label: "Home",
+              address: activeUser.homeAddress,
+              isDefault: true
             }} />
+          ) : null}
+          {activeUser.workAddress ? (
+            <AddressCard address={{
+              id: activeUser.id.toString(),
+              label: "Work",
+              address: activeUser.workAddress,
+              isDefault: false
+            }} />
+          ) : null}
+          {!activeUser.homeAddress && !activeUser.workAddress && activeUser.street && (
+            <AddressCard address={{
+              id: activeUser.id.toString(),
+              label: "Other (Last Pickup)",
+              address: activeUser.street,
+              isDefault: true
+            }} />
+          )}
         </div>
-      </div>
+      </div> : null}
     </div>
   );
 }

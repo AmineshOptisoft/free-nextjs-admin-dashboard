@@ -36,6 +36,7 @@ export default function RiderDashboard() {
   const [riderId, setRiderId] = useState<string>("");
   const [vehicleId, setVehicleId] = useState<string>("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
   const [riders, setRiders] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [riderProfile, setRiderProfile] = useState<any>(null);
@@ -135,12 +136,15 @@ export default function RiderDashboard() {
   }, [riderId, phase]);
 
   useEffect(() => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn || !isOnline) {
+      if (isPolling) setIsPolling(false);
+      return;
+    }
     fetchRides();
     const interval = setInterval(fetchRides, 5000);
     setIsPolling(true);
     return () => { clearInterval(interval); setIsPolling(false); };
-  }, [isLoggedIn, fetchRides]);
+  }, [isLoggedIn, isOnline, fetchRides]);
 
   // ── Actions ─────────────────────────────────────────────────────────────
   const handleAccept = async (order: Order) => {
@@ -217,7 +221,7 @@ export default function RiderDashboard() {
                 vehicleId: parseInt(vehicleId),
                 lat: latitude,
                 lng: longitude,
-                status: phase === "idle" ? "free" : "busy"
+                status: isOnline ? (phase === "idle" ? "free" : "busy") : "offline"
               });
             }
           },
@@ -227,7 +231,7 @@ export default function RiderDashboard() {
       }
     }, 10000);
     return () => clearInterval(interval);
-  }, [isLoggedIn, riderId, vehicleId, phase]);
+  }, [isLoggedIn, riderId, vehicleId, phase, isOnline]);
 
   const resetToIdle = () => {
     setPhase("idle"); setCurrentOrder(null); setOtpInput("");
@@ -262,10 +266,10 @@ export default function RiderDashboard() {
           setError("First time login: please set a new password.");
           return;
         }
-        if (data?.error?.includes("suspended")) {
-          setError("Your account is suspended. Contact admin.");
-          return;
-        }
+        // if (data?.error?.includes("suspended")) {
+        //   setError("Your account is suspended. Contact admin.");
+        //   return;
+        // }
         // If rider does not exist, fall back to registration flow.
         if (data?.error?.toLowerCase()?.includes("invalid credentials")) {
           setLoginStep("register");
@@ -321,14 +325,19 @@ export default function RiderDashboard() {
     }
   };
 
-  const handleGoOffline = () => {
+  const handleLogout = () => {
     setIsLoggedIn(false);
+    setIsOnline(false);
     localStorage.removeItem("sim_rider_phone");
     localStorage.removeItem("sim_rider_token");
     setLoginStep("phone"); setLoginPhone(""); setRiderId("");
     setLoginPassword(""); setNewPassword(""); setRequiresPasswordSetup(false);
     setShowForgotPassword(false);
     setRiderProfile(null);
+  };
+
+  const handleToggleOnlineStatus = () => {
+     setIsOnline(!isOnline);
   };
 
   // ────────────────────────────────────────────────────────────────────────
@@ -447,7 +456,7 @@ export default function RiderDashboard() {
                   onClick={() => setIsLoggedIn(true)}
                   className="w-full py-3 text-sm font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl disabled:opacity-40"
                 >
-                  Go Live 🟢
+                  Enter Dashboard ➾
                 </button>
               </div>
             )}
@@ -479,20 +488,30 @@ export default function RiderDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {isPolling && (
-                <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />Live
+              {isOnline ? (
+                <span className="flex items-center gap-1 text-xs text-green-600 font-medium px-2 bg-green-50 py-1 rounded-full border border-green-200">
+                  <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />Online
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-xs text-gray-500 font-medium px-2 bg-gray-100 py-1 rounded-full border border-gray-200">
+                  <span className="h-2 w-2 rounded-full bg-gray-400" />Offline
                 </span>
               )}
               <button
-                onClick={handleGoOffline}
-                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                onClick={handleToggleOnlineStatus}
+                className={`px-4 py-1.5 text-xs font-bold rounded-lg shadow-sm transition-all ${
+                  isOnline 
+                  ? "text-red-500 bg-red-50 border-2 border-red-200 hover:bg-red-100" 
+                  : "text-white bg-green-500 hover:bg-green-600 border-2 border-green-500 shadow-green-500/30"
+                }`}
               >
-                Logout
+                {isOnline ? "Go Offline" : "Go Online"}
               </button>
-              <button onClick={handleGoOffline}
-                className="px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50">
-                Go Offline
+              <button
+                onClick={handleLogout}
+                className="px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all ml-1"
+              >
+                Logout ➔
               </button>
             </div>
           </div>
@@ -534,11 +553,10 @@ export default function RiderDashboard() {
               <button
                 key={tab.key}
                 onClick={() => { setActiveTab(tab.key); if (tab.key === "profile") fetchProfile(); }}
-                className={`flex-1 py-3 text-xs font-semibold border-b-2 transition-colors ${
-                  activeTab === tab.key
-                    ? "border-brand-500 text-brand-600 dark:text-brand-400"
-                    : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                }`}
+                className={`flex-1 py-3 text-xs font-semibold border-b-2 transition-colors ${activeTab === tab.key
+                  ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                  : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                  }`}
               >
                 {tab.label}
               </button>
@@ -564,9 +582,20 @@ export default function RiderDashboard() {
                   </div>
                   {pendingOrders.length === 0 ? (
                     <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-10 text-center">
-                      <p className="text-4xl mb-3">😴</p>
-                      <p className="font-semibold text-gray-700 dark:text-gray-300">No ride requests right now</p>
-                      <p className="text-sm text-gray-400 mt-1">Polling every 5 seconds...</p>
+                      {!isOnline ? (
+                        <>
+                           <p className="text-4xl mb-3">🛌</p>
+                           <p className="font-semibold text-gray-700 dark:text-gray-300">You are offline</p>
+                           <p className="text-sm text-gray-400 mt-1">Go online to start receiving ride requests.</p>
+                           <button onClick={handleToggleOnlineStatus} className="mt-4 px-6 py-2 bg-green-500 text-white font-bold rounded-xl shadow-lg hover:scale-105 transition-all">Go Online Now 🟢</button>
+                        </>
+                      ) : (
+                        <>
+                           <p className="text-4xl mb-3">📡</p>
+                           <p className="font-semibold text-gray-700 dark:text-gray-300">Scanning for duties...</p>
+                           <p className="text-sm text-gray-400 mt-1">No ride requests near you right now.</p>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -711,7 +740,7 @@ export default function RiderDashboard() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-white">My Orders</h2>
-                <span className="text-xs text-gray-400">{riderProfile?.orders?.length ?? 0} total</span>
+                <span className="text-xs text-gray-400">{riderProfile?.orders?.length} total</span>
               </div>
               {!riderProfile?.orders || riderProfile.orders.length === 0 ? (
                 <div className="text-center py-16 text-gray-400">
@@ -786,11 +815,10 @@ export default function RiderDashboard() {
                   <div key={trip.id} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4">
                     <div className="flex items-center justify-between mb-2">
                       <p className="font-bold text-sm text-gray-800 dark:text-white">Trip #{trip.id}</p>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        trip.status === "completed" ? "bg-green-100 text-green-700" :
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${trip.status === "completed" ? "bg-green-100 text-green-700" :
                         trip.status === "ongoing" ? "bg-blue-100 text-blue-700" :
-                        "bg-gray-100 text-gray-600"
-                      }`}>{trip.status}</span>
+                          "bg-gray-100 text-gray-600"
+                        }`}>{trip.status}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-3 text-center mt-3">
                       <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-2">
@@ -835,9 +863,8 @@ export default function RiderDashboard() {
                 <div>
                   <p className="text-xl font-bold text-gray-800 dark:text-white">{selectedRider?.name}</p>
                   <p className="text-sm text-gray-400">{selectedRider?.phone}</p>
-                  <span className={`mt-1 inline-block text-xs px-2 py-0.5 rounded-full font-semibold ${
-                    selectedRider?.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
-                  }`}>{selectedRider?.status}</span>
+                  <span className={`mt-1 inline-block text-xs px-2 py-0.5 rounded-full font-semibold ${selectedRider?.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
+                    }`}>{selectedRider?.status}</span>
                 </div>
               </div>
 
@@ -898,9 +925,9 @@ export default function RiderDashboard() {
               </div>
 
               {/* Logout */}
-              <button onClick={handleGoOffline}
+              <button onClick={handleLogout}
                 className="w-full py-3 text-sm font-bold text-red-600 border border-red-200 rounded-2xl hover:bg-red-50 transition-colors">
-                🔴 Go Offline & Logout
+                🔴 Logout from App
               </button>
             </div>
           )}

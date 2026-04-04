@@ -2,7 +2,7 @@
 
 import React, { useContext, useEffect, useState } from "react";
 import Link from "next/link";
-import { UserContext } from "../layout";
+import { UserContext } from "@/context/UserContext";
 
 const ORDER_STATUS: Record<number, string> = {
   0: "Pending",
@@ -56,7 +56,7 @@ export default function CustomerDashboardPage() {
         <div className="text-6xl">👤</div>
         <h2 className="text-xl font-bold dark:text-white">Login required</h2>
         <p className="text-sm text-gray-500 max-w-sm">
-          Dashboard ke liye pehle customer account se login karein (homepage par).
+          First log in using the customer account (on the homepage) to access the dashboard.
         </p>
         <Link
           href="/user"
@@ -160,7 +160,7 @@ export default function CustomerDashboardPage() {
         {loading ? (
           <p className="text-sm text-gray-500">Loading...</p>
         ) : recent.length === 0 ? (
-          <p className="text-sm text-gray-500">Abhi koi order nahi. Pehli ride book karein.</p>
+          <p className="text-sm text-gray-500">No orders yet. Book your first ride!</p>
         ) : (
           <ul className="space-y-2">
             {recent.map((o) => (

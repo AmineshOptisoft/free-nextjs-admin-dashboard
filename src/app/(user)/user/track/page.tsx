@@ -2,7 +2,9 @@
 
 import { useEffect, useContext, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { UserContext } from "../layout";
+import { UserContext } from "@/context/UserContext";
+
+import { ORDER_STATUS } from "@/lib/constants";
 
 function TrackingRedirectController() {
   const router = useRouter();
@@ -24,7 +26,7 @@ function TrackingRedirectController() {
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
-            const ongoing = data.find(o => ["Pending", "Accepted", "Started", "Picked Up"].includes(o.status));
+            const ongoing = data.find(o => [ORDER_STATUS.PENDING, ORDER_STATUS.ACCEPTED, ORDER_STATUS.ARRIVED, ORDER_STATUS.STARTED].includes(o.status));
             if (ongoing) {
               router.replace(`/user/track/${ongoing.id}`);
             } else {

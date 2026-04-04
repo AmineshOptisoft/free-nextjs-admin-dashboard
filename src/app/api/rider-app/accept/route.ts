@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishNotification } from '@/lib/redis-pub'
 import { sendPushNotification } from '@/lib/onesignal-server'
+import { ORDER_STATUS, TRIP_STATUS, VEHICLE_STATUS } from '@/lib/constants'
 
 // POST /api/rider-app/accept
 // Rider self-accepts a pending ride near them
@@ -37,10 +38,18 @@ import { sendPushNotification } from '@/lib/onesignal-server'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { orderId, riderId, vehicleId } = body
+    let { orderId, riderId, vehicleId } = body
 
-    if (!orderId || !riderId || !vehicleId) {
-      return NextResponse.json({ error: 'orderId, riderId, and vehicleId are required' }, { status: 400 })
+    if (!orderId || !riderId) {
+      return NextResponse.json({ error: 'orderId and riderId are required' }, { status: 400 })
+    }
+
+    // Resolve vehicleId if not sent
+    if (!vehicleId) {
+      const rider = await prisma.rider.findUnique({ where: { id: parseInt(riderId) } });
+      if (rider?.assignedVehicleId) {
+        vehicleId = rider.assignedVehicleId;
+      }
     }
 
     // Check order is still Pending
@@ -50,13 +59,13 @@ export async function POST(request: Request) {
     })
 
     if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
-    if (order.status !== 0) {//'Pending'
+    if (order.status !== ORDER_STATUS.PENDING) {
       return NextResponse.json({ error: 'This ride has already been accepted or is no longer available' }, { status: 400 })
     }
 
     // Check rider is free
     const riderBusy = await prisma.trip.findFirst({
-      where: { riderId: parseInt(riderId), status: 3 }//'ongoing'
+      where: { riderId: parseInt(riderId), status: TRIP_STATUS.ONGOING }
     })
     if (riderBusy) return NextResponse.json({ error: 'You are already on a trip' }, { status: 400 })
 
@@ -64,13 +73,16 @@ export async function POST(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       const updatedOrder = await tx.order.update({
         where: { id: parseInt(orderId) },
-        data: { riderId: parseInt(riderId), status: 1 },//'Accepted'
+        data: { riderId: parseInt(riderId), status: ORDER_STATUS.ACCEPTED },
         include: { customer: true }
       })
-      await tx.vehicle.update({
-        where: { id: parseInt(vehicleId) },
-        data: { status: 2 }//'in_use'
-      })
+      
+      if (vehicleId) {
+        await tx.vehicle.update({
+          where: { id: parseInt(vehicleId) },
+          data: { status: VEHICLE_STATUS.IN_USE }
+        })
+      }
       return updatedOrder
     })
 

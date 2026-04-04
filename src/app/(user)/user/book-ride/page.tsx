@@ -3,9 +3,15 @@ import React, { useState, useEffect, useContext } from "react";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { useRouter } from "next/navigation";
-import { UserContext } from "../layout";
+import { UserContext } from "@/context/UserContext";
 import Autocomplete from "react-google-autocomplete";
 import UserAuthModal from "@/components/user/layout/UserAuthModal";
+import dynamic from "next/dynamic";
+
+const BookingMap = dynamic(() => import("@/components/user/booking/BookingMap"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full bg-gray-100 dark:bg-gray-800 animate-pulse flex items-center justify-center font-bold text-gray-400">Loading Map & Nearby Riders...</div>,
+});
 
 // ─── Client-side Haversine ──────────────────────────────────────────────────
 function calcDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -55,7 +61,19 @@ export default function BookRidePage() {
     dropLat: "",
     dropLng: "",
     paymentMode: "Cash",
+    saveAsHome: false,
+    saveAsWork: false,
   });
+
+  const [saveAs, setSaveAs] = useState<"home" | "work" | null>(null);
+
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      saveAsHome: saveAs === "home",
+      saveAsWork: saveAs === "work"
+    }));
+  }, [saveAs]);
 
   // Handlers for address selection
   const handlePickupSelected = (place: any) => {
@@ -393,131 +411,185 @@ export default function BookRidePage() {
         : "https://www.google.com/maps?q=26.9124,75.7873&z=12&output=embed";
 
   return (
-    <div className="max-w-8xl mx-auto space-y-8 px-2 sm:px-4">
-      <div>
-        <h2 className="text-3xl font-black text-gray-800 dark:text-white uppercase tracking-tight">Book Your Kadi Ride</h2>
-        <p className="mt-1 text-sm text-gray-500">Go green, go Kadi. Fast e-bikes at your doorstep.</p>
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="mb-8">
+        <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Book Your Kadi Ride</h2>
+        <p className="mt-2 text-base text-gray-500 dark:text-gray-400 font-medium">Fast, eco-friendly e-bikes at your doorstep.</p>
       </div>
 
-      {step === 2 && (
-        <div className="relative rounded-3xl overflow-hidden border border-gray-200 dark:border-gray-800 shadow-2xl min-h-[540px]">
-          <iframe
-            title="Ride map"
-            src={mapUrl}
-            className="absolute inset-0 w-full h-full"
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-          />
-          <div className="absolute inset-0 bg-black/15 pointer-events-none" />
-
-          <div className="relative z-10 p-4 md:p-6 flex flex-col h-full justify-between">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-bold text-white drop-shadow">Live Map</p>
-              <button
-                type="button"
-                onClick={useCurrentLocationAsPickup}
-                disabled={!currentLocation}
-                className="px-3 py-2 text-xs font-bold rounded-lg bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
-              >
-                Use My Current Location
-              </button>
-            </div>
-
-            <div className="rounded-2xl bg-black/35 backdrop-blur-md p-4 md:p-5 border border-white/20 shadow-xl space-y-3">
-              <div className="space-y-2">
-                <Label className="text-white">🏫 Pickup Location</Label>
-                <Autocomplete
-                  key={`pickup-${formData.pickupLoc}`}
-                  apiKey={apiKey}
-                  onPlaceSelected={handlePickupSelected}
-                  defaultValue={formData.pickupLoc}
-                  options={{ types: ["geocode", "establishment"], componentRestrictions: { country: "in" } }}
-                  className="w-full h-12 px-4 rounded-xl border border-white/40 bg-white/10 text-white placeholder:text-white/70 outline-none focus:border-brand-400 transition-all font-medium"
-                  placeholder="Where from? Search your area..."
-                />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Form Panel */}
+        <div className="lg:col-span-5 space-y-6">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-xl overflow-hidden">
+            {error && (
+              <div className="m-6 p-4 text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-2xl">
+                {error}
               </div>
+            )}
 
-              <div className="space-y-2">
-                <Label className="text-white">📍 Destination Address</Label>
-                <Autocomplete
-                  apiKey={apiKey}
-                  onPlaceSelected={handleDropSelected}
-                  defaultValue={formData.dropLoc}
-                  options={{ types: ["geocode", "establishment"], componentRestrictions: { country: "in" } }}
-                  className="w-full h-12 px-4 rounded-xl border border-white/40 bg-white/10 text-white placeholder:text-white/70 outline-none focus:border-brand-400 transition-all font-medium"
-                  placeholder="Where to? Enter drop point..."
-                />
-              </div>
-
-              <select
-                id="paymentMode"
-                value={formData.paymentMode}
-                onChange={handleChange as any}
-                className="w-full h-12 px-4 rounded-xl border border-white/40 bg-white/10 text-white"
-              >
-                <option value="Cash">💵 Cash on Delivery</option>
-                <option value="UPI">📱 UPI Payment</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="rounded-3xl border border-transparent bg-transparent p-8 shadow-none">
-        {error && <div className="mb-6 p-4 text-sm text-red-600 bg-red-50 rounded-2xl border border-red-100">{error}</div>}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {step === 1 && (
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" value={formData.firstName} onChange={handleChange} required placeholder="John" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" value={formData.lastName} onChange={handleChange} required placeholder="Doe" />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input id="phone" type="tel" value={formData.phone} onChange={handleChange} required placeholder="9876543210" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input id="email" type="email" value={formData.email} onChange={handleChange} placeholder="john@example.com (optional)" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" value={formData.password} onChange={handleChange} required placeholder="Enter your password" />
-              </div>
-              <button type="button" onClick={() => setStep(2)} className="w-full py-4 bg-brand-500 text-white font-bold rounded-2xl shadow-lg hover:bg-brand-600 transition-all">Confirm Details →</button>
-            </div>
-          )}
-
-          {step === 2 && (
-            <>
-              {estimate && (
-                <div className="p-6 rounded-3xl bg-brand-500 text-white shadow-xl space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Estimated Fare</p>
-                  <div className="flex items-center justify-between">
-                    <p className="text-4xl font-black">₹{estimate.fare}</p>
-                    <div className="text-right">
-                      <p className="text-xs font-bold">{estimate.distance} KM</p>
-                      <p className="text-[10px] opacity-70">~{estimate.timeMin} mins</p>
+            <form onSubmit={handleSubmit}>
+              {step === 1 && (
+                <div className="p-6 space-y-5">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="h-8 w-8 rounded-full bg-brand-100 dark:bg-brand-900/30 text-brand-600 flex items-center justify-center font-bold text-sm">1</div>
+                    <h3 className="text-xl font-bold text-gray-800 dark:text-white">Your Info</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="firstName" className="text-xs font-bold text-gray-500 uppercase tracking-wider">First Name</Label>
+                      <Input id="firstName" value={formData.firstName} onChange={handleChange} required placeholder="John" className="bg-gray-50 dark:bg-gray-800 border-transparent rounded-xl" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="lastName" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Last Name</Label>
+                      <Input id="lastName" value={formData.lastName} onChange={handleChange} required placeholder="Doe" className="bg-gray-50 dark:bg-gray-800 border-transparent rounded-xl" />
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Phone</Label>
+                    <Input id="phone" type="tel" value={formData.phone} onChange={handleChange} required placeholder="9876543210" className="bg-gray-50 dark:bg-gray-800 border-transparent rounded-xl" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Email (Optional)</Label>
+                    <Input id="email" type="email" value={formData.email} onChange={handleChange} placeholder="john@example.com" className="bg-gray-50 dark:bg-gray-800 border-transparent rounded-xl" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="password" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Create Password</Label>
+                    <Input id="password" type="password" value={formData.password} onChange={handleChange} required placeholder="minimum 6 chars" className="bg-gray-50 dark:bg-gray-800 border-transparent rounded-xl" />
+                  </div>
+                  <button type="button" onClick={() => setStep(2)} className="w-full mt-4 py-4 bg-brand-500 text-white font-black text-lg rounded-2xl shadow-lg shadow-brand-500/30 hover:bg-brand-600 hover:-translate-y-0.5 transition-all">Next Step →</button>
                 </div>
               )}
 
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setStep(1)} className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold">Back</button>
-                <button type="submit" disabled={loading || !formData.pickupLoc || !formData.dropLoc} className="flex-[2] py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl disabled:opacity-40">{loading ? "Booking..." : "Confirm Kadi Ride 🚀"}</button>
-              </div>
-            </>
-          )}
-        </form>
+              {step === 2 && (
+                <div className="p-6 space-y-6">
+                   <div className="space-y-4">
+                      {/* Pick up */}
+                      <div className="relative">
+                        <div className="absolute left-4 top-4 w-2.5 h-2.5 bg-gray-900 dark:bg-white rounded-full z-10 animate-pulse"></div>
+                        <div className="absolute left-[1.15rem] top-8 w-0.5 h-8 bg-gray-200 dark:bg-gray-700 z-10"></div>
+                        <Autocomplete
+                          key={`pickup-${formData.pickupLoc}`}
+                          apiKey={apiKey}
+                          onPlaceSelected={handlePickupSelected}
+                          defaultValue={formData.pickupLoc}
+                          options={{ types: ["geocode", "establishment"], componentRestrictions: { country: "in" } }}
+                          className="w-full pl-12 pr-4 py-3.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all placeholder:text-gray-400"
+                          placeholder="Current Location"
+                        />
+                      </div>
+                      
+                      {/* Drop */}
+                      <div className="relative">
+                        <div className="absolute left-4 top-4 w-2.5 h-2.5 bg-brand-500 rounded-sm z-10 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></div>
+                        <Autocomplete
+                          apiKey={apiKey}
+                          onPlaceSelected={handleDropSelected}
+                          defaultValue={formData.dropLoc}
+                          options={{ types: ["geocode", "establishment"], componentRestrictions: { country: "in" } }}
+                          className="w-full pl-12 pr-4 py-3.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all placeholder:text-gray-400"
+                          placeholder="Where to?"
+                        />
+                      </div>
+                   </div>
+
+                   <button
+                      type="button"
+                      onClick={useCurrentLocationAsPickup}
+                      disabled={!currentLocation}
+                      className="inline-flex flex-row items-center gap-2 text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      Use my current location as pickup
+                    </button>
+
+                    <div className="pt-4 border-t border-gray-100 dark:border-gray-800 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Payment</Label>
+                          <select
+                            id="paymentMode"
+                            value={formData.paymentMode}
+                            onChange={handleChange as any}
+                            className="w-full h-11 px-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold text-gray-800 dark:text-gray-200 focus:border-brand-500 outline-none"
+                          >
+                            <option value="Cash">💵 Cash</option>
+                            <option value="UPI">📱 UPI</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Save Address</Label>
+                          <select 
+                            value={saveAs || ""}
+                            onChange={(e) => setSaveAs(e.target.value as "home" | "work" | null || null)}
+                            className="w-full h-11 px-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold text-gray-800 dark:text-gray-200 focus:border-brand-500 outline-none"
+                          >
+                             <option value="">Don&apos;t save</option>
+                             <option value="home">🏠 Save as Home</option>
+                             <option value="work">💼 Save as Work</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {estimate && (
+                      <div className="mt-2 flex items-center justify-between p-4 bg-gray-900 dark:bg-black rounded-2xl shadow-inner text-white">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Fare Estimate</p>
+                          <div className="flex items-baseline gap-2 mt-0.5">
+                            <span className="text-3xl font-black">₹{estimate.fare}</span>
+                            <span className="text-xs font-semibold text-gray-400 line-through">₹{Math.round(estimate.fare * 1.2)}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold">{estimate.distance} KM</p>
+                          <p className="text-xs text-gray-400 font-medium">~{estimate.timeMin} mins away</p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-3 pt-2">
+                       {!activeUser && (
+                          <button type="button" onClick={() => setStep(1)} className="px-5 py-4 border-2 border-gray-200 dark:border-gray-700 rounded-2xl font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Back</button>
+                       )}
+                       <button 
+                         type="submit" 
+                         disabled={loading || !formData.pickupLoc || !formData.dropLoc} 
+                         className="flex-1 py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-2xl font-black text-lg shadow-lg shadow-brand-500/30 transition-all disabled:opacity-40 disabled:hover:translate-y-0 hover:-translate-y-0.5 flex justify-center items-center gap-2"
+                        >
+                          {loading ? (
+                             <span className="animate-pulse">Booking...</span>
+                          ) : (
+                             <>Confirm Ride <span className="text-xl">🚀</span></>
+                          )}
+                        </button>
+                    </div>
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+
+        {/* Right Map Panel */}
+        <div className="lg:col-span-7 h-[500px] lg:h-[700px] w-full bg-gray-100 dark:bg-gray-900 rounded-3xl overflow-hidden border border-gray-200 dark:border-gray-800 shadow-xl relative mt-8 lg:mt-0 z-0">
+           {step === 2 ? (
+             <div className="absolute inset-0 w-full h-full">
+                <BookingMap 
+                  pickupLat={pickupLatNum} 
+                  pickupLng={pickupLngNum} 
+                  dropLat={dropLatNum} 
+                  dropLng={dropLngNum} 
+                />
+             </div>
+           ) : (
+             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 p-8 text-center bg-gray-50 dark:bg-gray-900">
+                <svg className="w-16 h-16 mb-4 opacity-50 block mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+                <p className="font-semibold text-lg">Enter your details to view map</p>
+                <p className="text-xs max-w-xs mx-auto mt-2">The map will update magically once you choose your pickup and drop locations in the next step.</p>
+             </div>
+           )}
+           {/* Gradient overlay for aesthetic map borders */}
+           <div className="absolute inset-0 pointer-events-none rounded-3xl ring-1 ring-inset ring-black/10 dark:ring-white/10 shadow-[inset_0_0_20px_rgba(0,0,0,0.05)]"></div>
+        </div>
       </div>
     </div>
   );

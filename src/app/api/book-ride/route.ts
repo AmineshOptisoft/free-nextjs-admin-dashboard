@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { publishNotification } from "@/lib/redis-pub";
 import { sendPushNotification } from "@/lib/onesignal-server";
+import { ORDER_STATUS, RIDER_STATUS, TRIP_STATUS } from "@/lib/constants";
 
 // Generate a 4-digit OTP
 function generateOTP(): string {
@@ -87,6 +88,9 @@ export async function POST(request: Request) {
       dropLat,
       dropLng,
       dropLoc,
+      // Save prefs
+      saveAsHome,
+      saveAsWork,
       // Payment preference
       paymentMode = "Cash",
     } = data;
@@ -105,28 +109,38 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Find or create customer (by phone first, then email)
-    let customer = await prisma.customer.findFirst({
+    // 1. Find or create customer
+    let customer = await prisma.customer.findUnique({
       where: { phone },
     });
 
     if (!customer && email) {
-      customer = await prisma.customer.findFirst({
+      customer = await prisma.customer.findUnique({
         where: { email },
       });
     }
 
+    const customerData: any = { firstName, lastName };
+    
+    // Explicit save requests
+    if (saveAsHome && pickupLoc) customerData.homeAddress = pickupLoc;
+    if (saveAsWork && pickupLoc) customerData.workAddress = pickupLoc;
+
     if (!customer) {
-      // Generate a placeholder email if not provided
       const resolvedEmail = email || `user_${phone}@kadi.app`;
+      // AUTO-SAVE: If this is their first time, save pickup as default address (street)
+      customerData.street = pickupLoc; 
       customer = await prisma.customer.create({
-        data: { firstName, lastName, phone, email: resolvedEmail },
+        data: { ...customerData, phone, email: resolvedEmail },
       });
     } else {
-      // Update name if changed
+      // AUTO-SAVE: If they have NO address saved anywhere, fill the 'street' field at minimum
+      if (!customer.street && !customer.homeAddress && !customer.workAddress && pickupLoc) {
+        customerData.street = pickupLoc;
+      }
       customer = await prisma.customer.update({
         where: { id: customer.id },
-        data: { firstName, lastName },
+        data: customerData,
       });
     }
 
@@ -134,8 +148,8 @@ export async function POST(request: Request) {
     const activeOrder = await prisma.order.findFirst({
       where: {
         customerId: customer.id,
-        // Active means still in-progress. Exclude Delivered (5) and Cancelled (6).
-        status: { in: [0, 1, 2, 3] }
+        // Active means still in-progress. Exclude Delivered (4) and Canceled (5).
+        status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ACCEPTED, ORDER_STATUS.ARRIVED, ORDER_STATUS.STARTED] }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -172,7 +186,7 @@ export async function POST(request: Request) {
     const newOrder = await prisma.order.create({
       data: {
         customerId: customer.id,
-        status: 0,//"Pending",
+        status: ORDER_STATUS.PENDING,
         date: new Date(),
         pickupLat: parseFloat(pickupLat),
         pickupLng: parseFloat(pickupLng),
@@ -207,9 +221,9 @@ export async function POST(request: Request) {
     // 5. Find nearby free riders (using Haversine on their latest location logs)
     const freeRiders = await prisma.rider.findMany({
       where: {
-        status: 1,//"active",
+        status: RIDER_STATUS.ACTIVE,
         trips: {
-          none: { status: 3 },//"ongoing" // no ongoing trip = FREE
+          none: { status: TRIP_STATUS.ONGOING },
         },
       },
       select: {

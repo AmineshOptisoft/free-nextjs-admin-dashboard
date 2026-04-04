@@ -10,9 +10,11 @@ import {
 import Badge from "../ui/badge/Badge";
 import Link from "next/link";
 
+import { ORDER_STATUS_LABELS, ORDER_STATUS } from "@/lib/constants";
+
 interface Order {
   id: number;
-  status: string;
+  status: number;
   createdAt: string;
   customer: { firstName: string; lastName: string };
   rider?: { name: string } | null;
@@ -100,12 +102,12 @@ export default function RecentOrders() {
                   <Badge
                     size="sm"
                     color={
-                      order.status === "Delivered" ? "success" : 
-                      order.status === "Pending" ? "warning" : 
-                      ["Accepted", "Arrived", "Started"].includes(order.status) ? "info" : "error"
+                      order.status === ORDER_STATUS.DELIVERED ? "success" : 
+                      order.status === ORDER_STATUS.PENDING ? "warning" : 
+                      [ORDER_STATUS.ACCEPTED, ORDER_STATUS.ARRIVED, ORDER_STATUS.STARTED].includes(order.status) ? "info" : "error"
                     }
                   >
-                    {order.status}
+                    {ORDER_STATUS_LABELS[order.status] || order.status}
                   </Badge>
                 </TableCell>
               </TableRow>

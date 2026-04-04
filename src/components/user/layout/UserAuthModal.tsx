@@ -3,7 +3,7 @@
 import React, { useState, useContext, useEffect } from "react";
 import ForgotPasswordOtpForm from "@/components/auth/ForgotPasswordOtpForm";
 import { useRouter } from "next/navigation";
-import { UserContext } from "@/app/(user)/user/layout";
+import { UserContext } from "@/context/UserContext";
 
 type Props = {
   mode: "login" | "signup";

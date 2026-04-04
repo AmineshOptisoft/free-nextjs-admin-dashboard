@@ -7,6 +7,8 @@ import { Modal } from "@/components/ui/modal";
 import Label from "@/components/form/Label";
 import { getSocket } from "@/lib/socket";
 
+import { ORDER_STATUS, RIDER_STATUS, VEHICLE_STATUS } from "@/lib/constants";
+
 export default function OrdersList() {
   const [orders, setOrders] = useState<any[]>([]);
   const [riders, setRiders] = useState<any[]>([]);
@@ -61,10 +63,10 @@ export default function OrdersList() {
     }
   }, [assignData.riderId, riders]);
 
-  const freeRiders = riders.filter((r: any) => r.currentState === "Free" || r.status === "active");
+  const freeRiders = riders.filter((r: any) => r.status === RIDER_STATUS.ACTIVE);
 
   const getRelevantVehicles = () => {
-    const baseAvail = vehicles.filter((v: any) => v.status === "available");
+    const baseAvail = vehicles.filter((v: any) => v.status === VEHICLE_STATUS.AVAILABLE);
     if (!assignData.riderId) return baseAvail;
     
     const selectedRider = riders.find((r: any) => r.id.toString() === assignData.riderId);
@@ -117,7 +119,7 @@ export default function OrdersList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-              {orders.filter(o => o.status === "Pending").map((order) => (
+              {orders.filter(o => o.status === ORDER_STATUS.PENDING).map((order) => (
                 <tr key={order.id}>
                   <td className="px-6 py-4 text-sm">#ORD-{order.id}</td>
                   <td className="px-6 py-4 text-sm">{order.customer?.firstName}</td>

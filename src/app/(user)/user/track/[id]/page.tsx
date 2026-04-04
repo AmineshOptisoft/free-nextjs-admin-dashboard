@@ -12,6 +12,8 @@ const CustomerTrackMap = dynamic(() => import("@/components/user/tracking/Custom
   loading: () => <div className="h-full w-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center animate-pulse text-gray-400 font-bold tracking-widest text-xs uppercase">🛰️ Connecting to Kadi Satellites...</div>,
 });
 
+import { ORDER_STATUS } from "@/lib/constants";
+
 export default function OrderTrackingPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -86,12 +88,12 @@ export default function OrderTrackingPage() {
   );
 
   const steps = [
-    { label: "Booked", status: ["Pending"] },
-    { label: "Assigned", status: ["Accepted", "Arrived"] },
-    { label: "On Route", status: ["Started"] },
-    { label: "Arrived", status: ["Delivered"] }
+    { label: "Booked", status: [ORDER_STATUS.PENDING] },
+    { label: "Assigned", status: [ORDER_STATUS.ACCEPTED, ORDER_STATUS.ARRIVED] },
+    { label: "On Route", status: [ORDER_STATUS.STARTED] },
+    { label: "Arrived", status: [ORDER_STATUS.DELIVERED] }
   ];
-  const isActiveMission = order?.status !== "Cancelled" && order?.status !== "Delivered";
+  const isActiveMission = order?.status !== ORDER_STATUS.CANCELED && order?.status !== ORDER_STATUS.DELIVERED;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col overflow-hidden">
@@ -105,13 +107,13 @@ export default function OrderTrackingPage() {
               <div className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
                 <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">
-                  {order?.status} {isActiveMission ? "ACTIVE" : "CLOSED"}
+                  Status Code: {order?.status} - {isActiveMission ? "ACTIVE" : "CLOSED"}
                 </p>
               </div>
             </div>
           </div>
-          <Badge color={order?.status === "Started" || order?.status === "Delivered" ? "success" : "info"}>
-            {order?.status}
+          <Badge color={order?.status === ORDER_STATUS.STARTED || order?.status === ORDER_STATUS.DELIVERED ? "success" : "info"}>
+            Status: {order?.status}
           </Badge>
         </div>
       </div>
@@ -142,7 +144,7 @@ export default function OrderTrackingPage() {
         <div className="w-full lg:w-[450px] bg-white dark:bg-gray-900 border-t lg:border-t-0 lg:border-l border-gray-200 dark:border-gray-800 shadow-2xl z-[1002] flex flex-col justify-between">
           <div className="p-8 space-y-8 overflow-y-auto">
             {/* Status Stepper */}
-            {order?.status === "Cancelled" ? (
+            {order?.status === ORDER_STATUS.CANCELED ? (
               <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-6 rounded-2xl text-center border border-red-200 dark:border-red-800 space-y-4">
                 <div className="text-4xl">🚫</div>
                 <div>
@@ -160,7 +162,7 @@ export default function OrderTrackingPage() {
               <div className="flex justify-between items-center px-2 relative">
                 <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-100 dark:bg-gray-800 -translate-y-1/2 z-0"></div>
                 {steps.map((step, i) => {
-                  const isCompleted = steps.slice(0, i + 1).some(s => s.status.includes(order.status)) || order.status === "Delivered";
+                  const isCompleted = steps.slice(0, i + 1).some(s => s.status.includes(order.status)) || order.status === ORDER_STATUS.DELIVERED;
                   return (
                     <div key={i} className="relative z-10 flex flex-col items-center gap-2">
                       <div className={`h-6 w-6 rounded-full border-4 ${isCompleted ? 'bg-brand-500 border-brand-100' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-800'} transition-all duration-500 shadow-sm`}></div>
@@ -172,7 +174,7 @@ export default function OrderTrackingPage() {
             )}
 
             {/* Rider Identity */}
-            {order?.status !== "Cancelled" && (
+            {order?.status !== ORDER_STATUS.CANCELED && (
             <div className="bg-gray-50 dark:bg-white/5 rounded-[32px] p-6 border border-gray-100 dark:border-white/5 shadow-inner">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
@@ -225,7 +227,7 @@ export default function OrderTrackingPage() {
             <button className="w-full h-14 bg-gray-800 dark:bg-white text-white dark:text-gray-950 font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-gray-200 dark:shadow-none hover:translate-y-[-2px] active:translate-y-[0px] transition-all text-xs">
               Need Help? Support Active
             </button>
-            {order?.status !== "Cancelled" && order?.status !== "Delivered" && order?.status !== "Started" && (
+            {order?.status !== ORDER_STATUS.CANCELED && order?.status !== ORDER_STATUS.DELIVERED && order?.status !== ORDER_STATUS.STARTED && (
               <button 
                 onClick={handleCancel}
                 disabled={cancelling}

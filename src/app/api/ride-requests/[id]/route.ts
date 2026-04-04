@@ -1,24 +1,10 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+import { ORDER_STATUS, ORDER_STATUS_LABELS } from '@/lib/constants'
+
 function orderStatusLabel(status: number) {
-  switch (status) {
-    case 0:
-      return 'Pending'
-    case 1:
-      return 'Accepted'
-    case 2:
-      return 'Arrived'
-    case 3:
-    case 4:
-      return 'Started'
-    case 5:
-      return 'Delivered'
-    case 6:
-      return 'Cancelled'
-    default:
-      return String(status)
-  }
+  return ORDER_STATUS_LABELS[status] || String(status);
 }
 
 // GET /api/ride-requests/[id]

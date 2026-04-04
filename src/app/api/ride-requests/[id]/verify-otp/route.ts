@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishNotification } from '@/lib/redis-pub'
 import { sendPushNotification } from '@/lib/onesignal-server'
+import { ORDER_STATUS, TRIP_STATUS } from '@/lib/constants'
 
 // POST /api/ride-requests/[id]/verify-otp
 // Rider arrives at pickup, customer shows OTP — rider verifies it to START the trip
@@ -31,8 +32,8 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    if (order.status !== 1) {//'Accepted'
-      return NextResponse.json({ error: 'OTP can only be verified for Accepted orders' }, { status: 400 })
+    if (order.status !== ORDER_STATUS.ACCEPTED && order.status !== ORDER_STATUS.ARRIVED) {
+      return NextResponse.json({ error: 'OTP can only be verified for Accepted/Arrived orders' }, { status: 400 })
     }
 
     // Validate OTP
@@ -56,7 +57,7 @@ export async function POST(
       // Update order status to Started
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
-        data: { status: 4 }//'Started'
+        data: { status: ORDER_STATUS.STARTED }
       })
 
       // Create the actual Trip record
@@ -64,7 +65,7 @@ export async function POST(
         data: {
           riderId: order.riderId!,
           vehicleId: vid,
-          status: 3,//'ongoing',
+          status: TRIP_STATUS.ONGOING,
           startTime: new Date(),
           startLoc: order.pickupLoc || null,
           endLoc: order.dropLoc || null,

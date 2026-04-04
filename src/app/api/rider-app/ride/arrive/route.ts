@@ -24,6 +24,8 @@ import prisma from '@/lib/prisma';
  *       200:
  *         description: Marked as Arrived
  */
+import { ORDER_STATUS } from '@/lib/constants';
+
 export async function POST(request: Request) {
   try {
     const { orderId, riderId } = await request.json();
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
 
     const updatedOrder = await prisma.order.update({
       where: { id: parseInt(orderId) },
-      data: { status: 2 } // 2 = Arrived
+      data: { status: ORDER_STATUS.ARRIVED } 
     });
 
     return NextResponse.json({ message: 'Rider marked as arrived', order: updatedOrder });

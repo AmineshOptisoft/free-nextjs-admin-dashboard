@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishNotification } from '@/lib/redis-pub'
 import { sendPushNotification } from '@/lib/onesignal-server'
+import { ORDER_STATUS, TRIP_STATUS, VEHICLE_STATUS } from '@/lib/constants'
 
 export async function POST(
   request: Request,
@@ -26,12 +27,12 @@ export async function POST(
     if (!existingOrder) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
-    if (existingOrder.status !== 0) {//'Pending'
+    if (existingOrder.status !== ORDER_STATUS.PENDING) {
       return NextResponse.json({ error: 'Only Pending orders can be assigned' }, { status: 400 })
     }
 
     const riderBusy = await prisma.trip.findFirst({
-      where: { riderId: parseInt(riderId), status: 3 }//'ongoing'
+      where: { riderId: parseInt(riderId), status: TRIP_STATUS.ONGOING }
     })
     if (riderBusy) {
       return NextResponse.json({ error: 'Selected rider is already on a trip' }, { status: 400 })
@@ -43,7 +44,7 @@ export async function POST(
     }
 
     const vehicleBusy = await prisma.trip.findFirst({
-      where: { vehicleId: parseInt(vehicleId), status: 3 }//'ongoing'
+      where: { vehicleId: parseInt(vehicleId), status: TRIP_STATUS.ONGOING }
     })
     if (vehicleBusy) {
       return NextResponse.json({ error: 'Selected vehicle is already on a trip with another rider' }, { status: 400 })
@@ -54,14 +55,14 @@ export async function POST(
         where: { id: orderId },
         data: {
           riderId: parseInt(riderId),
-          status: 1,//'Accepted',
+          status: ORDER_STATUS.ACCEPTED,
         },
         include: { customer: true, rider: true }
       })
 
       await tx.vehicle.update({
         where: { id: parseInt(vehicleId) },
-        data: { status: 2 }//'in_use'
+        data: { status: VEHICLE_STATUS.IN_USE }
       })
 
       return { order: updatedOrder, vehicleId: parseInt(vehicleId) }

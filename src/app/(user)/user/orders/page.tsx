@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect, useContext } from "react";
 import OrderCard from "@/components/user/orders/OrderCard";
-import { UserContext } from "../layout";
+import { UserContext } from "@/context/UserContext";
+
+import { ORDER_STATUS } from "@/lib/constants";
 
 export default function UserOrdersPage() {
   const { user: activeUser } = useContext(UserContext);
@@ -25,10 +27,10 @@ export default function UserOrdersPage() {
   }, [activeUser]);
 
   const active = orders.filter((o) =>
-    ["Pending", "Accepted", "Started", "Picked Up", "Out for Delivery"].includes(o.status)
+    [ORDER_STATUS.PENDING, ORDER_STATUS.ACCEPTED, ORDER_STATUS.ARRIVED, ORDER_STATUS.STARTED].includes(o.status)
   );
-  const completed = orders.filter((o) => o.status === "Delivered");
-  const cancelled = orders.filter((o) => o.status === "Cancelled");
+  const completed = orders.filter((o) => o.status === ORDER_STATUS.DELIVERED);
+  const cancelled = orders.filter((o) => o.status === ORDER_STATUS.CANCELED);
 
   if (!activeUser) {
     return (
@@ -56,14 +58,14 @@ export default function UserOrdersPage() {
       ) : (
         <>
           <section className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Active ({active.length})</h3>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Active {active.length > 0 && `(${active.length})`}</h3>
             {active.length ? active.map((order) => <OrderCard key={order.id} order={order} />) : (
                <p className="text-sm text-gray-500 dark:text-gray-400">No active orders.</p>
             )}
           </section>
 
           <section className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Completed ({completed.length})</h3>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Completed {completed.length > 0 && `(${completed.length})`}</h3>
             {completed.length ? (
               completed.map((order) => <OrderCard key={order.id} order={order} />)
             ) : (
@@ -72,7 +74,7 @@ export default function UserOrdersPage() {
           </section>
 
           <section className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancelled ({cancelled.length})</h3>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancelled {cancelled.length > 0 && `(${cancelled.length})`}</h3>
             {cancelled.length ? (
               cancelled.map((order) => <OrderCard key={order.id} order={order} />)
             ) : (

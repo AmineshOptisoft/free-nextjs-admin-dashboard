@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useContext } from "react";
 import Link from "next/link";
 import OrderStatusBadge from "./OrderStatusBadge";
-import { UserContext } from "@/app/(user)/user/layout";
+import { UserContext } from "@/context/UserContext";
+
+import { ORDER_STATUS } from "@/lib/constants";
 
 export default function CurrentOrderBanner() {
   const context = useContext(UserContext) as any;
@@ -21,7 +23,7 @@ export default function CurrentOrderBanner() {
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
-          const ongoing = data.find(o => ["Pending", "Accepted", "Started", "Picked Up", "Out for Delivery"].includes(o.status));
+          const ongoing = data.find(o => [ORDER_STATUS.PENDING, ORDER_STATUS.ACCEPTED, ORDER_STATUS.ARRIVED, ORDER_STATUS.STARTED].includes(o.status));
           setCurrentOrder(ongoing || null);
         }
       })

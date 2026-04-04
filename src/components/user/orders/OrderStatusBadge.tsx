@@ -1,27 +1,29 @@
 import React from "react";
 import Badge from "@/components/ui/badge/Badge";
-import type { OrderStatus } from "@/data/user/orders";
+import { ORDER_STATUS_LABELS, ORDER_STATUS } from "@/lib/constants";
 
-export default function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  if (status === "Delivered") {
+export default function OrderStatusBadge({ status }: { status: number }) {
+  const label = ORDER_STATUS_LABELS[status] || "Unknown";
+
+  if (status === ORDER_STATUS.DELIVERED) {
     return (
       <Badge size="sm" color="success">
-        {status}
+        {label}
       </Badge>
     );
   }
 
-  if (status === "Cancelled") {
+  if (status === ORDER_STATUS.CANCELED) {
     return (
       <Badge size="sm" color="error">
-        {status}
+        {label}
       </Badge>
     );
   }
 
   return (
     <Badge size="sm" color="warning">
-      {status}
+      {label}
     </Badge>
   );
 }
