@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
+import { IoIosWarning } from "react-icons/io";
+
 
 const PAGE_SIZE = 5;
 
@@ -239,13 +241,9 @@ export default function DisputeList() {
   return (
     <div className="flex flex-col gap-4">
       {/* Page header */}
-      <div className="flex items-center gap-3">
-        <button className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Disputes</h1>
+      <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+        <IoIosWarning className="w-6 h-6" />
+        <h1 className="text-xl font-bold ">Disputes</h1>
       </div>
 
       {/* Advanced Search panel */}

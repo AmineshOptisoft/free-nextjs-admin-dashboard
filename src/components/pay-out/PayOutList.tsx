@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
+import { Modal } from "../ui/modal";
+import { PiArrowCircleDownFill, PiContactlessPaymentFill } from "react-icons/pi";
 
 const PAGE_SIZE = 5;
 
@@ -163,7 +165,7 @@ function PayOutCard({ item }: { item: PayOutItem }) {
   );
 
   return (
-    <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
+    <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/3 overflow-hidden">
       {headerRow}
 
       {/* ── DESKTOP: always-visible detail rows ── */}
@@ -219,7 +221,161 @@ function PayOutCard({ item }: { item: PayOutItem }) {
   );
 }
 
+type CompanyPayOutTab = "ALL" | "APPROVED" | "PENDING" | "UNASSIGNED" | "REJECTED";
+
+function CompanyPayOutRequestModal({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const inputClass =
+    "h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-2 focus:ring-brand-500/15";
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} className="max-w-2xl p-0 overflow-hidden" showCloseButton={false}>
+      <div className="rounded-xl bg-white">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+          <h3 className="text-xl font-semibold text-gray-900">New PayOut Form</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <form className="space-y-4 px-5 py-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Client ID <span className="text-red-500">*</span></label>
+              <input className={inputClass} placeholder="Enter client ID" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Client Name <span className="text-red-500">*</span></label>
+              <input className={inputClass} placeholder="Full name of the client" />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Amount <span className="text-red-500">*</span></label>
+            <input className={inputClass} placeholder="Enter amount (₹)" />
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-gray-50/70 p-3.5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Holder Name <span className="text-red-500">*</span></label>
+                <input className={inputClass} />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Bank Name <span className="text-red-500">*</span></label>
+                <input className={inputClass} />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Account Number <span className="text-red-500">*</span></label>
+                <input className={inputClass} />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">IFSC Code <span className="text-red-500">*</span></label>
+                <input className={inputClass} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+              Cancel
+            </button>
+            <button type="button" className="rounded-md bg-brand-500 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600">
+              Submit Request
+            </button>
+          </div>
+        </form>
+      </div>
+    </Modal>
+  );
+}
+
+function CompanyPayOutView() {
+  const [activeTab, setActiveTab] = useState<CompanyPayOutTab>("ALL");
+  const [isRequestOpen, setIsRequestOpen] = useState(false);
+
+  const companyTabs: { label: string; value: CompanyPayOutTab }[] = [
+    { label: "All", value: "ALL" },
+    { label: "Approved", value: "APPROVED" },
+    { label: "Pending", value: "PENDING" },
+    { label: "Not_assigned", value: "UNASSIGNED" },
+    { label: "Rejected", value: "REJECTED" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+          <PiContactlessPaymentFill className="w-6 h-6 rotate-180" />
+          <h1 className="text-xl font-bold">PayOut Management</h1>
+        </div>
+        <button
+          onClick={() => setIsRequestOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white shadow-theme-xs hover:bg-brand-600"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          New Request
+        </button>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-3.5 dark:border-gray-800 dark:bg-white/3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {companyTabs.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === tab.value
+                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                    : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <button className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18l-7 8v6l-4-2v-4L3 4z" />
+            </svg>
+            Filters
+          </button>
+        </div>
+
+        <div className="mt-6 flex h-[260px] items-start justify-center rounded-xl border border-gray-100 pt-10 text-sm text-gray-400 dark:border-gray-800 dark:text-gray-500">
+          No PAYOUT requests found yet.
+        </div>
+      </div>
+
+      <CompanyPayOutRequestModal isOpen={isRequestOpen} onClose={() => setIsRequestOpen(false)} />
+    </div>
+  );
+}
+
 export default function PayOutList() {
+  const [panelRole] = useState<"admin" | "agent" | "company">(() => {
+    if (typeof window === "undefined") return "admin";
+    const role = localStorage.getItem("tepay_panel");
+    return role === "agent" || role === "company" ? role : "admin";
+  });
+
+  if (panelRole === "company") {
+    return <CompanyPayOutView />;
+  }
+
   const [activeTab, setActiveTab] = useState<PayOutStatus | "ALL">("ALL");
   const [showFilter, setShowFilter] = useState(false);
   const [search, setSearch]         = useState("");
@@ -260,18 +416,13 @@ export default function PayOutList() {
   return (
     <div className="flex flex-col gap-4">
       {/* Page header */}
-      <div className="flex items-center gap-3">
-        <button className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Pay Out</h1>
+      <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+        <PiContactlessPaymentFill className="w-6 h-6 rotate-180" />
+        <h1 className="text-xl font-bold">Pay Out</h1>
       </div>
 
-      {/* Advanced Search filter panel */}
       {showFilter && (
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/3 overflow-hidden">
           {/* Panel header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-800">
             <div className="flex items-center gap-2.5">
@@ -415,7 +566,7 @@ export default function PayOutList() {
       {/* Cards */}
       <div className="flex flex-col gap-3">
         {filtered.length === 0 ? (
-          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-6 py-12 text-center text-gray-400">
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/3 px-6 py-12 text-center text-gray-400">
             No transactions found.
           </div>
         ) : (

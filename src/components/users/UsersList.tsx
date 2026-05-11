@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import CreateUserModal from "./CreateUserModal";
 import Pagination from "../ui/Pagination";
+import { UserIcon } from "@/icons";
 
 const PAGE_SIZE = 6;
 
@@ -235,9 +236,9 @@ export default function UsersList() {
     <div className="flex flex-col gap-5">
       {/* ── Page header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900 dark:text-white">Paysol Users</h1>
-          <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">Manage registered users</p>
+        <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+          <UserIcon className="w-6 h-6" />
+          <h1 className="text-lg font-bold">Payment Method</h1>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}

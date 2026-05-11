@@ -36,7 +36,7 @@ type NavSection = {
   items: NavItem[];
 };
 
-type PanelType = "admin" | "agent";
+type PanelType = "admin" | "agent" | "company";
 
 /* ── Menu definitions ───────────────────────────────────────── */
 const adminSections: NavSection[] = [
@@ -46,13 +46,14 @@ const adminSections: NavSection[] = [
     items: [
       { icon: <GridIcon />,      name: "Dashboard",          path: "/" },
       { icon: <GroupIcon />,     name: "Agent",              path: "/agent" },
+      { icon: <BoxCubeIcon />,   name: "Companies",          path: "/companies" },
       { icon: <ArrowDownIcon />, name: "Pay In",             path: "/pay-in" },
       { icon: <ArrowUpIcon />,   name: "Pay Out",            path: "/pay-out" },
       { icon: <PieChartIcon />,  name: "Transaction Report", path: "/transaction-report" },
       { icon: <AlertIcon />,     name: "Disputes",           path: "/dispute" },
       { icon: <ListIcon />,      name: "Settlement Log",     path: "/settlement-log" },
+      { icon: <TableIcon />,     name: "Ledger",             path: "/ledger" },
       { icon: <BellIcon />,      name: "Notifications",      path: "/notifications" },
-      { icon: <BoxCubeIcon />,   name: "Companies",          path: "/companies" },
     ],
   },
   {
@@ -72,23 +73,20 @@ const agentSections: NavSection[] = [
       { icon: <GridIcon />,      name: "Dashboard", path: "/agent-dashboard" },
       { icon: <ArrowDownIcon />, name: "Pay In",    path: "/pay-in" },
       { icon: <ArrowUpIcon />,   name: "Pay Out",   path: "/pay-out" },
-      { icon: <AlertIcon />,     name: "Disputes",  path: "/dispute" },
     ],
   },
-  {
-    heading: "Reporting",
-    sectionKey: "agent-reporting",
-    items: [
-      { icon: <PieChartIcon />, name: "Saved Reports",   path: "/saved-reports" },
-      { icon: <TableIcon />,    name: "Peer Statements", path: "/peer-statements" },
-    ],
-  },
+  // {
+  //   heading: "Reporting",
+  //   sectionKey: "agent-reporting",
+  //   items: [
+  //     { icon: <PieChartIcon />, name: "Saved Reports", path: "/saved-reports" },
+  //   ],
+  // },
   {
     heading: "Management",
     sectionKey: "agent-mgmt",
     items: [
-      { icon: <UserIcon />,  name: "Users",          path: "/users" },
-      { icon: <LockIcon />,  name: "UTR Management", path: "/utr-management" },
+      { icon: <UserIcon />,  name: "Payment Method", path: "/users" },
     ],
   },
   {
@@ -100,9 +98,45 @@ const agentSections: NavSection[] = [
   },
 ];
 
+const companySections: NavSection[] = [
+  {
+    heading: "",
+    sectionKey: "company-main",
+    items: [
+      { icon: <GridIcon />,      name: "Dashboard",     path: "/company-dashboard" },
+      { icon: <ArrowDownIcon />, name: "PayIn",         path: "/pay-in" },
+      { icon: <ArrowUpIcon />,   name: "PayOut",        path: "/pay-out" },
+      { icon: <PieChartIcon />,  name: "Reports",       path: "/reports" },
+      { icon: <BellIcon />,      name: "Notifications", path: "/notifications" },
+    ],
+  },
+];
+
 const PANEL_LABELS: Record<PanelType, string> = {
   admin: "Admin Panel",
   agent: "Agent Panel",
+  company: "Company Panel",
+};
+
+const PANEL_THEME: Record<PanelType, { borderBgText: string; iconBg: string; activeItemBg: string; text: string }> = {
+  admin: {
+    borderBgText: "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300",
+    iconBg: "bg-blue-500",
+    activeItemBg: "bg-blue-50 dark:bg-blue-900/20",
+    text: "text-blue-700 dark:text-blue-300",
+  },
+  agent: {
+    borderBgText: "border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300",
+    iconBg: "bg-purple-500",
+    activeItemBg: "bg-purple-50 dark:bg-purple-900/20",
+    text: "text-purple-700 dark:text-purple-300",
+  },
+  company: {
+    borderBgText: "border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300",
+    iconBg: "bg-teal-500",
+    activeItemBg: "bg-teal-50 dark:bg-teal-900/20",
+    text: "text-teal-700 dark:text-teal-300",
+  },
 };
 
 /* ── Component ──────────────────────────────────────────────── */
@@ -118,7 +152,7 @@ const AppSidebar: React.FC = () => {
   /* Load saved panel from localStorage */
   useEffect(() => {
     const saved = localStorage.getItem("tepay_panel") as PanelType | null;
-    if (saved === "admin" || saved === "agent") setPanel(saved);
+    if (saved === "admin" || saved === "agent" || saved === "company") setPanel(saved);
   }, []);
 
   /* Save panel choice */
@@ -139,7 +173,8 @@ const AppSidebar: React.FC = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const currentSections = panel === "admin" ? adminSections : agentSections;
+  const currentSections =
+    panel === "admin" ? adminSections : panel === "agent" ? agentSections : companySections;
 
   /* Submenu state */
   const [openSubmenu, setOpenSubmenu] = useState<{ sectionKey: string; index: number } | null>(null);
@@ -301,25 +336,24 @@ const AppSidebar: React.FC = () => {
         <button
           onClick={() => setPanelDropOpen((v) => !v)}
           className={`flex items-center gap-2 rounded-xl border transition-colors w-full
-            ${panel === "admin"
-              ? "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-              : "border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300"
-            }
+            ${PANEL_THEME[panel].borderBgText}
             ${showLabel ? "px-3 py-2.5" : "justify-center p-2.5"}`}
         >
           {/* Icon */}
-          <span className={`flex items-center justify-center w-6 h-6 rounded-lg shrink-0 ${
-            panel === "admin" ? "bg-blue-500" : "bg-purple-500"
-          }`}>
+          <span className={`flex items-center justify-center w-6 h-6 rounded-lg shrink-0 ${PANEL_THEME[panel].iconBg}`}>
             {panel === "admin" ? (
               <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
                   d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-            ) : (
+            ) : panel === "agent" ? (
               <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
                   d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 7h10M7 12h10M7 17h6M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
               </svg>
             )}
           </span>
@@ -344,47 +378,40 @@ const AppSidebar: React.FC = () => {
         {/* Dropdown options */}
         {panelDropOpen && showLabel && (
           <div className="absolute top-full left-0 right-0 mt-1.5 z-50 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg overflow-hidden">
-            {(["admin", "agent"] as PanelType[]).map((p) => (
+            {(["admin", "agent", "company"] as PanelType[]).map((p) => (
               <button
                 key={p}
                 onClick={() => switchPanel(p)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors
-                  ${panel === p
-                    ? p === "admin"
-                      ? "bg-blue-50 dark:bg-blue-900/20"
-                      : "bg-purple-50 dark:bg-purple-900/20"
-                    : "hover:bg-gray-50 dark:hover:bg-gray-800"
-                  }`}
+                  ${panel === p ? PANEL_THEME[p].activeItemBg : "hover:bg-gray-50 dark:hover:bg-gray-800"}`}
               >
-                <span className={`flex items-center justify-center w-6 h-6 rounded-lg shrink-0 ${
-                  p === "admin" ? "bg-blue-500" : "bg-purple-500"
-                }`}>
+                <span className={`flex items-center justify-center w-6 h-6 rounded-lg shrink-0 ${PANEL_THEME[p].iconBg}`}>
                   {p === "admin" ? (
                     <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
                         d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
-                  ) : (
+                  ) : p === "agent" ? (
                     <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
                         d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 7h10M7 12h10M7 17h6M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                    </svg>
                   )}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold leading-tight ${
-                    p === "admin"
-                      ? "text-blue-700 dark:text-blue-300"
-                      : "text-purple-700 dark:text-purple-300"
-                  }`}>
+                  <p className={`text-sm font-semibold leading-tight ${PANEL_THEME[p].text}`}>
                     {PANEL_LABELS[p]}
                   </p>
                   <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
-                    {p === "admin" ? "Full system access" : "Operations access"}
+                    {p === "admin" ? "Full system access" : p === "agent" ? "Operations access" : "Company operations"}
                   </p>
                 </div>
                 {panel === p && (
-                  <svg className={`w-4 h-4 shrink-0 ${p === "admin" ? "text-blue-500" : "text-purple-500"}`}
+                  <svg className={`w-4 h-4 shrink-0 ${p === "admin" ? "text-blue-500" : p === "agent" ? "text-purple-500" : "text-teal-500"}`}
                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>

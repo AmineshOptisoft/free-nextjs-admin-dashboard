@@ -116,10 +116,80 @@ function Tip({ label, children }: { label: string; children: React.ReactNode }) 
 /* ── Component ── */
 export default function AdminDashboard() {
   const [search, setSearch] = useState("");
+  const [hoveredToolbarIndex, setHoveredToolbarIndex] = useState<number | null>(null);
+  const getActionLabelSpace = (label: string) =>
+    Math.max(72, Math.min(220, label.length * 7 + 24));
+
+  const topActions = [
+    {
+      label: "Add Interledger Entry",
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 7l-4 5 4 5M17 7l4 5-4 5M10 6l4 12" />
+        </svg>
+      ),
+    },
+    {
+      label: "Add Security Deposit",
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l7 3v5c0 4.2-2.7 7.8-7 10-4.3-2.2-7-5.8-7-10V6l7-3z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v6M9 11h6" />
+        </svg>
+      ),
+    },
+    {
+      label: "Add Settlement",
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 13v4M10 15h4" />
+        </svg>
+      ),
+    },
+    {
+      label: "Export Data",
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v11m0 0l-4-4m4 4l4-4M4 16v2a3 3 0 003 3h10a3 3 0 003-3v-2" />
+        </svg>
+      ),
+    },
+    {
+      label: "Manual PayIn (CSV)",
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v5h5M12 17V11m0 0l-2 2m2-2l2 2M8 20h8" />
+        </svg>
+      ),
+    },
+    {
+      label: "Commission Settlement (CSV)",
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v5h5M8.5 15.5l2.1 2.1 4.9-4.9" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 10h6" />
+        </svg>
+      ),
+    },
+    {
+      label: "Manual Deposit",
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 8h18v9a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 8V6a2 2 0 012-2h6a2 2 0 012 2v2M12 11v6M9 14h6" />
+        </svg>
+      ),
+    },
+  ] as const;
 
   const filtered = rows.filter((r) =>
     !search || r.name.toLowerCase().includes(search.toLowerCase())
   );
+  const hoveredLabelSpacePx =
+    hoveredToolbarIndex === null ? 0 : getActionLabelSpace(topActions[hoveredToolbarIndex].label);
 
   return (
     <div className="flex flex-col gap-4">
@@ -137,43 +207,37 @@ export default function AdminDashboard() {
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 ml-7">View and manage financial transactions</p>
         </div>
 
-        {/* Right-side toolbar — borderless icon buttons */}
-        <div className="flex items-center gap-0.5 flex-wrap">
-          <Tip label="Copy">
-            <button className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
-            </button>
-          </Tip>
-          <Tip label="Security">
-            <button className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-            </button>
-          </Tip>
-          <Tip label="Columns">
-            <button className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zm-8 8V9m-4 6V9m8 6V9" /></svg>
-            </button>
-          </Tip>
-          <Tip label="Download">
-            <button className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-            </button>
-          </Tip>
-          <Tip label="Upload">
-            <button className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-            </button>
-          </Tip>
-          <Tip label="Refresh">
-            <button className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            </button>
-          </Tip>
-          <Tip label="Archive">
-            <button className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-            </button>
-          </Tip>
+        {/* Right-side toolbar — animated action rail */}
+        <div className="relative flex items-center gap-0.5 flex-wrap">
+          {topActions.map((action, idx) => {
+            const isHovered = hoveredToolbarIndex === idx;
+            const isLeftOfHovered = hoveredToolbarIndex !== null && idx < hoveredToolbarIndex;
+            return (
+              <div
+                key={action.label}
+                className="relative transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                style={{
+                  transform: isLeftOfHovered ? `translateX(-${hoveredLabelSpacePx}px)` : "translateX(0px)",
+                }}
+                onMouseEnter={() => setHoveredToolbarIndex(idx)}
+                onMouseLeave={() => setHoveredToolbarIndex(null)}
+              >
+                <button
+                  aria-label={action.label}
+                  className="relative z-10 flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-300"
+                >
+                  {action.icon}
+                </button>
+                <span
+                  className={`pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    isHovered ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
+                  }`}
+                >
+                  {action.label}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 

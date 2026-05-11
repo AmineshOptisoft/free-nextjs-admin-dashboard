@@ -3,6 +3,8 @@ import React, { useState } from "react";
 import Link from "next/link";
 import CreateCompanyModal from "./CreateCompanyModal";
 import Pagination from "../ui/Pagination";
+import { GoOrganization } from "react-icons/go";
+
 
 /* ── Inline edit modal ── */
 interface EditModalProps { company: Company; onClose: () => void; }
@@ -101,8 +103,11 @@ export default function CompaniesList() {
   return (
     <div className="flex flex-col gap-5">
       {/* ── Page header ── */}
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Companies Management</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+          <GoOrganization className="w-6 h-6" />
+        <h1 className="text-xl font-bold">Companies Management</h1>
+        </div>
         <button
           onClick={() => setShowCreate(true)}
           className="inline-flex items-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm shrink-0"

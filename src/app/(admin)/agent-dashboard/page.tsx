@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import DashboardMetrics from "@/components/dashboard/DashboardMetrics";
+import AgentOperationsCards from "@/components/dashboard/AgentOperationsCards";
 import PayinListTable from "@/components/dashboard/PayinListTable";
 import SummaryTable from "@/components/dashboard/SummaryTable";
 import TransactionVolumeChart from "@/components/dashboard/TransactionVolumeChart";
@@ -18,6 +19,7 @@ export default function AgentDashboard() {
         </p>
       </div>
       <DashboardMetrics />
+      <AgentOperationsCards />
       <PayinListTable />
       <SummaryTable />
       <TransactionVolumeChart />
