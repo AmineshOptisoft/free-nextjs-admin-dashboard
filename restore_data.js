@@ -1,8 +1,14 @@
 const { PrismaClient } = require('@prisma/client');
+const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-const prisma = new PrismaClient();
+const adapter = new PrismaMariaDb({
+  host: 'localhost',
+  user: 'root',
+  database: 'ev_fleet',
+});
+const prisma = new PrismaClient({ adapter });
 
 async function restore() {
   try {

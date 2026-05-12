@@ -4,12 +4,13 @@ import { createServer } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
 import Redis from "ioredis";
-import { PrismaClient } from "@prisma/client";
+import prismaPkg from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import * as mariadb from "mariadb";
 
 const pool = mariadb.createPool({ host: 'localhost', user: 'root', database: 'ev_fleet' });
 const adapter = new PrismaMariaDb(pool);
+const { PrismaClient } = prismaPkg;
 const prisma = new PrismaClient({ adapter });
 
 const dev = process.env.NODE_ENV !== "production";

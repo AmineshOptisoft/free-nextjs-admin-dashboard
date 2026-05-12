@@ -5,10 +5,27 @@ import OneSignal from "react-onesignal";
 
 export default function OneSignalInit() {
   useEffect(() => {
-    // OneSignal strictly requires HTTPS or 'localhost' in Version 16+.
-    // Bypass gracefully if running in a local network insecure context.
-    if (typeof window !== "undefined" && window.location.protocol === "http:" && window.location.hostname !== "localhost") {
+    const host = window.location.hostname;
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    const isSecureOrigin = window.location.protocol === "https:" || isLocalHost;
+
+    // OneSignal requires a secure origin (HTTPS or localhost).
+    if (!isSecureOrigin) {
       console.warn("[OneSignal] Skipping init: Push APIs require HTTPS or localhost. Running on:", window.location.href);
+      return;
+    }
+
+    // Prevent noisy runtime errors on hosts that are not configured in OneSignal.
+    // Override via NEXT_PUBLIC_ONESIGNAL_ALLOWED_HOSTS="host1,host2" when needed.
+    const allowedHosts = (
+      process.env.NEXT_PUBLIC_ONESIGNAL_ALLOWED_HOSTS ?? "mucic-jone-saltatorial.ngrok-free.dev"
+    )
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (!allowedHosts.includes(host)) {
+      console.info(`[OneSignal] Skipping init: "${host}" is not in allowed hosts.`);
       return;
     }
 
