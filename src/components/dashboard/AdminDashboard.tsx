@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 /* ── Types ── */
 interface VendorRow {
@@ -23,8 +23,8 @@ interface VendorRow {
   remainingBalance: number;
 }
 
-/* ── Mock data ── */
-const rows: VendorRow[] = [
+/* ── Mock data (initial) ── */
+const initialRows: VendorRow[] = [
   { id:"1",  name:"Leo SubAdmin",       security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:542,    net:0,       prevBalance:0, commission:0,    running:542,    runningUnsettled:0,    credit:0,       finalBalance:542,     remainingBalance:-542    },
   { id:"2",  name:"Chime Leo Personal", security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
   { id:"3",  name:"lionel0",            security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
@@ -53,8 +53,8 @@ const rows: VendorRow[] = [
   { id:"26", name:"Priyanka,008",       security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:50187,   prevBalance:0, commission:0,    running:50187,  runningUnsettled:50187,credit:0,       finalBalance:50187,   remainingBalance:-60187  },
 ];
 
-/* Totals (header data row) */
-const totals: Omit<VendorRow, "id" | "name"> = {
+/* Totals (static except credit can be derived from rows when editing) */
+const baseTotals: Omit<VendorRow, "id" | "name"> = {
   security:        12046777,
   manualPayIn:     0,
   approvedPayIn:   1494371,
@@ -72,6 +72,104 @@ const totals: Omit<VendorRow, "id" | "name"> = {
   finalBalance:    9947764,
   remainingBalance:5756887,
 };
+
+function EditableCreditCell({
+  rowId,
+  value,
+  onSave,
+}: {
+  rowId: string;
+  value: number;
+  onSave: (id: string, next: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+
+  const display =
+    value > 0 ? (
+      <span className="text-green-600 dark:text-green-400 font-semibold">{value.toLocaleString("en-IN")}</span>
+    ) : (
+      <span>0</span>
+    );
+
+  const startEdit = () => {
+    setDraft(value === 0 ? "" : String(value));
+    setEditing(true);
+  };
+
+  const commit = () => {
+    const normalized = draft.replace(/,/g, "").trim();
+    const parsed = normalized === "" ? 0 : Number(normalized);
+    if (Number.isNaN(parsed)) {
+      setDraft(String(value));
+      setEditing(false);
+      return;
+    }
+    onSave(rowId, parsed);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setDraft(String(value));
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") cancel();
+          }}
+          className="w-24 min-w-0 rounded-md border border-brand-300 bg-white px-2 py-1 text-xs text-gray-800 focus:outline-hidden focus:ring-2 focus:ring-brand-500/20 dark:border-brand-600 dark:bg-gray-900 dark:text-gray-100"
+          autoFocus
+        />
+        <button
+          type="button"
+          onClick={commit}
+          className="rounded-md bg-brand-500 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-brand-600"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={cancel}
+          className="rounded-md border border-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group/credit relative flex min-h-[1.75rem] items-center gap-1">
+      {display}
+      <button
+        type="button"
+        title="Edit credit"
+        onClick={(e) => {
+          e.stopPropagation();
+          startEdit();
+        }}
+        className="pointer-events-none inline-flex shrink-0 items-center justify-center rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-brand-600 group-hover/credit:pointer-events-auto group-hover/credit:opacity-100 dark:hover:bg-gray-800 dark:hover:text-brand-400"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+          />
+        </svg>
+      </button>
+    </div>
+  );
+}
 
 /* ── Helpers ── */
 const fmt = (n: number) => {
@@ -115,9 +213,22 @@ function Tip({ label, children }: { label: string; children: React.ReactNode }) 
 
 /* ── Component ── */
 export default function AdminDashboard() {
+  const [rows, setRows] = useState<VendorRow[]>(() => initialRows.map((r) => ({ ...r })));
   const [search, setSearch] = useState("");
   const [hoveredToolbarIndex, setHoveredToolbarIndex] = useState<number | null>(null);
   const [hoveredTableActionIndex, setHoveredTableActionIndex] = useState<number | null>(null);
+
+  const totals = useMemo(
+    () => ({
+      ...baseTotals,
+      credit: rows.reduce((sum, r) => sum + r.credit, 0),
+    }),
+    [rows]
+  );
+
+  const saveRowCredit = (id: string, next: number) => {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, credit: next } : r)));
+  };
   const getActionLabelSpace = (label: string) =>
     Math.max(72, Math.min(220, label.length * 7 + 24));
 
@@ -424,7 +535,9 @@ export default function AdminDashboard() {
                     {badge(row.runningUnsettled)}
                   </td>
 
-                  <td className={colCell}>{row.credit > 0 ? row.credit.toLocaleString("en-IN") : "0"}</td>
+                  <td className={colCell}>
+                    <EditableCreditCell rowId={row.id} value={row.credit} onSave={saveRowCredit} />
+                  </td>
 
                   {/* Final Balance */}
                   <td className={colCell}>{colorVal(row.finalBalance, true)}</td>
