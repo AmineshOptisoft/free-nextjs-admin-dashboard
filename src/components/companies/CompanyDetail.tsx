@@ -1,7 +1,8 @@
 "use client";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Pagination from "../ui/Pagination";
+import LogoImagePicker from "./LogoImagePicker";
 
 /* ── Types ── */
 type TxStatus = "NOT_ASSIGNED" | "PENDING" | "APPROVED" | "EXPIRED" | "FAILED";
@@ -24,14 +25,6 @@ const txStatusStyle: Record<TxStatus, string> = {
 };
 
 /* ── Mock data helpers ── */
-const allCompanies: Record<string, { name: string; email: string; brandName: string; commission: string }> = {
-  "1": { name: "Rajputana",  email: "Rajputana777@gmail.com", brandName: "Rajputana",    commission: "3%" },
-  "2": { name: "Dafaxbets",  email: "dfx80@gmail.com",        brandName: "Dafaxbets.com", commission: "3%" },
-  "3": { name: "win777",     email: "win777@win777.com",       brandName: "WIN777",        commission: "3.6%" },
-  "4": { name: "BetKings",   email: "admin@betkings.io",       brandName: "BetKings",      commission: "2.5%" },
-  "5": { name: "SpinZone",   email: "ops@spinzone.com",        brandName: "SpinZone",      commission: "4%" },
-};
-
 function getMockTransactions(id: string): Transaction[] {
   return [
     { id:"1", date:"5/8/2026\n04:07 PM", orderId:`ORD-${id}778236678249-49671`, payer:"werdftghyj", amount:123456, status:"NOT_ASSIGNED" },
@@ -72,22 +65,102 @@ function QrPlaceholder() {
 
 const TX_PAGE_SIZE = 5;
 
+type ApiCompany = {
+  id: string;
+  username: string;
+  brand_name: string;
+  logo: string | null;
+  status: string;
+  company_code: string | null;
+  commission: number;
+  net_pay_in: number;
+  net_pay_out: number;
+  settlement_amount: number;
+};
+
 /* ── Main component ── */
 export default function CompanyDetail({ id }: { id: string }) {
-  const company = allCompanies[id] ?? {
-    name: `Company #${id}`, email: "—", brandName: "—", commission: "—",
-  };
-
-  const transactions = getMockTransactions(id);
-  const securityKey  = `987C3914B${id}026696`;
-  const paymentLink  = `https://pay.tepay.in/${company.brandName.toLowerCase().replace(/\s+/g, "-")}`;
-
+  const [apiCompany, setApiCompany] = useState<ApiCompany | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [txPage, setTxPage] = useState(1);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null);
+
+  const uploadLogoFile = useCallback(
+    async (file: File) => {
+      let blobUrl: string | null = null;
+      setUploadError(null);
+      setUploadingLogo(true);
+      try {
+        blobUrl = URL.createObjectURL(file);
+        setPendingPreview(blobUrl);
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch(`/api/companies/${id}/logo`, {
+          method: "POST",
+          body: fd,
+          credentials: "include",
+        });
+        const data = (await res.json()) as { ok?: boolean; logo?: string; error?: string };
+        if (!res.ok || !data.ok || !data.logo) {
+          setUploadError(data.error ?? "Upload failed.");
+          return;
+        }
+        setApiCompany((prev) => (prev ? { ...prev, logo: data.logo as string } : null));
+      } catch {
+        setUploadError("Network error.");
+      } finally {
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        setPendingPreview(null);
+        setUploadingLogo(false);
+      }
+    },
+    [id],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoadError(null);
+      setApiCompany(null);
+      if (!id || id === "undefined") {
+        setLoadError("Invalid company link.");
+        return;
+      }
+      try {
+        const res = await fetch(`/api/companies/${id}`, { credentials: "include" });
+        const data = (await res.json()) as { ok?: boolean; company?: ApiCompany; error?: string };
+        if (cancelled) return;
+        if (res.status === 404) {
+          setLoadError("Company not found.");
+          return;
+        }
+        if (!res.ok || !data.ok || !data.company) {
+          setLoadError(data.error ?? "Could not load company.");
+          return;
+        }
+        setApiCompany(data.company);
+      } catch {
+        if (!cancelled) setLoadError("Network error.");
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const transactions = getMockTransactions(id);
+  const securityKey = `987C3914B${id}026696`;
 
   const txPaginated = transactions.slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE);
-  const todayPayIn  = transactions.filter((t) => t.status === "APPROVED").reduce((s, t) => s + t.amount, 0);
+  const todayPayIn = transactions.filter((t) => t.status === "APPROVED").reduce((s, t) => s + t.amount, 0);
   const todayPayOut = 0;
+
+  const brandSlug = (apiCompany?.brand_name || "company").toLowerCase().replace(/\s+/g, "-");
+  const paymentLink = `https://pay.tepay.in/${brandSlug}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(paymentLink).catch(() => {});
@@ -95,6 +168,26 @@ export default function CompanyDetail({ id }: { id: string }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  if (loadError && !apiCompany) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Link href="/companies" className="text-sm text-brand-500 hover:underline w-fit">
+          ← Back to companies
+        </Link>
+        <p className="text-gray-600 dark:text-gray-400">{loadError}</p>
+      </div>
+    );
+  }
+
+  if (!apiCompany) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-gray-500 dark:text-gray-400">Loading…</p>
+      </div>
+    );
+  }
+
+  const company = apiCompany;
   return (
     <div className="flex flex-col gap-5">
       {/* ── Page header ── */}
@@ -117,23 +210,31 @@ export default function CompanyDetail({ id }: { id: string }) {
 
         {/* ── Left: Profile card ── */}
         <div className="rounded-2xl bg-white dark:bg-white/[0.03] border border-gray-200 dark:border-gray-800 overflow-hidden">
-          {/* Avatar block */}
+          {/* Logo + profile */}
           <div className="flex flex-col items-center pt-8 pb-5 px-5 border-b border-gray-100 dark:border-gray-800">
-            <div className="flex items-center justify-center w-20 h-20 rounded-full bg-indigo-100 dark:bg-indigo-900/30 mb-3">
-              <svg className="w-9 h-9 text-indigo-500 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <p className="text-base font-bold text-gray-900 dark:text-white">{company.name}</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Brand: {company.brandName}</p>
+            <LogoImagePicker
+              previewSrc={
+                pendingPreview ??
+                (company.logo && (company.logo.startsWith("http") || company.logo.startsWith("/"))
+                  ? company.logo
+                  : null)
+              }
+              onFile={uploadLogoFile}
+              uploading={uploadingLogo}
+            />
+            {uploadError && <p className="text-xs text-red-500 text-center max-w-[220px] mt-1">{uploadError}</p>}
+            <p className="text-base font-bold text-gray-900 dark:text-white mt-3">{company.username}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Brand: {company.brand_name || "—"}</p>
           </div>
 
           {/* Info fields */}
           <div className="px-5 py-4 flex flex-col gap-4 border-b border-gray-100 dark:border-gray-800">
             {[
-              { label: "Email",       value: company.email },
-              { label: "Phone",       value: "N/A" },
+              { label: "Status", value: company.status },
+              { label: "Company code", value: company.company_code || "—" },
+              { label: "Commission", value: `${Number(company.commission) || 0}%` },
+              { label: "Net pay-in", value: `₹${company.net_pay_in.toLocaleString("en-IN")}` },
+              { label: "Net pay-out", value: `₹${company.net_pay_out.toLocaleString("en-IN")}` },
             ].map(({ label, value }) => (
               <div key={label}>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">{label}</p>

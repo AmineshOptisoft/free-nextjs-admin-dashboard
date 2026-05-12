@@ -1,5 +1,6 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 /* ── Types ── */
 interface VendorRow {
@@ -23,55 +24,6 @@ interface VendorRow {
   remainingBalance: number;
 }
 
-/* ── Mock data (initial) ── */
-const initialRows: VendorRow[] = [
-  { id:"1",  name:"Leo SubAdmin",       security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:542,    net:0,       prevBalance:0, commission:0,    running:542,    runningUnsettled:0,    credit:0,       finalBalance:542,     remainingBalance:-542    },
-  { id:"2",  name:"Chime Leo Personal", security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
-  { id:"3",  name:"lionel0",            security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
-  { id:"4",  name:"allpersonal",        security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
-  { id:"5",  name:"almlrest",           security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
-  { id:"6",  name:"Famiest",            security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
-  { id:"7",  name:"Famiest personal",   security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
-  { id:"8",  name:"Arnnold01",          security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
-  { id:"9",  name:"Aul,002",            security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:-348,   net:0,       prevBalance:0, commission:0,    running:-148,   runningUnsettled:-148, credit:0,       finalBalance:-1349,   remainingBalance:1349    },
-  { id:"10", name:"Egg,003",            security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
-  { id:"11", name:"Bhrca,004",          security:200808,  manualPayIn:0,  approvedPayIn:43965, discounted:0,  netPayIn:43965,  payout:33100,   unsettlePayout:-100000, settlement:10765, net:-87736, prevBalance:0, commission:0,    running:33036,  runningUnsettled:33036,credit:400000,  finalBalance:-77772,  remainingBalance:573772  },
-  { id:"12", name:"Devthe,105",         security:150000,  manualPayIn:0,  approvedPayIn:50480, discounted:0,  netPayIn:50480,  payout:11172,   unsettlePayout:0,    settlement:-872,   net:5553,    prevBalance:0, commission:0,    running:4721,   runningUnsettled:4721, credit:300000,  finalBalance:-145279, remainingBalance:445279  },
-  { id:"13", name:"Mishka,108",         security:242942,  manualPayIn:0,  approvedPayIn:16818, discounted:0,  netPayIn:16818,  payout:5800,    unsettlePayout:0,    settlement:9026,   net:-28003,  prevBalance:0, commission:0,    running:10061,  runningUnsettled:10061,credit:300000,  finalBalance:-216927, remainingBalance:518627  },
-  { id:"14", name:"Michelle,109",       security:226267,  manualPayIn:0,  approvedPayIn:44949, discounted:0,  netPayIn:44949,  payout:11500,   unsettlePayout:0,    settlement:-4901,  net:49479,   prevBalance:0, commission:0,    running:42548,  runningUnsettled:42548,credit:400000,  finalBalance:-182118, remainingBalance:542718  },
-  { id:"15", name:"Rina,10",            security:200000,  manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:64987,   prevBalance:0, commission:0,    running:64987,  runningUnsettled:64987,credit:0,       finalBalance:-135013, remainingBalance:335013  },
-  { id:"16", name:"AllPrimary personal",security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:-50807,  prevBalance:0, commission:0,    running:-50807, runningUnsettled:-50807,credit:0,      finalBalance:-50807,  remainingBalance:50807   },
-  { id:"17", name:"Jatinvp,02",         security:200959,  manualPayIn:0,  approvedPayIn:14420, discounted:0,  netPayIn:14420,  payout:0,       unsettlePayout:0,    settlement:14420,  net:33108,   prevBalance:0, commission:0,    running:47509,  runningUnsettled:47509,credit:400000,  finalBalance:-103950, remainingBalance:503950  },
-  { id:"18", name:"Himanshuvp,03",      security:200000,  manualPayIn:0,  approvedPayIn:15300, discounted:0,  netPayIn:15200,  payout:100000,  unsettlePayout:0,    settlement:-84800, net:85599,   prevBalance:0, commission:0,    running:759,    runningUnsettled:759,  credit:500000,  finalBalance:-199148, remainingBalance:699241  },
-  { id:"19", name:"Minup,04",           security:5880,    manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:85679,   prevBalance:0, commission:0,    running:85679,  runningUnsettled:85679,credit:0,       finalBalance:73130,   remainingBalance:-73710  },
-  { id:"20", name:"Sakariya,05",        security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:-4550,   prevBalance:0, commission:0,    running:-4550,  runningUnsettled:-4550,credit:0,       finalBalance:-4550,   remainingBalance:4340    },
-  { id:"21", name:"Chaudhary,06",       security:220000,  manualPayIn:0,  approvedPayIn:7500,  discounted:0,  netPayIn:7500,   payout:15000,   unsettlePayout:0,    settlement:-7500,  net:12180,   prevBalance:0, commission:0,    running:10880,  runningUnsettled:10880,credit:200000,  finalBalance:-100220, remainingBalance:300220  },
-  { id:"22", name:"Minup,07",           security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:0,       prevBalance:0, commission:0,    running:0,      runningUnsettled:0,    credit:0,       finalBalance:0,       remainingBalance:0       },
-  { id:"23", name:"Sanjup,08",          security:153045,  manualPayIn:0,  approvedPayIn:40300, discounted:0,  netPayIn:40300,  payout:81963,   unsettlePayout:0,    settlement:-27663, net:68442,   prevBalance:0, commission:0,    running:30779,  runningUnsettled:30779,credit:400000,  finalBalance:-122099, remainingBalance:532098  },
-  { id:"24", name:"Hoseem,068",         security:129000,  manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:107696,  prevBalance:0, commission:0,    running:181906, runningUnsettled:181906,credit:0,      finalBalance:6895,    remainingBalance:-6895   },
-  { id:"25", name:"Rakesh,038",         security:547,     manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:74844,   prevBalance:0, commission:0,    running:74844,  runningUnsettled:74844,credit:0,       finalBalance:76297,   remainingBalance:-74297  },
-  { id:"26", name:"Priyanka,008",       security:0,       manualPayIn:0,  approvedPayIn:0,     discounted:0,  netPayIn:0,      payout:0,       unsettlePayout:0,    settlement:0,      net:50187,   prevBalance:0, commission:0,    running:50187,  runningUnsettled:50187,credit:0,       finalBalance:50187,   remainingBalance:-60187  },
-];
-
-/* Totals (static except credit can be derived from rows when editing) */
-const baseTotals: Omit<VendorRow, "id" | "name"> = {
-  security:        12046777,
-  manualPayIn:     0,
-  approvedPayIn:   1494371,
-  discounted:      0,
-  netPayIn:        1485593,
-  payout:          1803044,
-  unsettlePayout:  -42879,
-  settlement:      223946,
-  net:             -3027,
-  prevBalance:     0,
-  commission:      316616,
-  running:         21061306,
-  runningUnsettled:2383706,
-  credit:          16000000,
-  finalBalance:    9947764,
-  remainingBalance:5756887,
-};
 
 function EditableCreditCell({
   rowId,
@@ -213,18 +165,83 @@ function Tip({ label, children }: { label: string; children: React.ReactNode }) 
 
 /* ── Component ── */
 export default function AdminDashboard() {
-  const [rows, setRows] = useState<VendorRow[]>(() => initialRows.map((r) => ({ ...r })));
+  const [rows, setRows] = useState<VendorRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [hoveredToolbarIndex, setHoveredToolbarIndex] = useState<number | null>(null);
   const [hoveredTableActionIndex, setHoveredTableActionIndex] = useState<number | null>(null);
 
-  const totals = useMemo(
-    () => ({
-      ...baseTotals,
-      credit: rows.reduce((sum, r) => sum + r.credit, 0),
-    }),
-    [rows]
-  );
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/admin/dashboard", { credentials: "include" });
+      const data = (await res.json()) as { ok?: boolean; rows?: VendorRow[]; error?: string };
+      if (res.status === 401) {
+        setLoadError("Admin sign-in required.");
+        setRows([]);
+        return;
+      }
+      if (!res.ok || !data.ok || !data.rows) {
+        setLoadError(data.error ?? "Could not load dashboard.");
+        setRows([]);
+        return;
+      }
+      setRows(data.rows.map((r) => ({ ...r })));
+    } catch {
+      setLoadError("Network error.");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const totals = useMemo(() => {
+    const z: Omit<VendorRow, "id" | "name"> = {
+      security: 0,
+      manualPayIn: 0,
+      approvedPayIn: 0,
+      discounted: 0,
+      netPayIn: 0,
+      payout: 0,
+      unsettlePayout: 0,
+      settlement: 0,
+      net: 0,
+      prevBalance: 0,
+      commission: 0,
+      running: 0,
+      runningUnsettled: 0,
+      credit: 0,
+      finalBalance: 0,
+      remainingBalance: 0,
+    };
+    return rows.reduce(
+      (acc, r) => ({
+        security: acc.security + r.security,
+        manualPayIn: acc.manualPayIn + r.manualPayIn,
+        approvedPayIn: acc.approvedPayIn + r.approvedPayIn,
+        discounted: acc.discounted + r.discounted,
+        netPayIn: acc.netPayIn + r.netPayIn,
+        payout: acc.payout + r.payout,
+        unsettlePayout: acc.unsettlePayout + r.unsettlePayout,
+        settlement: acc.settlement + r.settlement,
+        net: acc.net + r.net,
+        prevBalance: acc.prevBalance + r.prevBalance,
+        commission: acc.commission + r.commission,
+        running: acc.running + r.running,
+        runningUnsettled: acc.runningUnsettled + r.runningUnsettled,
+        credit: acc.credit + r.credit,
+        finalBalance: acc.finalBalance + r.finalBalance,
+        remainingBalance: acc.remainingBalance + r.remainingBalance,
+      }),
+      z,
+    );
+  }, [rows]);
 
   const saveRowCredit = (id: string, next: number) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, credit: next } : r)));
@@ -351,7 +368,9 @@ export default function AdminDashboard() {
             </svg>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Admin Dashboard</h1>
           </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 ml-7">View and manage financial transactions</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 ml-7">
+            Live agent balances from the database — columns without data stay at 0 (nothing is hidden).
+          </p>
         </div>
 
         {/* Right-side toolbar — animated action rail */}
@@ -390,6 +409,19 @@ export default function AdminDashboard() {
 
       {/* ── Financial Statistics card ── */}
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
+        {loadError && (
+          <div className="px-5 py-3 text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/25 border-b border-amber-100 dark:border-amber-900/40">
+            {loadError}{" "}
+            <Link href="/signin/admin" className="font-semibold underline">
+              Sign in as admin
+            </Link>
+          </div>
+        )}
+        {loading && (
+          <div className="px-5 py-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+            Loading dashboard…
+          </div>
+        )}
         {/* Card header */}
         <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 flex-wrap">
           <h2 className="text-sm font-semibold text-gray-800 dark:text-white">Financial Statistics</h2>
@@ -487,18 +519,12 @@ export default function AdminDashboard() {
                   </div>
                 </td>
                 <td className={colCell}>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-green-600 dark:text-green-400 font-semibold">{(totals.running / 1000).toFixed(0)}K</span>
-                    <span className="text-blue-500 font-semibold text-[10px]">{totals.runningUnsettled.toLocaleString("en-IN")}</span>
-                  </div>
+                  <span className="text-green-600 dark:text-green-400 font-semibold">{totals.running.toLocaleString("en-IN")}</span>
                 </td>
                 <td className={colCell}>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-green-600 dark:text-green-400 font-semibold">{totals.runningUnsettled.toLocaleString("en-IN")}</span>
-                    <span className="text-orange-500 font-semibold text-[10px]">{(totals.runningUnsettled * 0.87).toFixed(0)}</span>
-                  </div>
+                  <span className="text-green-600 dark:text-green-400 font-semibold">{totals.runningUnsettled.toLocaleString("en-IN")}</span>
                 </td>
-                <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400`}>{(totals.credit / 1000000).toFixed(0)}M</td>
+                <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400`}>{totals.credit.toLocaleString("en-IN")}</td>
                 <td className={`${colCell} font-bold text-green-600 dark:text-green-400`}>{totals.finalBalance.toLocaleString("en-IN")}</td>
                 <td className={`${colCell} font-bold text-green-600 dark:text-green-400`}>{totals.remainingBalance.toLocaleString("en-IN")}</td>
                 <td className={colCell}></td>
@@ -513,17 +539,17 @@ export default function AdminDashboard() {
                     {row.name}
                   </td>
 
-                  <td className={colCell}>{row.security > 0 ? row.security.toLocaleString("en-IN") : "0"}</td>
-                  <td className={colCell}>{row.manualPayIn}</td>
-                  <td className={colCell}>{row.approvedPayIn > 0 ? row.approvedPayIn.toLocaleString("en-IN") : "0"}</td>
-                  <td className={colCell}>{row.discounted}</td>
-                  <td className={colCell}>{row.netPayIn > 0 ? row.netPayIn.toLocaleString("en-IN") : "0"}</td>
-                  <td className={colCell}>{row.payout > 0 ? row.payout.toLocaleString("en-IN") : "0"}</td>
+                  <td className={colCell}>{row.security.toLocaleString("en-IN")}</td>
+                  <td className={colCell}>{row.manualPayIn.toLocaleString("en-IN")}</td>
+                  <td className={colCell}>{row.approvedPayIn.toLocaleString("en-IN")}</td>
+                  <td className={colCell}>{row.discounted.toLocaleString("en-IN")}</td>
+                  <td className={colCell}>{row.netPayIn.toLocaleString("en-IN")}</td>
+                  <td className={colCell}>{row.payout.toLocaleString("en-IN")}</td>
                   <td className={colCell}>{colorVal(row.unsettlePayout, true)}</td>
                   <td className={colCell}>{colorVal(row.settlement, true)}</td>
                   <td className={colCell}>{colorVal(row.net, true)}</td>
-                  <td className={colCell}>{row.prevBalance}</td>
-                  <td className={colCell}>{row.commission > 0 ? row.commission.toLocaleString("en-IN") : "0"}</td>
+                  <td className={colCell}>{row.prevBalance.toLocaleString("en-IN")}</td>
+                  <td className={colCell}>{row.commission.toLocaleString("en-IN")}</td>
 
                   {/* Running — badge */}
                   <td className={colCell}>

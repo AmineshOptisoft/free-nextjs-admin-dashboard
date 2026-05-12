@@ -1,25 +1,80 @@
 "use client";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import EditAgentModal from "./EditAgentModal";
 import Pagination from "../ui/Pagination";
+import type { Agent, AgentDetailApi } from "./types";
 
-/* ── Mock agent data ── */
-const agentDb: Record<string, {
-  id: string; username: string; displayName: string; parent: string;
-  status: "online" | "offline"; whatsapp: string; currentUsage: number;
-  securityDeposit: number; creditLimit: number; net: number;
-  prevLastRunning: number; runningToday: number; final: number;
-  remainingBalance: number; payinCommission: string; payoutCommission: string;
-  referralCommission: string; referralCode: string; accountCreated: string;
-  perf: { successRate: number; totalVolume: number; today: number; thisWeek: number };
-}> = {
-  "1":  { id:"1",  username:"Mafiya0808",  displayName:"Mafiya0808",  parent:"daniyalleo", status:"online",  whatsapp:"8200000000", currentUsage:0,    securityDeposit:100000, creditLimit:0, net:3000,  prevLastRunning:0,  runningToday:3000,  final:-92000, remainingBalance:92000, payinCommission:"2%",  payoutCommission:"0%", referralCommission:"0%", referralCode:"8395394688", accountCreated:"5/6/2026", perf:{successRate:5.26,totalVolume:3000,today:0,thisWeek:3000} },
-  "2":  { id:"2",  username:"Ajmonu8989",  displayName:"Ajmonu8989",  parent:"daniyalleo", status:"online",  whatsapp:"9100000001", currentUsage:0,    securityDeposit:50000,  creditLimit:0, net:1000,  prevLastRunning:0,  runningToday:1000,  final:-49000, remainingBalance:49000, payinCommission:"2%",  payoutCommission:"0%", referralCommission:"0%", referralCode:"7485920134", accountCreated:"5/1/2026", perf:{successRate:8.33,totalVolume:1000,today:1000,thisWeek:1000} },
-  "3":  { id:"3",  username:"Salasar007",  displayName:"Salasar007",  parent:"daniyalleo", status:"offline", whatsapp:"N/A",        currentUsage:0,    securityDeposit:0,      creditLimit:0, net:0,     prevLastRunning:0,  runningToday:0,     final:0,      remainingBalance:0,     payinCommission:"1.5%",payoutCommission:"0%", referralCommission:"0%", referralCode:"N/A",        accountCreated:"4/20/2026",perf:{successRate:0,totalVolume:0,today:0,thisWeek:0} },
-  "4":  { id:"4",  username:"Anjani2424",  displayName:"Anjani2424",  parent:"daniyalleo", status:"online",  whatsapp:"9300000003", currentUsage:5000, securityDeposit:75000,  creditLimit:500, net:8000, prevLastRunning:2000, runningToday:8000, final:-67000, remainingBalance:67000, payinCommission:"2%",  payoutCommission:"0%", referralCommission:"0%", referralCode:"6371058249", accountCreated:"4/15/2026",perf:{successRate:12.5,totalVolume:8000,today:5000,thisWeek:8000} },
-  "5":  { id:"5",  username:"Chirag3232",  displayName:"Chirag3232",  parent:"daniyalleo", status:"online",  whatsapp:"9400000004", currentUsage:2000, securityDeposit:25000,  creditLimit:200, net:2000, prevLastRunning:0,   runningToday:2000, final:-23000, remainingBalance:23000, payinCommission:"3%",  payoutCommission:"0%", referralCommission:"0%", referralCode:"5260947138", accountCreated:"4/10/2026",perf:{successRate:4.0,totalVolume:2000,today:2000,thisWeek:2000} },
-  "6":  { id:"6",  username:"Prince334",   displayName:"Prince334",   parent:"daniyalleo", status:"offline", whatsapp:"9500000005", currentUsage:0,    securityDeposit:10000,  creditLimit:0, net:-500, prevLastRunning:0,   runningToday:0,    final:-10500, remainingBalance:10500, payinCommission:"2%",  payoutCommission:"0%", referralCommission:"0%", referralCode:"4159836027", accountCreated:"3/28/2026",perf:{successRate:0,totalVolume:0,today:0,thisWeek:0} },
-};
+function statusBadgeClass(s: string) {
+  const x = s.toLowerCase();
+  if (x === "active") return "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400";
+  if (x === "pending") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
+  if (x === "blocked") return "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400";
+  return "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400";
+}
+
+function formatAgentDate(v: string | Date | null | undefined): string {
+  if (v == null) return "—";
+  try {
+    const d = typeof v === "string" ? new Date(v) : v;
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return "—";
+  }
+}
+
+function toListAgent(d: AgentDetailApi): Agent {
+  return {
+    id: d.id,
+    fullname: d.fullname,
+    username: d.username,
+    email: d.email,
+    security_deposit: d.security_deposit,
+    credit_limit: d.credit_limit,
+    net_pay_in: d.net_pay_in,
+    net_pay_out: d.net_pay_out,
+    pay_in_commission: d.pay_in_commission,
+    pay_out_commission: d.pay_out_commission,
+    referral_commission: d.referral_commission,
+    status: d.status,
+  };
+}
+
+/** Maps DB agent row to the legacy detail layout fields. */
+function mapApiToView(a: AgentDetailApi) {
+  const net = a.net_pay_in - a.net_pay_out;
+  const statusOnline = a.status === "active";
+  return {
+    id: a.id,
+    username: a.username,
+    displayName: a.fullname || a.username,
+    parent: "—",
+    rawStatus: a.status,
+    status: statusOnline ? ("online" as const) : ("offline" as const),
+    whatsapp: a.email || "N/A",
+    currentUsage: 0,
+    securityDeposit: a.security_deposit,
+    creditLimit: a.credit_limit,
+    net,
+    prevLastRunning: a.previous_balance,
+    runningToday: a.running_balance,
+    final: a.running_balance - a.security_deposit,
+    remainingBalance: Math.max(0, Math.abs(a.running_balance)),
+    payinCommission: `${a.pay_in_commission}%`,
+    payoutCommission: `${a.pay_out_commission}%`,
+    referralCommission: `${a.referral_commission}%`,
+    referralCode: "—",
+    accountCreated: formatAgentDate(a.created_at),
+    settlementAmount: a.settlement_amount,
+    perf: {
+      successRate: 0,
+      totalVolume: a.net_pay_in,
+      today: a.running_balance,
+      thisWeek: a.net_pay_in,
+    },
+  };
+}
 
 type ActivityStatus = "EXPIRED" | "APPROVED" | "PENDING" | "PROCESSING" | "FAILED";
 type ActivityType   = "PAYIN" | "PAYOUT";
@@ -82,35 +137,141 @@ function InfoRow({ label, value, valueClass = "" }: { label: string; value: stri
 }
 
 export default function AgentDetail({ id }: { id: string }) {
-  const agent = agentDb[id] ?? {
-    id, username: `Agent#${id}`, displayName: `Agent#${id}`, parent: "—",
-    status: "offline" as const, whatsapp: "N/A", currentUsage: 0, securityDeposit: 0,
-    creditLimit: 0, net: 0, prevLastRunning: 0, runningToday: 0, final: 0,
-    remainingBalance: 0, payinCommission: "0%", payoutCommission: "0%",
-    referralCommission: "0%", referralCode: "N/A", accountCreated: "—",
-    perf: { successRate: 0, totalVolume: 0, today: 0, thisWeek: 0 },
-  };
-
-  const activity = getMockActivity(id);
+  const [detail, setDetail] = useState<AgentDetailApi | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [toggleBusy, setToggleBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<"accounts" | "stats">("stats");
   const [actPage, setActPage] = useState(1);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    setNotFound(false);
+    const idNum = Number(id);
+    if (!Number.isInteger(idNum) || idNum < 1) {
+      setNotFound(true);
+      setDetail(null);
+      setLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/agents/${id}`, { credentials: "include" });
+      const data = (await res.json()) as { ok?: boolean; agent?: AgentDetailApi; error?: string };
+      if (res.status === 401) {
+        setLoadError("Admin sign-in required.");
+        setDetail(null);
+        return;
+      }
+      if (res.status === 404) {
+        setNotFound(true);
+        setDetail(null);
+        return;
+      }
+      if (!res.ok || !data.ok || !data.agent) {
+        setLoadError(data.error ?? "Could not load agent.");
+        setDetail(null);
+        return;
+      }
+      setDetail(data.agent);
+    } catch {
+      setLoadError("Network error.");
+      setDetail(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const activity = getMockActivity(id);
   const actPaginated = activity.slice((actPage - 1) * ACT_PAGE_SIZE, actPage * ACT_PAGE_SIZE);
-
-  const totalTx    = activity.length;
-  const completed  = activity.filter((a) => a.status === "APPROVED").length;
+  const totalTx = activity.length;
+  const completed = activity.filter((a) => a.status === "APPROVED").length;
   const processing = activity.filter((a) => a.status === "PROCESSING").length;
-  const failed     = activity.filter((a) => a.status === "EXPIRED" || a.status === "FAILED").length;
-
-  const payins          = activity.filter((a) => a.type === "PAYIN");
+  const failed = activity.filter((a) => a.status === "EXPIRED" || a.status === "FAILED").length;
+  const payins = activity.filter((a) => a.type === "PAYIN");
   const completedPayins = payins.filter((a) => a.status === "APPROVED").length;
-  const payinVolume     = payins.reduce((s, a) => s + a.amount, 0);
-  const payinSuccess    = payins.length ? ((completedPayins / payins.length) * 100).toFixed(2) : "0.00";
-
-  const payouts          = activity.filter((a) => a.type === "PAYOUT");
+  const payinVolume = payins.reduce((s, a) => s + a.amount, 0);
+  const payinSuccess = payins.length ? ((completedPayins / payins.length) * 100).toFixed(2) : "0.00";
+  const payouts = activity.filter((a) => a.type === "PAYOUT");
   const completedPayouts = payouts.filter((a) => a.status === "APPROVED").length;
-  const payoutVolume     = payouts.reduce((s, a) => s + a.amount, 0);
-  const payoutSuccess    = payouts.length ? ((completedPayouts / payouts.length) * 100).toFixed(2) : "0.00";
+  const payoutVolume = payouts.reduce((s, a) => s + a.amount, 0);
+  const payoutSuccess = payouts.length ? ((completedPayouts / payouts.length) * 100).toFixed(2) : "0.00";
 
+  async function patchStatus(next: string) {
+    if (!detail) return;
+    setToggleBusy(true);
+    try {
+      const res = await fetch(`/api/agents/${detail.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ status: next }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (res.ok && data.ok) await load();
+    } finally {
+      setToggleBusy(false);
+    }
+  }
+
+  async function resetPassword() {
+    if (!detail) return;
+    const pwd = window.prompt("New password (min 6 characters recommended):");
+    if (pwd == null || pwd === "") return;
+    setResetBusy(true);
+    try {
+      const res = await fetch(`/api/agents/${detail.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ password: pwd }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) window.alert(data.error ?? "Could not reset password.");
+      else window.alert("Password updated.");
+    } finally {
+      setResetBusy(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center text-gray-500 dark:border-gray-800 dark:bg-white/[0.03]">
+        Loading agent…
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-center text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
+        <p className="mb-2">{loadError}</p>
+        <Link href="/signin/admin" className="font-semibold text-blue-600 underline dark:text-blue-400">
+          Sign in as admin
+        </Link>
+      </div>
+    );
+  }
+
+  if (notFound || !detail) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white px-6 py-12 text-center dark:border-gray-800 dark:bg-white/[0.03]">
+        <p className="text-gray-600 dark:text-gray-300">Agent not found.</p>
+        <Link href="/agent" className="mt-4 inline-block text-blue-500 hover:underline">
+          Back to agents
+        </Link>
+      </div>
+    );
+  }
+
+  const agent = mapApiToView(detail);
   const initials = agent.username.slice(0, 1).toUpperCase();
 
   return (
@@ -129,13 +290,27 @@ export default function AgentDetail({ id }: { id: string }) {
           </h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button className="rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm">
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm"
+          >
             Edit Agent
           </button>
-          <button className="rounded-xl bg-orange-400 hover:bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm">
-            {agent.status === "online" ? "Deactivate" : "Activate"}
+          <button
+            type="button"
+            disabled={toggleBusy}
+            onClick={() => void patchStatus(agent.rawStatus === "active" ? "deactivated" : "active")}
+            className="rounded-xl bg-orange-400 hover:bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm disabled:opacity-50"
+          >
+            {agent.rawStatus === "active" ? "Deactivate" : "Activate"}
           </button>
-          <button className="rounded-xl bg-red-500 hover:bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm">
+          <button
+            type="button"
+            disabled={resetBusy}
+            onClick={() => void resetPassword()}
+            className="rounded-xl bg-red-500 hover:bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm disabled:opacity-50"
+          >
             Reset Password
           </button>
         </div>
@@ -154,12 +329,8 @@ export default function AgentDetail({ id }: { id: string }) {
               </svg>
               <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Profile Information</span>
             </div>
-            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-              agent.status === "online"
-                ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-                : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-            }`}>
-              {agent.status === "online" ? "ACTIVE" : "INACTIVE"}
+            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${statusBadgeClass(agent.rawStatus)}`}>
+              {agent.rawStatus}
             </span>
           </div>
 
@@ -174,7 +345,7 @@ export default function AgentDetail({ id }: { id: string }) {
 
           {/* Info rows */}
           <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800">
-            <InfoRow label="WhatsApp Number"   value={agent.whatsapp} />
+            <InfoRow label="Email / contact" value={agent.whatsapp} />
             <InfoRow label="Current Usage"     value={fmt(agent.currentUsage)} />
             <InfoRow label="Security Deposit"  value={fmt(agent.securityDeposit)} />
             <InfoRow label="Credit Limit"      value={fmt(agent.creditLimit)} />
@@ -184,6 +355,7 @@ export default function AgentDetail({ id }: { id: string }) {
             <InfoRow label="Final"             value={`₹${agent.final < 0 ? "-" : ""}${Math.abs(agent.final).toLocaleString("en-IN")}`}
               valueClass={agent.final < 0 ? "text-red-500 dark:text-red-400" : ""} />
             <InfoRow label="Remaining Balance" value={fmt(agent.remainingBalance)} />
+            <InfoRow label="Settlement" value={fmt(agent.settlementAmount)} />
             <InfoRow label="PayIn Commission"  value={agent.payinCommission} />
             <InfoRow label="PayOut Commission" value={agent.payoutCommission} />
             <InfoRow label="Referral Commission" value={agent.referralCommission} />
@@ -364,6 +536,16 @@ export default function AgentDetail({ id }: { id: string }) {
           )}
         </div>
       </div>
+
+      {editOpen && (
+        <EditAgentModal
+          agent={toListAgent(detail)}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => {
+            void load();
+          }}
+        />
+      )}
     </div>
   );
 }

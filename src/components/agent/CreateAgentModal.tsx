@@ -3,16 +3,32 @@ import React, { useState } from "react";
 
 interface Props {
   onClose: () => void;
+  onCreated?: () => void;
 }
 
-export default function CreateAgentModal({ onClose }: Props) {
+function localPartFromEmail(email: string): string {
+  const t = email.trim();
+  const at = t.indexOf("@");
+  if (at <= 0) return "";
+  return t.slice(0, at).trim();
+}
+
+export default function CreateAgentModal({ onClose, onCreated }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [isActive, setIsActive] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    name: "", username: "", password: "",
-    securityDeposit: "", creditLimit: "",
-    payinCommission: "", payoutCommission: "", referralCode: "",
+    name: "",
+    password: "",
+    email: "",
+    securityDeposit: "",
+    creditLimit: "",
+    payinCommission: "",
+    payoutCommission: "",
+    referralCode: "",
+    referralCommission: "",
   });
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -23,25 +39,71 @@ export default function CreateAgentModal({ onClose }: Props) {
   const labelCls =
     "block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2";
 
+  const referralCodeFilled = form.referralCode.trim().length > 0;
+
+  async function submit() {
+    setError(null);
+    const username = localPartFromEmail(form.email).trim();
+    const password = form.password;
+    if (!username || !password) {
+      setError("Valid email (with @) is required — login username is the part before @. Password is required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          username,
+          password,
+          fullname: form.name.trim(),
+          email: form.email.trim() || undefined,
+          security_deposit: form.securityDeposit || "0",
+          credit_limit: form.creditLimit || "0",
+          pay_in_commission: form.payinCommission || "0",
+          pay_out_commission: form.payoutCommission || "0",
+          referral_commission: referralCodeFilled ? form.referralCommission.trim() || "0" : "0",
+          status: isActive ? "active" : "blocked",
+        }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (res.status === 401) {
+        setError("Admin sign-in required.");
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        setError(data.error ?? "Could not create agent.");
+        return;
+      }
+      onCreated?.();
+      onClose();
+    } catch {
+      setError("Network error.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 dark:bg-black/60" onClick={onClose} />
 
-      {/* Modal */}
       <div className="relative w-full max-w-2xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2.5">
             <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30">
-              <svg className="w-4.5 h-4.5 text-green-600 dark:text-green-400" style={{width:"18px",height:"18px"}} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4.5 h-4.5 text-green-600 dark:text-green-400" style={{ width: "18px", height: "18px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </span>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">Create New Agent</h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            disabled={saving}
             className="flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -50,22 +112,31 @@ export default function CreateAgentModal({ onClose }: Props) {
           </button>
         </div>
 
-        {/* Body */}
         <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-          {/* Name */}
+          {error && (
+            <div className="sm:col-span-2 text-sm text-red-500" role="alert">
+              {error}
+            </div>
+          )}
+
           <div>
             <label className={labelCls}>Name</label>
-            <input type="text" value={form.name} onChange={set("name")} placeholder="Enter name" className={inputCls} />
+            <input type="text" value={form.name} onChange={set("name")} placeholder="Enter name" className={inputCls} disabled={saving} />
           </div>
 
-          {/* Username */}
           <div>
-            <label className={labelCls}>Username</label>
-            <input type="text" value={form.username} onChange={set("username")} placeholder="Enter username" className={inputCls} />
+            <label className={labelCls}>Email</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={set("email")}
+              placeholder="agent@example.com"
+              className={inputCls}
+              disabled={saving}
+            />
           </div>
 
-          {/* Password */}
-          <div>
+          <div className="sm:col-span-2">
             <label className={labelCls}>Password</label>
             <div className="relative">
               <input
@@ -74,6 +145,7 @@ export default function CreateAgentModal({ onClose }: Props) {
                 onChange={set("password")}
                 placeholder="Enter password"
                 className={`${inputCls} pr-12`}
+                disabled={saving}
               />
               <button
                 type="button"
@@ -94,42 +166,67 @@ export default function CreateAgentModal({ onClose }: Props) {
             </div>
           </div>
 
-          {/* Security Deposit */}
           <div>
             <label className={labelCls}>Security Deposit</label>
-            <input type="number" value={form.securityDeposit} onChange={set("securityDeposit")} placeholder="Enter security deposit amount" className={inputCls} />
+            <input type="number" value={form.securityDeposit} onChange={set("securityDeposit")} placeholder="Amount" className={inputCls} disabled={saving} />
           </div>
 
-          {/* Credit Limit */}
           <div>
             <label className={labelCls}>Credit Limit</label>
-            <input type="number" value={form.creditLimit} onChange={set("creditLimit")} placeholder="Enter total PayIn limit" className={inputCls} />
+            <input type="number" value={form.creditLimit} onChange={set("creditLimit")} placeholder="Pay-in limit" className={inputCls} disabled={saving} />
           </div>
 
-          {/* PayIn Commission */}
           <div>
             <label className={labelCls}>PayIn Commission (%)</label>
-            <input type="text" value={form.payinCommission} onChange={set("payinCommission")} placeholder="e.g. 0.6, 2, 3" className={inputCls} />
+            <input type="text" value={form.payinCommission} onChange={set("payinCommission")} placeholder="e.g. 0.6, 2, 3" className={inputCls} disabled={saving} />
           </div>
 
-          {/* PayOut Commission */}
           <div>
             <label className={labelCls}>PayOut Commission (%)</label>
-            <input type="text" value={form.payoutCommission} onChange={set("payoutCommission")} placeholder="e.g. 0.1, 1.5" className={inputCls} />
+            <input type="text" value={form.payoutCommission} onChange={set("payoutCommission")} placeholder="e.g. 0.1, 1.5" className={inputCls} disabled={saving} />
           </div>
 
-          {/* Referral Code */}
-          <div>
-            <label className={labelCls}>Referral Code <span className="normal-case font-normal text-gray-400">(Optional)</span></label>
-            <input type="text" value={form.referralCode} onChange={set("referralCode")} placeholder="Enter 10-digit referral code" className={inputCls} maxLength={10} />
+          <div className="sm:col-span-2">
+            <label className={labelCls}>
+              Referral code <span className="normal-case font-normal text-gray-400">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              value={form.referralCode}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm((p) => ({
+                  ...p,
+                  referralCode: v,
+                  referralCommission: v.trim() === "" ? "" : p.referralCommission,
+                }));
+              }}
+              placeholder="Enter referral code if any"
+              className={inputCls}
+              disabled={saving}
+            />
           </div>
 
-          {/* Blocked / Active toggle — full-width */}
+          {referralCodeFilled && (
+            <div className="sm:col-span-2">
+              <label className={labelCls}>Referral commission (%)</label>
+              <input
+                type="text"
+                value={form.referralCommission}
+                onChange={set("referralCommission")}
+                placeholder="e.g. 0, 1, 2.5"
+                className={inputCls}
+                disabled={saving}
+              />
+            </div>
+          )}
+
           <div className="sm:col-span-2 flex items-center gap-3 pt-1">
             <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Blocked</span>
             <button
               type="button"
               onClick={() => setIsActive((v) => !v)}
+              disabled={saving}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}
             >
               <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isActive ? "translate-x-6" : "translate-x-1"}`} />
@@ -140,16 +237,22 @@ export default function CreateAgentModal({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
           <button
+            type="button"
             onClick={onClose}
+            disabled={saving}
             className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-5 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             Cancel
           </button>
-          <button className="rounded-xl bg-green-600 hover:bg-green-700 px-6 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm">
-            Create Agent
+          <button
+            type="button"
+            onClick={() => void submit()}
+            disabled={saving}
+            className="rounded-xl bg-green-600 hover:bg-green-700 px-6 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm disabled:opacity-50"
+          >
+            {saving ? "Creating…" : "Create Agent"}
           </button>
         </div>
       </div>

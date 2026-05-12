@@ -2,6 +2,9 @@ import AgentDetail from "@/components/agent/AgentDetail";
 
 export const metadata = { title: "Agent Details" };
 
-export default function AgentDetailPage({ params }: { params: { id: string } }) {
-  return <AgentDetail id={params.id} />;
+type PageProps = { params: Promise<{ id: string }> };
+
+export default async function AgentDetailPage({ params }: PageProps) {
+  const { id } = await params;
+  return <AgentDetail id={id} />;
 }
