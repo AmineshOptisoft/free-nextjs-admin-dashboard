@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import CreateAgentModal from "./CreateAgentModal";
 import Pagination from "../ui/Pagination";
@@ -36,7 +36,7 @@ const mockAgents: Agent[] = [
 const PAGE_SIZE = 6;
 
 /* ── Agent Card (Grid View) ── */
-function AgentCard({ agent }: { agent: Agent }) {
+function AgentCard({ agent, onDeleteClick }: { agent: Agent; onDeleteClick: () => void }) {
   return (
     <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] p-4 flex flex-col gap-3">
       {/* Top row: avatar + name + status + role + delete */}
@@ -66,7 +66,15 @@ function AgentCard({ agent }: { agent: Agent }) {
           <span className="rounded-lg border border-gray-200 dark:border-gray-700 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-gray-400">
             {agent.role}
           </span>
-          <button className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+          <button
+            type="button"
+            aria-label="Delete agent"
+            onClick={(e) => {
+              e.preventDefault();
+              onDeleteClick();
+            }}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
@@ -111,7 +119,7 @@ function AgentCard({ agent }: { agent: Agent }) {
 }
 
 /* ── Agent Row (List View) ── */
-function AgentRow({ agent }: { agent: Agent }) {
+function AgentRow({ agent, onDeleteClick }: { agent: Agent; onDeleteClick: () => void }) {
   return (
     <div className="flex items-center gap-4 px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors">
       <div className="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 shrink-0">
@@ -143,7 +151,15 @@ function AgentRow({ agent }: { agent: Agent }) {
           </svg>
           2FA
         </button>
-        <button className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+        <button
+          type="button"
+          aria-label="Delete agent"
+          onClick={(e) => {
+            e.preventDefault();
+            onDeleteClick();
+          }}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+        >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
@@ -160,8 +176,25 @@ export default function AgentList() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [agents, setAgents] = useState<Agent[]>(() => mockAgents.map((a) => ({ ...a })));
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
 
-  const filtered = mockAgents.filter((a) =>
+  useEffect(() => {
+    if (!removeConfirmId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRemoveConfirmId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [removeConfirmId]);
+
+  const confirmRemoveAgent = () => {
+    if (!removeConfirmId) return;
+    setAgents((prev) => prev.filter((a) => a.id !== removeConfirmId));
+    setRemoveConfirmId(null);
+  };
+
+  const filtered = agents.filter((a) =>
     !search ||
     a.username.toLowerCase().includes(search.toLowerCase()) ||
     a.parent.toLowerCase().includes(search.toLowerCase()) ||
@@ -178,7 +211,7 @@ export default function AgentList() {
         <svg className="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Agents</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Vendors</h1>
       </div>
 
       {/* ── Toolbar ── */}
@@ -188,7 +221,7 @@ export default function AgentList() {
           <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">All Agents</span>
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">All Vendors</span>
           <span className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-bold text-gray-600 dark:text-gray-300">
             {filtered.length}
           </span>
@@ -218,7 +251,7 @@ export default function AgentList() {
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 onBlur={() => { if (!search) setSearchOpen(false); }}
-                placeholder="Search Agents..."
+                placeholder="Search Vendors..."
                 className="w-44 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-9 pr-4 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
               />
             </div>
@@ -230,7 +263,7 @@ export default function AgentList() {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              <span className="text-sm">Search Agents...</span>
+              <span className="text-sm">Search Vendors...</span>
             </button>
           )}
 
@@ -260,19 +293,23 @@ export default function AgentList() {
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
         {/* Section heading */}
         <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Agents List</h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Vendors List</h2>
         </div>
 
         {/* Empty state */}
         {filtered.length === 0 ? (
-          <div className="py-16 text-center text-gray-400 dark:text-gray-500">No agents found.</div>
+          <div className="py-16 text-center text-gray-400 dark:text-gray-500">No vendors found.</div>
         ) : viewMode === "grid" ? (
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {paginated.map((a) => <AgentCard key={a.id} agent={a} />)}
+            {paginated.map((a) => (
+              <AgentCard key={a.id} agent={a} onDeleteClick={() => setRemoveConfirmId(a.id)} />
+            ))}
           </div>
         ) : (
           <div>
-            {paginated.map((a) => <AgentRow key={a.id} agent={a} />)}
+            {paginated.map((a) => (
+              <AgentRow key={a.id} agent={a} onDeleteClick={() => setRemoveConfirmId(a.id)} />
+            ))}
           </div>
         )}
       </div>
@@ -287,6 +324,50 @@ export default function AgentList() {
 
       {/* ── Create Agent Modal ── */}
       {showCreate && <CreateAgentModal onClose={() => setShowCreate(false)} />}
+
+      {removeConfirmId !== null && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-agent-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[1px] dark:bg-black/60"
+            aria-label="Dismiss"
+            onClick={() => setRemoveConfirmId(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+            <h3 id="remove-agent-title" className="text-lg font-semibold text-gray-900 dark:text-white">
+              Remove vendor?
+            </h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              This will remove{" "}
+              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                {agents.find((a) => a.id === removeConfirmId)?.username ?? "this agent"}
+              </span>{" "}
+              from the list. Refresh the page to restore mock data.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRemoveConfirmId(null)}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveAgent}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -95,8 +95,8 @@ export default function LedgerReport() {
             onClick={() => setOpenAccountIndex((prev) => (prev === index ? -1 : index))}
             className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
               openAccountIndex === index
-                ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
-                : "bg-transparent text-gray-800 hover:bg-gray-50 dark:text-white/90 dark:hover:bg-white/5"
+                ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-700"
+                : "bg-transparent text-brand-700 hover:bg-brand-50 dark:text-brand-700 dark:hover:bg-brand-50/15"
             }`}
           >
             <div>

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import CreateCompanyModal from "./CreateCompanyModal";
 import Pagination from "../ui/Pagination";
@@ -81,14 +81,36 @@ export default function CompaniesList() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [editCompany, setEditCompany] = useState<Company | null>(null);
-  const [statuses, setStatuses] = useState<Record<string, Company["status"]>>(
+  const [companies, setCompanies] = useState<Company[]>(() => mockCompanies.map((c) => ({ ...c })));
+  const [statuses, setStatuses] = useState<Record<string, Company["status"]>>(() =>
     Object.fromEntries(mockCompanies.map((c) => [c.id, c.status]))
   );
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!removeConfirmId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRemoveConfirmId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [removeConfirmId]);
+
+  const confirmRemoveCompany = () => {
+    if (!removeConfirmId) return;
+    setCompanies((prev) => prev.filter((c) => c.id !== removeConfirmId));
+    setStatuses((prev) => {
+      const next = { ...prev };
+      delete next[removeConfirmId];
+      return next;
+    });
+    setRemoveConfirmId(null);
+  };
 
   const toggleStatus = (id: string) =>
     setStatuses((prev) => ({ ...prev, [id]: prev[id] === "Active" ? "Inactive" : "Active" }));
 
-  const filtered = mockCompanies.filter(
+  const filtered = companies.filter(
     (c) =>
       !search ||
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -286,7 +308,9 @@ export default function CompaniesList() {
 
                         {/* Delete */}
                         <button
+                          type="button"
                           title="Delete company"
+                          onClick={() => setRemoveConfirmId(c.id)}
                           className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -321,6 +345,50 @@ export default function CompaniesList() {
       {/* ── Modals ── */}
       {showCreate  && <CreateCompanyModal onClose={() => setShowCreate(false)} />}
       {editCompany && <EditModal company={editCompany} onClose={() => setEditCompany(null)} />}
+
+      {removeConfirmId !== null && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-company-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[1px] dark:bg-black/60"
+            aria-label="Dismiss"
+            onClick={() => setRemoveConfirmId(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+            <h3 id="remove-company-title" className="text-lg font-semibold text-gray-900 dark:text-white">
+              Delete company?
+            </h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              This will remove{" "}
+              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                {companies.find((c) => c.id === removeConfirmId)?.name ?? "this company"}
+              </span>{" "}
+              from the directory. Refresh the page to restore mock data.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRemoveConfirmId(null)}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveCompany}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

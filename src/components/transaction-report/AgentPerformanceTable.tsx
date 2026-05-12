@@ -14,13 +14,13 @@ export default function AgentPerformanceTable({ rows }: { rows: AgentPerformance
   return (
     <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
       <div className="border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">Agent Performance</h3>
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">Vendor Performance</h3>
       </div>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader className="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-white/[0.02]">
             <TableRow>
-              <TableCell isHeader className="px-5 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400">Agent</TableCell>
+              <TableCell isHeader className="px-5 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400">Vendor</TableCell>
               <TableCell isHeader className="px-5 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400">Total Transactions</TableCell>
               <TableCell isHeader className="px-5 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400">Total Amount</TableCell>
               <TableCell isHeader className="px-5 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400">Completed</TableCell>

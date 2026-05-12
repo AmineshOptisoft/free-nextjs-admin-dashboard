@@ -16,7 +16,7 @@ import { GrTransaction } from "react-icons/gr";
 
 const summaryCards: TransactionSummaryCard[] = [
   {
-    title: "Total Agents",
+    title: "Total Vendors",
     value: "2",
     accent: "blue",
     icon: (
