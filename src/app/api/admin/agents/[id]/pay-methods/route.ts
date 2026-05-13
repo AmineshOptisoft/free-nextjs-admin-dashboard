@@ -45,9 +45,9 @@ export async function GET(
 
     const ids = rows.map((r) => r.id);
     const financialByPm = await loadPayMethodFinancials(agentId, ids);
-    const staff = rows.map((r) => payMethodToStaffApi(r, agentUsername, financialByPm.get(r.id)));
+    const payment_methods = rows.map((r) => payMethodToStaffApi(r, agentUsername, financialByPm.get(r.id)));
 
-    return NextResponse.json({ ok: true as const, staff });
+    return NextResponse.json({ ok: true as const, payment_methods });
   } catch (e: unknown) {
     if (isMysqlErNoSuchTable(e)) {
       return NextResponse.json({ ok: false, error: PAY_METHODS_TABLE_HINT }, { status: 503 });

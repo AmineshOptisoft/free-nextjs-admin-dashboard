@@ -144,10 +144,11 @@ export default function LedgerReport() {
           <button
             type="button"
             onClick={() => setOpenAgentId((prev) => (prev === account.agentId ? null : account.agentId))}
-            className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${openAccountIndex === index
+            className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+              openAgentId === account.agentId
                 ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-700"
                 : "bg-transparent text-brand-700 hover:bg-brand-50 dark:text-brand-700 dark:hover:bg-brand-50/15"
-              }`}
+            }`}
           >
             <div>
               <h3 className="text-sm font-semibold">{account.name}</h3>

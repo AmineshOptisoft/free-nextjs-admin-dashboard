@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentPayInListItem } from "@/lib/agent-transactions-map";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
@@ -8,116 +8,12 @@ import { PiContactlessPaymentFill } from "react-icons/pi";
 import CompanyPayInView from "./CompanyPayInView";
 
 const PAGE_SIZE = 5;
-const USE_DEMO_DATA = false;
+
+const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 
 type PayInStatus = "PENDING" | "APPROVED" | "EXPIRED" | "RECEIPT_PENDING" | "UNASSIGNED" | "PROCESSING";
 
 type PayInItem = AgentPayInListItem;
-
-const mockData: PayInItem[] = [
-  {
-    id: "1", ref: "#Q5PGJIZBJD", amount: 1000, status: "PENDING",
-    orderId: "XGi3lXpT0l91WVg", clientName: "BT247_Swamy63", clientUpi: "SKIP_UPI",
-    assignedUpi: "OW11481M53@mairtel", createdOn: "Fri 08 May 2026, 16:00",
-    totalAmount: 1000, discountAmount: 0, assignedTo: "Rahul airtel",
-    assignedOn: "Fri 08 May 2026, 16:00", remarks: "No remarks",
-  },
-  {
-    id: "2", ref: "#WG4Y10X39S", amount: 2000, status: "PENDING",
-    orderId: "oWa1V8DOeRPYTpS", clientName: "PLYBG_Nikki33", clientUpi: "SKIP_UPI",
-    assignedUpi: "34915717SP@mairtel", createdOn: "Fri 08 May 2026, 16:00",
-    totalAmount: 2000, discountAmount: 0, assignedTo: "Priya airtel",
-    assignedOn: "Fri 08 May 2026, 16:00", remarks: "No remarks",
-  },
-  {
-    id: "3", ref: "#HN1B62910A", amount: 5000, status: "PENDING",
-    orderId: "2bzAaiDbSz4xZzz", clientName: "BT247_Reddy55", clientUpi: "SKIP_UPI",
-    assignedUpi: "9511388004@MairTel", createdOn: "Fri 08 May 2026, 16:00",
-    totalAmount: 5000, discountAmount: 0, assignedTo: "Sunil mairtel",
-    assignedOn: "Fri 08 May 2026, 16:01", remarks: "No remarks",
-    hasReceipt: true, utrCode: "017075330557",
-  },
-  {
-    id: "4", ref: "#1APBGMGZND", amount: 500, status: "PENDING",
-    orderId: "XIRYBYVeoOkAOQq", clientName: "BT247_Basvaraj93", clientUpi: "SKIP_UPI",
-    assignedUpi: "gpay-11552523466@okbizaxis", createdOn: "Fri 08 May 2026, 16:01",
-    totalAmount: 500, discountAmount: 0, assignedTo: "Sunil gpay",
-    assignedOn: "Fri 08 May 2026, 16:02", remarks: "No remarks",
-  },
-  {
-    id: "5", ref: "#KR3M19PLWQ", amount: 3000, status: "APPROVED",
-    orderId: "Mn7pQx2Ry8vTa1Z", clientName: "PLYBG_Kumar21", clientUpi: "SKIP_UPI",
-    assignedUpi: "9876543210@ybl", createdOn: "Fri 08 May 2026, 15:45",
-    totalAmount: 3000, discountAmount: 0, assignedTo: "Amit ybl",
-    assignedOn: "Fri 08 May 2026, 15:46", remarks: "No remarks",
-  },
-  {
-    id: "6", ref: "#TZ8W44NXBC", amount: 1000, status: "APPROVED",
-    orderId: "Vb9cPdEfGhIjKlM", clientName: "BT247_Sharma44", clientUpi: "SKIP_UPI",
-    assignedUpi: "8765432109@okaxis", createdOn: "Fri 08 May 2026, 15:30",
-    totalAmount: 1000, discountAmount: 0, assignedTo: "Neha okaxis",
-    assignedOn: "Fri 08 May 2026, 15:31", remarks: "No remarks",
-  },
-  {
-    id: "7", ref: "#YD2F58MQVR", amount: 2000, status: "APPROVED",
-    orderId: "Nq3rSt4UvWxYzAb", clientName: "PLYBG_Verma88", clientUpi: "SKIP_UPI",
-    assignedUpi: "7654321098@paytm", createdOn: "Fri 08 May 2026, 15:15",
-    totalAmount: 2000, discountAmount: 50, assignedTo: "Ravi paytm",
-    assignedOn: "Fri 08 May 2026, 15:16", remarks: "Discount applied",
-    hasReceipt: true,
-  },
-  {
-    id: "8", ref: "#PL6H73BSNK", amount: 5000, status: "APPROVED",
-    orderId: "Cd5eF6gH7iJ8kL9", clientName: "BT247_Patel99", clientUpi: "SKIP_UPI",
-    assignedUpi: "6543210987@icici", createdOn: "Fri 08 May 2026, 15:00",
-    totalAmount: 5000, discountAmount: 0, assignedTo: "Deepak icici",
-    assignedOn: "Fri 08 May 2026, 15:01", remarks: "No remarks",
-    hasReceipt: true,
-  },
-  {
-    id: "9", ref: "#MN4C29WXOP", amount: 1000, status: "APPROVED",
-    orderId: "Mn7pQx2Ry8vTb2Y", clientName: "PLYBG_Singh12", clientUpi: "SKIP_UPI",
-    assignedUpi: "5432109876@upi", createdOn: "Fri 08 May 2026, 14:50",
-    totalAmount: 1000, discountAmount: 0, assignedTo: "Anjali upi",
-    assignedOn: "Fri 08 May 2026, 14:51", remarks: "No remarks",
-  },
-  {
-    id: "10", ref: "#AX7R14DQEL", amount: 300, status: "APPROVED",
-    orderId: "Op1qR2sT3uV4wX5", clientName: "BT247_Gupta77", clientUpi: "SKIP_UPI",
-    assignedUpi: "4321098765@hdfc", createdOn: "Fri 08 May 2026, 14:35",
-    totalAmount: 300, discountAmount: 0, assignedTo: "Vikram hdfc",
-    assignedOn: "Fri 08 May 2026, 14:36", remarks: "No remarks",
-  },
-  {
-    id: "11", ref: "#BQ9S36ZFGM", amount: 1000, status: "PROCESSING",
-    orderId: "Yb6cD7eF8gH9iJ0", clientName: "PLYBG_Mehta55", clientUpi: "SKIP_UPI",
-    assignedUpi: "3210987654@sbi", createdOn: "Fri 08 May 2026, 14:20",
-    totalAmount: 1000, discountAmount: 0, assignedTo: "Pooja sbi",
-    assignedOn: "Fri 08 May 2026, 14:21", remarks: "Under review",
-    hasReceipt: true,
-  },
-  {
-    id: "12", ref: "#CR5T81LHWN", amount: 750, status: "EXPIRED",
-    orderId: "Kl1mN2oP3qR4sT5", clientName: "BT247_Joshi34", clientUpi: "SKIP_UPI",
-    assignedUpi: "2109876543@axis", createdOn: "Fri 08 May 2026, 12:00",
-    totalAmount: 750, discountAmount: 0, assignedTo: "Manish axis",
-    assignedOn: "Fri 08 May 2026, 12:01", remarks: "Expired — no payment",
-  },
-  {
-    id: "13", ref: "#DV2U47YKBT", amount: 1500, status: "RECEIPT_PENDING",
-    orderId: "Uv6wX7yZ8aB9cD0", clientName: "PLYBG_Nair21", clientUpi: "SKIP_UPI",
-    assignedUpi: "1098765432@kotak", createdOn: "Fri 08 May 2026, 13:30",
-    totalAmount: 1500, discountAmount: 0, assignedTo: "Lakshmi kotak",
-    assignedOn: "Fri 08 May 2026, 13:31", remarks: "Awaiting receipt upload",
-  },
-  {
-    id: "14", ref: "#EW3V58ZMCU", amount: 2500, status: "UNASSIGNED",
-    orderId: "Ef1gH2iJ3kL4mN5", clientName: "BT247_Rao66", clientUpi: "SKIP_UPI",
-    assignedUpi: "—", createdOn: "Fri 08 May 2026, 16:05",
-    totalAmount: 2500, discountAmount: 0, assignedTo: "—",
-    assignedOn: "—", remarks: "Not yet assigned",
-  },
-];
 
 const STATUS_TABS: { label: string; value: PayInStatus | "ALL" }[] = [
   { label: "All", value: "ALL" },
@@ -139,7 +35,8 @@ const statusStyle: Record<PayInStatus, string> = {
 
 const showApprove = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING";
 const showReject = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING" || s === "RECEIPT_PENDING";
-const showCancel = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING" || s === "RECEIPT_PENDING";
+/** Revoke / unassign — not offered for receipt-pending (reject only there). */
+const showCancel = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING";
 const showActionButtons = (s: PayInStatus) => showApprove(s) || showReject(s) || showCancel(s);
 
 function MoneyIcon() {
@@ -215,21 +112,6 @@ function RejectButton({ onClick, disabled }: { onClick?: () => void; disabled?: 
   );
 }
 
-function CancelButton({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-    >
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-      </svg>
-      Cancel
-    </button>
-  );
-}
-
 function ViewButton({ onClick }: { onClick?: () => void }) {
   return (
     <button
@@ -254,16 +136,91 @@ function ChevronBtn({ rotated, onClick }: { rotated: boolean; onClick: () => voi
   );
 }
 
+function proofIsPdf(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  if (u.startsWith("data:") && u.includes("application/pdf")) return true;
+  const path = u.split("?")[0] ?? u;
+  return path.endsWith(".pdf");
+}
+
+function DeclineMenu({
+  disabled,
+  onReject,
+  onRevoke,
+}: {
+  disabled?: boolean;
+  onReject: () => void;
+  onRevoke: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        Decline
+        <svg className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 z-30 mt-1 min-w-[10rem] rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+            onClick={() => {
+              setOpen(false);
+              onReject();
+            }}
+          >
+            Reject
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20"
+            onClick={() => {
+              setOpen(false);
+              onRevoke();
+            }}
+          >
+            Revoke
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PayInCard({
   item,
   onOpenAction,
   onView,
+  onOpenProof,
   busy,
+  isAdmin,
+  onDispute,
 }: {
   item: PayInItem;
   onOpenAction: (item: PayInItem, initialAction: "approve" | "reject" | "cancel") => void;
   onView?: () => void;
+  onOpenProof?: (proofUrl: string) => void;
   busy?: boolean;
+  isAdmin?: boolean;
+  onDispute?: (item: PayInItem) => void;
 }) {
   // Desktop: chevron toggles extra details (Total Amount, Discount, etc.)
   // Mobile: chevron toggles all details
@@ -287,9 +244,47 @@ function PayInCard({
       {/* right-side action buttons */}
       <div className="flex items-center gap-2 shrink-0">
         {showApprove(item.status) && <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />}
+        {showReject(item.status) && showCancel(item.status) ? (
+          <DeclineMenu
+            disabled={busy}
+            onReject={() => onOpenAction(item, "reject")}
+            onRevoke={() => onOpenAction(item, "cancel")}
+          />
+        ) : showReject(item.status) ? (
+          <RejectButton onClick={() => onOpenAction(item, "reject")} disabled={busy} />
+        ) : showCancel(item.status) ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onOpenAction(item, "cancel")}
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            Revoke
+          </button>
+        ) : null}
+        {isAdmin && onDispute && !item.disputeRaised && showActionButtons(item.status) && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onDispute(item)}
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-900/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            Dispute
+          </button>
+        )}
         {onView && <ViewButton onClick={onView} />}
         {item.hasReceipt && (
-          <button className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+          <button
+            type="button"
+            title="View payment proof"
+            disabled={busy}
+            onClick={() => {
+              const p = item.paymentProof?.trim();
+              if (p) onOpenProof?.(p);
+              else window.alert("Proof is not available for this transaction.");
+            }}
+            className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
             <ReceiptIcon />
           </button>
         )}
@@ -413,15 +408,24 @@ export default function PayInList() {
   const [activeTab, setActiveTab] = useState<PayInStatus | "ALL">("ALL");
   const [showFilter, setShowFilter] = useState(false);
 
-  const [items, setItems] = useState<PayInItem[] | null>(null);
+  const [items, setItems] = useState<PayInItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<PayInItem | null>(null);
   const [modalAction, setModalAction] = useState<ActionType>("approve");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalUtr, setModalUtr] = useState("");
+  const [modalProofDataUrl, setModalProofDataUrl] = useState<string | null>(null);
+  const [modalProofName, setModalProofName] = useState("");
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [amount, setAmount] = useState("");
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [page, setPage] = useState(1);
 
   const loadPayIns = useCallback(async () => {
     setListLoading(true);
@@ -433,18 +437,20 @@ export default function PayInList() {
     try {
       const res = await fetch(endpoint, { credentials: "include" });
       if (res.status === 401) {
-        setItems(null);
+        setItems([]);
+        setListError("Please sign in to view PayIns.");
         return;
       }
       const data = (await res.json()) as { ok?: boolean; items?: PayInItem[]; error?: string };
       if (!res.ok || !data.ok || !data.items) {
-        setItems(null);
+        setItems([]);
         setListError(data.error ?? "Could not load transactions.");
         return;
       }
+      setListError(null);
       setItems(data.items);
     } catch {
-      setItems(null);
+      setItems([]);
       setListError("Network error.");
     } finally {
       setListLoading(false);
@@ -456,16 +462,63 @@ export default function PayInList() {
     void loadPayIns();
   }, [resolvedRole, loadPayIns]);
 
-  // Advanced search state
-  const [search, setSearch] = useState("");
-  const [amount, setAmount] = useState("");
-  const [filterStatus, setFilterStatus] = useState("All");
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const raiseDispute = useCallback(
+    async (item: PayInItem) => {
+      if (resolvedRole !== "admin") return;
+      const reason = window.prompt("Dispute reason?", "Other");
+      if (reason === null) return;
+      try {
+        const res = await fetch(`/api/admin/transactions/${item.id}/dispute`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: reason.trim() || "Other" }),
+        });
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !data.ok) {
+          window.alert(data.error ?? "Could not raise dispute.");
+          return;
+        }
+        await loadPayIns();
+      } catch {
+        window.alert("Network error.");
+      }
+    },
+    [resolvedRole, loadPayIns],
+  );
 
-  // Pagination
-  const [page, setPage] = useState(1);
+  function closeActionModal() {
+    setModalOpen(false);
+    setModalError(null);
+    setModalProofDataUrl(null);
+    setModalProofName("");
+  }
 
-  const baseData = items ?? (USE_DEMO_DATA ? mockData : []);
+  function handleModalProofFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) {
+      setModalProofDataUrl(null);
+      setModalProofName("");
+      return;
+    }
+    if (f.size > MAX_PROOF_BYTES) {
+      setModalError("Proof file must be 5 MB or smaller.");
+      return;
+    }
+    setModalError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const r = reader.result;
+      if (typeof r === "string") {
+        setModalProofDataUrl(r);
+        setModalProofName(f.name);
+      }
+    };
+    reader.readAsDataURL(f);
+  }
+
+  const baseData = items;
   const totalOrders = baseData.length;
 
   const counts: Partial<Record<PayInStatus | "ALL", number>> = {
@@ -495,20 +548,41 @@ export default function PayInList() {
     setSelectedItem(item);
     setModalAction(action);
     setModalUtr(item.utrCode ?? "");
+    setModalProofDataUrl(null);
+    setModalProofName("");
     setModalError(null);
     setModalOpen(true);
   }
 
-  async function runAction(item: PayInItem, action: ActionType, utrInput?: string) {
+  async function runAction(
+    item: PayInItem,
+    action: ActionType,
+    opts?: { utr?: string; paymentImage?: string | null },
+  ) {
     setActionBusyId(item.id);
     setModalError(null);
+
+    if (action === "approve") {
+      const proof = (opts?.paymentImage ?? "").trim();
+      if (!item.hasReceipt && !proof) {
+        setModalError("Upload payment proof (screenshot) before approving.");
+        setActionBusyId(null);
+        return;
+      }
+    }
+
     let status = "";
     if (action === "approve") status = resolvedRole === "admin" ? "APPROVED_BY_ADMIN" : "APPROVED_BY_AGENT";
     if (action === "reject") status = "REJECTED";
     if (action === "cancel") status = resolvedRole === "admin" ? "RE_ASSIGNED" : "REVOKED";
 
     const body: Record<string, string> = { status };
-    if (action === "approve" && (utrInput ?? "").trim()) body.utr_code = (utrInput ?? "").trim();
+    if (action === "approve") {
+      const utr = (opts?.utr ?? "").trim();
+      if (utr) body.utr_code = utr;
+      const proof = (opts?.paymentImage ?? "").trim();
+      if (proof) body.payment_image = proof;
+    }
 
     try {
       const endpoint =
@@ -524,7 +598,7 @@ export default function PayInList() {
         setModalError(data.error ?? "Could not update transaction.");
         return;
       }
-      setModalOpen(false);
+      closeActionModal();
       setSelectedItem(null);
       setModalUtr("");
       await loadPayIns();
@@ -547,7 +621,7 @@ export default function PayInList() {
           <PiContactlessPaymentFill className="w-6 h-6" />
           <h1 className="text-xl font-bold">Pay In</h1>
         </div>
-      {items !== null && (
+      {!listLoading && !listError && (
           <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
             {resolvedRole === "admin"
               ? "Live: all PayIn requests for admin actions (max 500)."
@@ -561,7 +635,7 @@ export default function PayInList() {
           {resolvedRole === "admin" ? "Loading admin payins…" : "Checking agent session…"}
         </div>
       )}
-      {listError && items === null && (
+      {listError && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
           {listError}
         </div>
@@ -753,8 +827,11 @@ export default function PayInList() {
               key={item.id}
               item={item}
               onOpenAction={openActionModal}
+              onOpenProof={(url) => setProofPreviewUrl(url)}
               onView={() => (window.location.href = `/transactions/${item.id}`)}
               busy={actionBusyId === item.id}
+              isAdmin={resolvedRole === "admin"}
+              onDispute={raiseDispute}
             />
           ))
         )}
@@ -770,19 +847,20 @@ export default function PayInList() {
 
       <Modal
         isOpen={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setModalError(null);
-        }}
+        onClose={closeActionModal}
         className="max-w-xl p-0 overflow-hidden"
         showCloseButton={false}
       >
         <div className="rounded-xl bg-white dark:bg-gray-900">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-gray-800">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">PayIn Action</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {modalAction === "approve" && "Approve PayIn"}
+              {modalAction === "reject" && "Reject PayIn"}
+              {modalAction === "cancel" && "Revoke assignment"}
+            </h3>
             <button
               type="button"
-              onClick={() => setModalOpen(false)}
+              onClick={closeActionModal}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               x
@@ -794,36 +872,109 @@ export default function PayInList() {
                 {selectedItem.orderId} · {selectedItem.clientName} · ₹{selectedItem.amount.toLocaleString("en-IN")}
               </p>
             )}
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                UTR Code (optional, but recommended for approve)
-              </label>
-              <input
-                value={modalUtr}
-                onChange={(e) => setModalUtr(e.target.value)}
-                placeholder="Enter UTR if missing"
-                className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-              />
-            </div>
+            {modalAction === "approve" && (
+              <>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    UTR code (optional)
+                  </label>
+                  <input
+                    value={modalUtr}
+                    onChange={(e) => setModalUtr(e.target.value)}
+                    placeholder="Enter UTR if missing"
+                    className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Payment proof (screenshot) {!selectedItem?.hasReceipt && <span className="text-red-500">*</span>}
+                  </label>
+                  <input type="file" accept="image/*" className="text-sm text-gray-600 dark:text-gray-300" onChange={handleModalProofFile} />
+                  {modalProofName && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {modalProofName}</p>
+                  )}
+                  {selectedItem?.hasReceipt && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">A proof is already on file; upload a new file to replace it.</p>
+                  )}
+                </div>
+              </>
+            )}
+            {modalAction === "reject" && (
+              <p className="text-sm text-gray-600 dark:text-gray-300">Reject this PayIn? The payer will need to submit again if applicable.</p>
+            )}
+            {modalAction === "cancel" && (
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Revoke unassigns this transaction from the current handler. Use the button below to confirm; Close only dismisses this dialog.
+              </p>
+            )}
             {modalError && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
                 {modalError}
               </div>
             )}
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <ApproveButton
-                onClick={() => selectedItem && void runAction(selectedItem, "approve", modalUtr)}
-                disabled={!selectedItem || actionBusyId === selectedItem?.id}
-              />
-              <RejectButton
-                onClick={() => selectedItem && void runAction(selectedItem, "reject", modalUtr)}
-                disabled={!selectedItem || actionBusyId === selectedItem?.id}
-              />
-              <CancelButton
-                onClick={() => selectedItem && void runAction(selectedItem, "cancel", modalUtr)}
-                disabled={!selectedItem || actionBusyId === selectedItem?.id}
-              />
+              <button
+                type="button"
+                onClick={closeActionModal}
+                className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+              >
+                Close
+              </button>
+              {modalAction === "approve" && (
+                <ApproveButton
+                  onClick={() =>
+                    selectedItem &&
+                    void runAction(selectedItem, "approve", { utr: modalUtr, paymentImage: modalProofDataUrl })
+                  }
+                  disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                />
+              )}
+              {modalAction === "reject" && (
+                <RejectButton
+                  onClick={() => selectedItem && void runAction(selectedItem, "reject")}
+                  disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                />
+              )}
+              {modalAction === "cancel" && (
+                <button
+                  type="button"
+                  disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                  onClick={() => selectedItem && void runAction(selectedItem, "cancel")}
+                  className="rounded-full bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Revoke assignment
+                </button>
+              )}
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={proofPreviewUrl != null}
+        onClose={() => setProofPreviewUrl(null)}
+        className="max-w-3xl p-0 overflow-hidden"
+        showCloseButton={false}
+      >
+        <div className="rounded-xl bg-white dark:bg-gray-900">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-gray-800">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Payment proof</h3>
+            <button
+              type="button"
+              onClick={() => setProofPreviewUrl(null)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              ×
+            </button>
+          </div>
+          <div className="max-h-[80vh] overflow-auto p-4">
+            {proofPreviewUrl &&
+              (proofIsPdf(proofPreviewUrl) ? (
+                <iframe title="Payment proof PDF" src={proofPreviewUrl} className="h-[70vh] w-full rounded-md border border-gray-200 dark:border-gray-700" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={proofPreviewUrl} alt="Payment proof" className="mx-auto max-h-[75vh] w-auto max-w-full object-contain" />
+              ))}
           </div>
         </div>
       </Modal>

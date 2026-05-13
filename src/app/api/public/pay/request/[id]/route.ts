@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
-import { payInDisplayStatus } from "@/lib/payin-lifecycle";
+import { payInDisplayStatus, publicPayInDisplayMethod, sqlFieldToUtf8 } from "@/lib/payin-lifecycle";
 
 type TxRow = RowDataPacket & {
   id: number;
@@ -20,6 +20,7 @@ type TxRow = RowDataPacket & {
   assigned_agent_id: number | null;
   payment_method: string;
   account_holder_name: string | null;
+  qr_code_url: string | null;
 };
 
 function num(v: string | number): number {
@@ -32,7 +33,7 @@ async function loadTx(txId: number): Promise<TxRow | null> {
   const [rows] = await pool.execute<TxRow[]>(
     `SELECT \`id\`, \`order_id\`, \`amount\`, \`status\`, \`client_name\`, \`client_upi\`, \`assigned_upi\`,
             \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`utr_code\`, \`payment_image\`,
-            \`pay_method_id\`, \`assigned_agent_id\`, \`payment_method\`, \`account_holder_name\`
+            \`pay_method_id\`, \`assigned_agent_id\`, \`payment_method\`, \`account_holder_name\`, \`qr_code_url\`
      FROM \`transactions\`
      WHERE \`id\` = ? AND \`type\` = 'PAYIN'
      LIMIT 1`,
@@ -48,22 +49,23 @@ function mapTx(tx: TxRow) {
   );
   return {
     id: String(tx.id),
-    orderId: tx.order_id,
+    orderId: sqlFieldToUtf8(tx.order_id),
     amount: num(tx.amount),
     status: dbStatus,
     displayStatus: payInDisplayStatus(dbStatus),
-    clientName: tx.client_name ?? "",
-    clientUpi: tx.client_upi ?? "",
-    assignedUpi: tx.assigned_upi ?? "",
-    bankName: tx.bank_name ?? "",
-    accountNo: tx.bank_account_number ?? "",
-    ifsc: tx.ifsc_code ?? "",
+    clientName: sqlFieldToUtf8(tx.client_name),
+    clientUpi: sqlFieldToUtf8(tx.client_upi),
+    assignedUpi: sqlFieldToUtf8(tx.assigned_upi),
+    bankName: sqlFieldToUtf8(tx.bank_name),
+    accountNo: sqlFieldToUtf8(tx.bank_account_number),
+    ifsc: sqlFieldToUtf8(tx.ifsc_code),
     hasReceipt: Boolean(tx.payment_image && String(tx.payment_image).trim().length > 0),
-    utrCode: tx.utr_code ?? "",
-    paymentMethod: (tx.payment_method ?? "UPI").toString().toUpperCase() === "BANK" ? "BANK" : "UPI",
-    accountHolderName: tx.account_holder_name ?? "",
+    utrCode: sqlFieldToUtf8(tx.utr_code),
+    paymentMethod: publicPayInDisplayMethod(tx),
+    accountHolderName: sqlFieldToUtf8(tx.account_holder_name),
     waitForAgent: dbStatus === "NOT_ASSIGNED" || !tx.pay_method_id || !tx.assigned_agent_id,
     proofSubmitted,
+    qrCodeUrl: sqlFieldToUtf8(tx.qr_code_url),
   };
 }
 

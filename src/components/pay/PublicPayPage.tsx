@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/modal";
+import { publicPayInDisplayMethod } from "@/lib/payin-lifecycle";
 
 type CompanyInfo = {
   id: string;
@@ -18,7 +19,8 @@ type PayRequest = {
   /** Server UX label (e.g. NOT_ASSIGNED → WAITING_FOR_AGENT). */
   displayStatus?: string;
   clientName: string;
-  clientUpi: string;
+  /** Legacy / optional payer UPI stored on txn; Payment UI does not use this for pay-to details. */
+  clientUpi?: string;
   assignedUpi: string;
   bankName: string;
   accountNo: string;
@@ -31,6 +33,8 @@ type PayRequest = {
   /** Assigned agent pay method (from server), not the payer's initial preference alone. */
   paymentMethod?: "UPI" | "BANK";
   accountHolderName?: string;
+  /** Server-built UPI intent string (preferred for QR when present). */
+  qrCodeUrl?: string;
 };
 
 type Step = "FORM" | "WAIT_ASSIGN" | "PAYMENT" | "VERIFY_QUEUE" | "FINAL";
@@ -60,6 +64,19 @@ function qrDataUrl(upiUri: string): string {
   return `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(upiUri)}`;
 }
 
+/** Read `pa` from `upi://pay?...` when assigned UPI text is empty. */
+function parsePayeeUpiFromIntent(uri: string): string {
+  const u = uri.trim();
+  if (!u.toLowerCase().startsWith("upi://")) return "";
+  const q = u.includes("?") ? u.slice(u.indexOf("?") + 1) : "";
+  try {
+    const pa = new URLSearchParams(q).get("pa");
+    return pa?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export default function PublicPayPage({ companyKey }: { companyKey: string }) {
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [companyError, setCompanyError] = useState<string | null>(null);
@@ -67,7 +84,6 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
 
   const [method, setMethod] = useState<"UPI" | "BANK">("UPI");
   const [clientName, setClientName] = useState("");
-  const [clientUpi, setClientUpi] = useState("");
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -84,7 +100,7 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
   const [secondsLeft, setSecondsLeft] = useState(PAYMENT_TIMER_SEC);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
-  const [copyFlash, setCopyFlash] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -114,18 +130,28 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
 
   useEffect(() => {
     if (!request?.id) return;
-    const timer = setInterval(async () => {
+
+    const id = request.id;
+    const poll = async () => {
       try {
-        const res = await fetch(`/api/public/pay/request/${request.id}`);
+        const res = await fetch(`/api/public/pay/request/${id}`);
         const data = (await res.json()) as { ok?: boolean; request?: PayRequest };
         if (!res.ok || !data.ok || !data.request) return;
         setRequest(data.request);
       } catch {
         // ignore transient polling failures
       }
-    }, 4000);
+    };
+
+    void poll();
+    const waiting =
+      request.waitForAgent ||
+      String(request.status).toUpperCase() === "NOT_ASSIGNED" ||
+      String(request.displayStatus ?? "").toUpperCase() === "WAITING_FOR_AGENT";
+    const ms = waiting ? 2000 : 5000;
+    const timer = setInterval(() => void poll(), ms);
     return () => clearInterval(timer);
-  }, [request?.id]);
+  }, [request?.id, request?.waitForAgent, request?.status, request?.displayStatus]);
 
   const currentStep: Step = useMemo(() => {
     if (!request) return "FORM";
@@ -144,9 +170,16 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
   }, [request]);
 
   const assignedMethod = useMemo((): "UPI" | "BANK" => {
-    if ((request?.paymentMethod ?? "").toString().toUpperCase() === "BANK") return "BANK";
-    return "UPI";
-  }, [request?.paymentMethod]);
+    if (!request) return "UPI";
+    return publicPayInDisplayMethod({
+      payment_method: request.paymentMethod,
+      assigned_upi: request.assignedUpi,
+      qr_code_url: request.qrCodeUrl,
+      bank_name: request.bankName,
+      bank_account_number: request.accountNo,
+      ifsc_code: request.ifsc,
+    });
+  }, [request]);
 
   useEffect(() => {
     if (currentStep !== "PAYMENT") return;
@@ -166,7 +199,7 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_name: clientName,
-          client_upi: clientUpi,
+          client_upi: "",
           amount,
           method,
         }),
@@ -216,8 +249,8 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
     if (!request) return;
     const utr = utrInput.trim();
     const image = proofDataUrl?.trim() ?? "";
-    if (!utr && !image) {
-      setProofError("Enter UTR or upload a screenshot.");
+    if (!image) {
+      setProofError("Upload a screenshot or proof of payment (required).");
       return;
     }
     setProofBusy(true);
@@ -226,7 +259,7 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
       const res = await fetch(`/api/public/pay/request/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ utr_code: utr, payment_image: image, user_upi: clientUpi }),
+        body: JSON.stringify({ utr_code: utr, payment_image: image }),
       });
       const data = (await res.json()) as { ok?: boolean; request?: PayRequest; error?: string };
       if (!res.ok || !data.ok || !data.request) {
@@ -243,21 +276,45 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
     }
   }
 
-  async function copyUpi(text: string) {
+  async function copyField(key: string, text: string) {
+    const t = text.trim();
+    if (!t) return;
     try {
-      await navigator.clipboard.writeText(text);
-      setCopyFlash(true);
-      window.setTimeout(() => setCopyFlash(false), 1600);
+      await navigator.clipboard.writeText(t);
+      setProofError(null);
+      setCopiedKey(key);
+      window.setTimeout(() => {
+        setCopiedKey((k) => (k === key ? null : k));
+      }, 1600);
     } catch {
-      setProofError("Could not copy — select and copy manually.");
+      setProofError("Copy failed — select the text and copy manually.");
     }
   }
 
   const brandTitle = company?.brand_name ?? "Merchant";
-  const upiUri =
-    request?.assignedUpi?.trim() && assignedMethod === "UPI"
-      ? buildUpiPayUri(request.assignedUpi.trim(), request.clientName || brandTitle, request.amount)
-      : "";
+
+  const upiIntent = useMemo(() => {
+    if (!request || assignedMethod !== "UPI") return "";
+    const server = (request.qrCodeUrl ?? "").trim();
+    if (server.toLowerCase().startsWith("upi://")) return server;
+    const upi = (request.assignedUpi ?? "").trim();
+    if (!upi) return "";
+    return buildUpiPayUri(upi, request.clientName || brandTitle, request.amount);
+  }, [request, assignedMethod, brandTitle]);
+
+  const qrImageSrc = useMemo(() => {
+    if (!request || assignedMethod !== "UPI") return "";
+    const server = (request.qrCodeUrl ?? "").trim();
+    if (server.startsWith("http://") || server.startsWith("https://")) return server;
+    return upiIntent ? qrDataUrl(upiIntent) : "";
+  }, [request, assignedMethod, upiIntent]);
+
+  const displayReceiverUpi = useMemo(() => {
+    if (!request) return "";
+    const a = (request.assignedUpi ?? "").trim();
+    if (a) return a;
+    return parsePayeeUpiFromIntent(upiIntent);
+  }, [request, upiIntent]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-4 py-10 text-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 dark:text-gray-100">
@@ -309,27 +366,15 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                      Your UPI ID <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      value={clientUpi}
-                      onChange={(e) => setClientUpi(e.target.value)}
-                      placeholder="e.g. name@paytm"
-                      className="mt-1.5 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none ring-sky-400/30 focus:border-sky-400 focus:ring-4 dark:border-gray-600 dark:bg-gray-800"
-                    />
-                  </div>
-                  <div>
                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Select Payment Method</p>
                     <div className="mt-3 grid gap-3">
                       <button
                         type="button"
                         onClick={() => setMethod("UPI")}
-                        className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors ${
-                          method === "UPI"
-                            ? "border-sky-400 bg-sky-50 dark:border-sky-500 dark:bg-sky-950/40"
-                            : "border-gray-100 bg-sky-50/40 hover:border-sky-200 dark:border-gray-700 dark:bg-gray-800/50"
-                        }`}
+                        className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors ${method === "UPI"
+                          ? "border-sky-400 bg-sky-50 dark:border-sky-500 dark:bg-sky-950/40"
+                          : "border-gray-100 bg-sky-50/40 hover:border-sky-200 dark:border-gray-700 dark:bg-gray-800/50"
+                          }`}
                       >
                         <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-xs font-bold text-sky-600 shadow-sm ring-1 ring-sky-100">
                           UPI
@@ -342,11 +387,10 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
                       <button
                         type="button"
                         onClick={() => setMethod("BANK")}
-                        className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors ${
-                          method === "BANK"
-                            ? "border-emerald-400 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40"
-                            : "border-gray-100 bg-emerald-50/40 hover:border-emerald-200 dark:border-gray-700 dark:bg-gray-800/50"
-                        }`}
+                        className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors ${method === "BANK"
+                          ? "border-emerald-400 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40"
+                          : "border-gray-100 bg-emerald-50/40 hover:border-emerald-200 dark:border-gray-700 dark:bg-gray-800/50"
+                          }`}
                       >
                         <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-emerald-100 dark:bg-gray-800">
                           <svg className="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -376,10 +420,15 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
             {request && currentStep === "WAIT_ASSIGN" && (
               <div className="w-full rounded-2xl border border-amber-200 bg-amber-50/90 p-6 text-center shadow-lg dark:border-amber-900/50 dark:bg-amber-950/30">
                 <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
-                <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">Waiting for payment account</p>
+                <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">Payment account assign ho raha hai…</p>
                 <p className="mt-2 text-xs text-amber-900/80 dark:text-amber-200/90">
-                  Order <span className="font-mono font-semibold">{request.orderId}</span>. An agent payment account will be
-                  linked to this request — keep this page open; UPI or bank details will appear automatically.
+                  Order <span className="font-mono font-semibold">{request.orderId}</span>. System abhi{" "}
+                  <span className="font-semibold">kisi available agent ke account</span> se link karega (eligible + limit ke
+                  hisaab se) — page khula rakhein; assign hote hi neeche{" "}
+                  <span className="font-semibold">UPI QR / bank details</span> khud dikhenge.
+                </p>
+                <p className="mt-2 text-[11px] text-amber-900/70 dark:text-amber-200/80">
+                  English: A receiver account is being picked automatically; details will appear here without refresh.
                 </p>
               </div>
             )}
@@ -403,8 +452,8 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
                   </p>
 
                   <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-center text-[11px] font-medium leading-snug text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
-                    Pay only using the details below — they are the <span className="font-semibold">agent receiver account</span>{" "}
-                    assigned to this request (not your own UPI from the first step).
+                    Pay only using the <span className="font-semibold">details on this screen</span> — they are the agent
+                    receiver details assigned to this payment (QR, UPI ID, or bank fields from the server).
                   </p>
 
                   <div className="mt-5 rounded-lg border-l-4 border-sky-500 bg-sky-50 px-3 py-3 text-sm text-sky-950 dark:border-sky-400 dark:bg-sky-950/40 dark:text-sky-100">
@@ -426,65 +475,78 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
                     </ul>
                   </div>
 
-                  {assignedMethod === "UPI" && request.assignedUpi.trim() ? (
+                  {assignedMethod === "UPI" && (qrImageSrc || displayReceiverUpi || upiIntent) ? (
                     <div className="mt-6 flex flex-col items-center">
-                      <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-wider text-gray-400">Agent UPI (receive)</p>
-                      <img
-                        src={qrDataUrl(upiUri)}
-                        alt="Payment QR"
-                        width={220}
-                        height={220}
-                        className="rounded-lg border border-gray-100 bg-white p-2 dark:border-gray-600"
-                      />
+                      <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                        Agent payment (receive)
+                      </p>
+                      {qrImageSrc ? (
+                        <img
+                          src={qrImageSrc}
+                          alt="Payment QR"
+                          width={220}
+                          height={220}
+                          className="rounded-lg border border-gray-100 bg-white p-2 dark:border-gray-600"
+                        />
+                      ) : null}
                       <div className="relative mt-4 w-full">
                         <input
                           readOnly
-                          value={request.assignedUpi}
+                          value={displayReceiverUpi || upiIntent}
                           className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 pr-20 pl-3 text-sm font-medium dark:border-gray-600 dark:bg-gray-800"
                         />
                         <button
                           type="button"
-                          onClick={() => void copyUpi(request.assignedUpi)}
+                          onClick={() => void copyField("agent-upi", displayReceiverUpi || upiIntent)}
                           className="absolute right-1 top-1 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700"
                         >
-                          {copyFlash ? "Copied" : "Copy"}
+                          {copiedKey === "agent-upi" ? "Copied" : "Copy"}
                         </button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="mt-6 space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-800/60">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                        {assignedMethod === "BANK" ? "Agent bank account (receive)" : "Assigned account details"}
-                      </p>
-                      {request.accountHolderName?.trim() ? (
-                        <p>
-                          <span className="font-semibold text-gray-500">Account holder: </span>
-                          {request.accountHolderName}
-                        </p>
-                      ) : null}
-                      {request.bankName ? (
-                        <p>
-                          <span className="font-semibold text-gray-500">Bank: </span>
-                          {request.bankName}
-                        </p>
-                      ) : null}
-                      {request.accountNo ? (
-                        <p>
-                          <span className="font-semibold text-gray-500">Account: </span>
-                          <span className="font-mono">{request.accountNo}</span>
-                        </p>
-                      ) : null}
-                      {request.ifsc ? (
-                        <p>
-                          <span className="font-semibold text-gray-500">IFSC: </span>
-                          <span className="font-mono">{request.ifsc}</span>
-                        </p>
-                      ) : null}
-                      {!request.bankName && !request.accountNo && !request.assignedUpi?.trim() && (
+                  ) : assignedMethod === "BANK" ? (
+                    <div className="mt-6 space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/60">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Agent bank account (receive)</p>
+                      {[
+                        { label: "Account holder", value: request.accountHolderName ?? "", key: "bank-holder" },
+                        { label: "Bank name", value: request.bankName ?? "", key: "bank-name" },
+                        { label: "Account number", value: request.accountNo ?? "", key: "bank-ac" },
+                        { label: "IFSC", value: request.ifsc ?? "", key: "bank-ifsc" },
+                      ].map((row) => {
+                        const v = row.value.trim();
+                        if (!v) return null;
+                        return (
+                          <div
+                            key={row.key}
+                            className="flex items-start justify-between gap-2 rounded-lg border border-gray-200/80 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-900/40"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{row.label}</p>
+                              <p className="break-all font-mono text-sm text-gray-800 dark:text-gray-100">{v}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void copyField(row.key, v)}
+                              className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-emerald-700"
+                            >
+                              {copiedKey === row.key ? "Copied" : "Copy"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {!request.bankName?.trim() && !request.accountNo?.trim() && !request.ifsc?.trim() && (
                         <p className="text-amber-800 dark:text-amber-200">
-                          Assigned payment details are not visible yet. Please wait a moment and refresh this page.
+                          Bank details abhi load nahi hue — thodi der mein dubara check karein (page khula rakhein).
                         </p>
                       )}
+                    </div>
+                  ) : (
+                    <div className="mt-6 space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-800/60">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Assigned account details</p>
+                      <p className="text-amber-800 dark:text-amber-200">
+                        Assigned payment details are not on this response yet. This page updates automatically — wait a few
+                        seconds. If it persists, go back and try again or contact support.
+                      </p>
                     </div>
                   )}
 
@@ -498,7 +560,7 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
 
                   <div>
                     <label className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                      Upload screenshot / proof <span className="font-normal text-gray-400">(optional if UTR filled)</span>
+                      Upload screenshot / proof <span className="font-normal text-red-500">(required)</span>
                     </label>
                     <div
                       role="button"
@@ -517,9 +579,8 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
                         ingestProofFile(e.dataTransfer.files[0] ?? null);
                       }}
                       onClick={() => fileInputRef.current?.click()}
-                      className={`mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-8 transition-colors ${
-                        dragOver ? "border-sky-400 bg-sky-50/80" : "border-gray-200 bg-gray-50/50 hover:border-sky-300 dark:border-gray-600 dark:bg-gray-800/40"
-                      }`}
+                      className={`mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-8 transition-colors ${dragOver ? "border-sky-400 bg-sky-50/80" : "border-gray-200 bg-gray-50/50 hover:border-sky-300 dark:border-gray-600 dark:bg-gray-800/40"
+                        }`}
                     >
                       <input
                         ref={fileInputRef}
@@ -556,14 +617,22 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
                   <button
                     type="button"
                     onClick={() => void submitProof()}
-                    disabled={proofBusy || (!utrInput.trim() && !proofDataUrl)}
+                    disabled={proofBusy || !proofDataUrl?.trim()}
                     className="mt-5 h-12 w-full rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 text-sm font-bold text-white shadow-md transition hover:from-sky-700 hover:to-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {proofBusy ? "Submitting…" : "I HAVE PAID"}
                   </button>
 
                   <p className="mt-4 text-center text-[11px] text-gray-400 dark:text-gray-500">
-                    Receipt: <span className="font-mono text-gray-600 dark:text-gray-400">{request.orderId}</span>
+                    Copy ID:{" "}
+                    <span className="font-mono text-gray-600 dark:text-gray-400">{request.orderId}</span>{" "}
+                    <button
+                      type="button"
+                      onClick={() => void copyField("receiptFooter", request.orderId)}
+                      className="ml-1 font-semibold text-sky-600 underline hover:text-sky-700 dark:text-sky-400"
+                    >
+                      {copiedKey === "receiptFooter" ? "Copied" : "Copy"}
+                    </button>
                   </p>
                 </div>
               </div>
@@ -572,8 +641,21 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
             {request && currentStep === "VERIFY_QUEUE" && (
               <div className="w-full rounded-2xl border border-sky-200 bg-white p-6 text-center shadow-lg dark:border-sky-900 dark:bg-gray-900">
                 <p className="text-sm font-semibold text-sky-900 dark:text-sky-100">Proof received</p>
-                <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-                  Order <span className="font-mono font-semibold">{request.orderId}</span> is in the verification queue. You will see the final status on this page.
+                <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Copy ID</p>
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                  <span className="rounded-lg bg-gray-100 px-3 py-2 font-mono text-sm font-semibold text-gray-900 dark:bg-gray-800 dark:text-sky-100">
+                    {request.orderId}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void copyField("copyId", request.orderId)}
+                    className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-200 dark:hover:bg-sky-900/60"
+                  >
+                    {copiedKey === "copyId" ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-gray-600 dark:text-gray-400">
+                  This copy ID is in the verification queue. You will see the final status on this page.
                 </p>
               </div>
             )}
@@ -606,10 +688,17 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
             </svg>
           </div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Payment submitted</h2>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Your order ID</p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Your copy ID</p>
           <p className="mt-2 break-all rounded-lg bg-gray-100 px-3 py-2 font-mono text-base font-bold text-gray-900 dark:bg-gray-800 dark:text-white">
             {successOrderId ?? "—"}
           </p>
+          <button
+            type="button"
+            onClick={() => successOrderId && void copyField("successModal", successOrderId)}
+            className="mt-3 w-full rounded-lg border border-gray-200 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            {copiedKey === "successModal" ? "Copied to clipboard" : "Copy copy ID"}
+          </button>
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
             Tap outside does not close this dialog. Use the button below when you are done.
           </p>

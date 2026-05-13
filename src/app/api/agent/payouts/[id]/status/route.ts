@@ -7,6 +7,7 @@ import { requireAgentSession } from "@/lib/require-agent-api";
 type TxRow = RowDataPacket & {
   id: number;
   status: string;
+  payment_image: string | null;
 };
 
 export async function PATCH(req: Request, context: { params: { id: string } | Promise<{ id: string }> }) {
@@ -26,12 +27,13 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     return NextResponse.json({ ok: false, error: "Invalid body" }, { status: 400 });
   }
   const toStatus = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
+  const paymentImage = typeof body.payment_image === "string" ? body.payment_image.trim() : "";
   if (!toStatus) {
     return NextResponse.json({ ok: false, error: "status is required" }, { status: 400 });
   }
 
   const [rows] = await pool.execute<TxRow[]>(
-    `SELECT \`id\`, \`status\`
+    `SELECT \`id\`, \`status\`, \`payment_image\`
      FROM \`transactions\`
      WHERE \`id\` = ? AND \`type\` = 'PAYOUT' AND \`assigned_agent_id\` = ?
      LIMIT 1`,
@@ -47,9 +49,26 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     );
   }
 
+  const existingProof = String(tx.payment_image ?? "").trim().length > 0;
+  const proofToStore = paymentImage || (existingProof ? String(tx.payment_image ?? "").trim() : "");
+  if (toStatus === "APPROVED_BY_AGENT" && !proofToStore) {
+    return NextResponse.json(
+      { ok: false, error: "Upload proof (screenshot) before approving this payout." },
+      { status: 400 },
+    );
+  }
+
+  const setParts: string[] = ["`status` = ?"];
+  const params: unknown[] = [toStatus];
+  if (paymentImage) {
+    setParts.push("`payment_image` = ?");
+    params.push(paymentImage);
+  }
+  params.push(txId, auth.agentId);
+
   const [res] = await pool.execute<ResultSetHeader>(
-    "UPDATE `transactions` SET `status` = ? WHERE `id` = ? AND `assigned_agent_id` = ? AND `type` = 'PAYOUT'",
-    [toStatus, txId, auth.agentId],
+    `UPDATE \`transactions\` SET ${setParts.join(", ")} WHERE \`id\` = ? AND \`assigned_agent_id\` = ? AND \`type\` = 'PAYOUT'`,
+    params as (string | number)[],
   );
   if (res.affectedRows === 0) {
     return NextResponse.json({ ok: false, error: "Could not update payout status" }, { status: 500 });

@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentPayOutListItem } from "@/lib/agent-transactions-map";
 import CompanyTxnAccordionCard from "../company/CompanyTxnAccordionCard";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
@@ -8,7 +8,8 @@ import { Modal } from "../ui/modal";
 import { PiContactlessPaymentFill } from "react-icons/pi";
 
 const PAGE_SIZE = 5;
-const USE_DEMO_DATA = false;
+
+const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 
 type PayOutStatus = "CREATED" | "UNASSIGNED" | "PENDING" | "PROCESSING" | "EXPIRED" | "APPROVED" | "DECLINED";
 
@@ -31,29 +32,6 @@ type CompanyPayoutItem = {
   assignedToLabel?: string;
 };
 type AgentOption = { id: string; label: string };
-
-const mockData: PayOutItem[] = [
-  { id: "1",  ref: "#dn56McMZ",  amount: 3800,  status: "CREATED",     orderId: "dn56McMZqBODA6P",  clientName: "BT247_prudhvi814",   clientUpi: "Dasivindhya",   bankName: "TelanaganaGrameenaBank", accountNo: "79104505384",  ifsc: "TGRB0008168", createdOn: "Fri 08 May 2026, 16:00" },
-  { id: "2",  ref: "#1AJyl9tE",  amount: 11600, status: "CREATED",     orderId: "1AJyl9tEr2df2jO",  clientName: "BT247_Bmveeresh93",  clientUpi: "B.MVeeresh",    bankName: "StateBankofIndia",       accountNo: "34309590598",  ifsc: "SBIN0040118", createdOn: "Fri 08 May 2026, 16:00" },
-  { id: "3",  ref: "#ILtAtSdl",  amount: 2648,  status: "CREATED",     orderId: "ILtAtSdliwXQiWP",  clientName: "BT247_Manju190",     clientUpi: "ManjunathaP",   bankName: "CanaraBank",             accountNo: "0450101034358", ifsc: "CNRB0000450", createdOn: "Fri 08 May 2026, 16:01" },
-  { id: "4",  ref: "#PR7KmX9T",  amount: 5000,  status: "UNASSIGNED",  orderId: "PR7KmX9TwBNE3sR",  clientName: "PLYBG_Sharma99",     clientUpi: "SharmaUPI",     bankName: "HDFCBank",               accountNo: "50100421783",  ifsc: "HDFC0001234", createdOn: "Fri 08 May 2026, 15:55" },
-  { id: "5",  ref: "#MQ2NvPzA",  amount: 8200,  status: "UNASSIGNED",  orderId: "MQ2NvPzAkFGH7tL",  clientName: "BT247_Reddy77",      clientUpi: "ReddyUPI",      bankName: "ICICIBank",              accountNo: "628405063791", ifsc: "ICIC0003456", createdOn: "Fri 08 May 2026, 15:50" },
-  { id: "6",  ref: "#XB9CwLjF",  amount: 1500,  status: "UNASSIGNED",  orderId: "XB9CwLjFoPQR5mK",  clientName: "PLYBG_Nair44",       clientUpi: "NairUPI",       bankName: "AxisBank",               accountNo: "917020045612", ifsc: "UTIB0001789", createdOn: "Fri 08 May 2026, 15:48" },
-  { id: "7",  ref: "#YZ4DsHqR",  amount: 3200,  status: "UNASSIGNED",  orderId: "YZ4DsHqRuVWX8nM",  clientName: "BT247_Kumar55",      clientUpi: "KumarUPI",      bankName: "KotakBank",              accountNo: "1234567890",   ifsc: "KKBK0007812", createdOn: "Fri 08 May 2026, 15:45" },
-  { id: "8",  ref: "#GH5EtIkS",  amount: 6750,  status: "UNASSIGNED",  orderId: "GH5EtIkSvYZA9oN",  clientName: "PLYBG_Gupta21",      clientUpi: "GuptaUPI",      bankName: "PNBBank",                accountNo: "0634000112345",ifsc: "PUNB0063400", createdOn: "Fri 08 May 2026, 15:42" },
-  { id: "9",  ref: "#TU6FuJlT",  amount: 4100,  status: "UNASSIGNED",  orderId: "TU6FuJlTwABC0pO",  clientName: "BT247_Verma33",      clientUpi: "VermaUPI",      bankName: "UnionBank",              accountNo: "5105001234567",ifsc: "UBIN0556789", createdOn: "Fri 08 May 2026, 15:40" },
-  { id: "10", ref: "#VW7GvKmU",  amount: 2300,  status: "UNASSIGNED",  orderId: "VW7GvKmUxBCD1qP",  clientName: "PLYBG_Singh66",      clientUpi: "SinghUPI",      bankName: "BankofBaroda",           accountNo: "19550100023456",ifsc: "BARB0PANVET", createdOn: "Fri 08 May 2026, 15:38" },
-  { id: "11", ref: "#WX8HwLnV",  amount: 9500,  status: "UNASSIGNED",  orderId: "WX8HwLnVyCDE2rQ",  clientName: "BT247_Joshi88",      clientUpi: "JoshiUPI",      bankName: "YesBank",                accountNo: "001893300002390",ifsc: "YESB0000189", createdOn: "Fri 08 May 2026, 15:35" },
-  { id: "12", ref: "#XY9IxMoW",  amount: 1800,  status: "UNASSIGNED",  orderId: "XY9IxMoWzDEF3sR",  clientName: "PLYBG_Mehta12",      clientUpi: "MehtaUPI",      bankName: "IndusIndBank",           accountNo: "201001234567", ifsc: "INDB0000190", createdOn: "Fri 08 May 2026, 15:32" },
-  { id: "13", ref: "#YZ0JyNpX",  amount: 7200,  status: "UNASSIGNED",  orderId: "YZ0JyNpXaEFG4tS",  clientName: "BT247_Rao44",        clientUpi: "RaoUPI",        bankName: "FederalBank",            accountNo: "14790200001234",ifsc: "FDRL0001479", createdOn: "Fri 08 May 2026, 15:30" },
-  { id: "14", ref: "#AB1KzOqY",  amount: 3600,  status: "PENDING",     orderId: "AB1KzOqYbFGH5uT",  clientName: "PLYBG_Patel55",      clientUpi: "PatelUPI",      bankName: "BankofIndia",            accountNo: "421010110006789",ifsc: "BKID0004210", createdOn: "Fri 08 May 2026, 15:28", assignedTo: "Vendor A", assignedOn: "Fri 08 May 2026, 15:29" },
-  { id: "15", ref: "#BC2LaPoZ",  amount: 14500, status: "PENDING",     orderId: "BC2LaPo_ZcGHI6vU", clientName: "BT247_Naik77",       clientUpi: "NaikUPI",       bankName: "CentralBank",            accountNo: "3456789012",   ifsc: "CBIN0283456", createdOn: "Fri 08 May 2026, 15:25", assignedTo: "Vendor B", assignedOn: "Fri 08 May 2026, 15:26" },
-  { id: "16", ref: "#CD3MbQrA",  amount: 4400,  status: "PROCESSING",  orderId: "CD3MbQrAdHIJ7wV",  clientName: "PLYBG_Shetty99",     clientUpi: "ShettyUPI",     bankName: "UCOBank",                accountNo: "01590101000123",ifsc: "UCBA0000159", createdOn: "Fri 08 May 2026, 15:20", assignedTo: "Vendor C", assignedOn: "Fri 08 May 2026, 15:21" },
-  { id: "17", ref: "#DE4NcRsB",  amount: 6100,  status: "PROCESSING",  orderId: "DE4NcRsBe_IJK8xW", clientName: "BT247_Pillai22",     clientUpi: "PillaiUPI",     bankName: "IOBBank",                accountNo: "089301000009876",ifsc: "IOBA0000893", createdOn: "Fri 08 May 2026, 15:18", assignedTo: "Vendor D", assignedOn: "Fri 08 May 2026, 15:19" },
-  { id: "18", ref: "#EF5OdStC",  amount: 2900,  status: "EXPIRED",     orderId: "EF5OdStCfJKL9yX",  clientName: "PLYBG_Iyer11",       clientUpi: "IyerUPI",       bankName: "BankofMaharashtra",      accountNo: "60078365783",  ifsc: "MAHB0001000", createdOn: "Fri 08 May 2026, 14:00", remarks: "Expired — timeout" },
-  { id: "19", ref: "#FG6PeTuD",  amount: 7800,  status: "APPROVED",    orderId: "FG6PeTuDgKLM0zA",  clientName: "BT247_Desai33",      clientUpi: "DesaiUPI",      bankName: "SBIBank",                accountNo: "32145678901",  ifsc: "SBIN0012345", createdOn: "Fri 08 May 2026, 13:30", assignedTo: "Vendor E", assignedOn: "Fri 08 May 2026, 13:31" },
-  { id: "20", ref: "#GH7QfUvE",  amount: 3300,  status: "DECLINED",    orderId: "GH7QfUvEhLMN1aB",  clientName: "PLYBG_Yadav44",      clientUpi: "YadavUPI",      bankName: "HDFCBank",               accountNo: "50100987654",  ifsc: "HDFC0004567", createdOn: "Fri 08 May 2026, 13:00", remarks: "Declined — insufficient funds" },
-];
 
 const STATUS_TABS: { label: string; value: PayOutStatus | "ALL" }[] = [
   { label: "All",        value: "ALL" },
@@ -89,6 +67,15 @@ function MoneyIcon() {
       <rect x="2" y="6" width="20" height="13" rx="2" strokeWidth={1.5} />
       <circle cx="12" cy="12" r="3" strokeWidth={1.5} />
       <path strokeLinecap="round" strokeWidth={1.5} d="M6 9.5v5M18 9.5v5" />
+    </svg>
+  );
+}
+
+function ReceiptIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
     </svg>
   );
 }
@@ -153,18 +140,6 @@ function RejectButton({ onClick, disabled }: { onClick?: () => void; disabled?: 
   );
 }
 
-function CancelButton({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-    >
-      Cancel
-    </button>
-  );
-}
-
 function ViewButton({ onClick }: { onClick?: () => void }) {
   return (
     <button
@@ -189,18 +164,93 @@ function ChevronBtn({ rotated, onClick }: { rotated: boolean; onClick: () => voi
   );
 }
 
+function proofIsPdf(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  if (u.startsWith("data:") && u.includes("application/pdf")) return true;
+  const path = u.split("?")[0] ?? u;
+  return path.endsWith(".pdf");
+}
+
+function DeclineMenu({
+  disabled,
+  onReject,
+  onRevoke,
+}: {
+  disabled?: boolean;
+  onReject: () => void;
+  onRevoke: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        Decline
+        <svg className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 z-30 mt-1 min-w-[10rem] rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+            onClick={() => {
+              setOpen(false);
+              onReject();
+            }}
+          >
+            Reject
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20"
+            onClick={() => {
+              setOpen(false);
+              onRevoke();
+            }}
+          >
+            Revoke
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PayOutCard({
   item,
   busy,
   onOpenAction,
   onView,
+  onOpenProof,
   allowAssign,
+  isAdmin,
+  onDispute,
 }: {
   item: PayOutItem;
   busy?: boolean;
   onOpenAction: (item: PayOutItem, action: "approve" | "reject" | "cancel" | "assign") => void;
   onView?: () => void;
+  onOpenProof?: (proofUrl: string) => void;
   allowAssign?: boolean;
+  isAdmin?: boolean;
+  onDispute?: (item: PayOutItem) => void;
 }) {
   const [extraOpen, setExtraOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -221,7 +271,50 @@ function PayOutCard({
       <div className="flex items-center gap-2 shrink-0">
         {allowAssign && showAssign(item.status) && <AssignButton onClick={() => onOpenAction(item, "assign")} disabled={busy} />}
         {showApprove(item.status) && <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />}
+        {showReject(item.status) && showCancel(item.status) ? (
+          <DeclineMenu
+            disabled={busy}
+            onReject={() => onOpenAction(item, "reject")}
+            onRevoke={() => onOpenAction(item, "cancel")}
+          />
+        ) : showReject(item.status) ? (
+          <RejectButton onClick={() => onOpenAction(item, "reject")} disabled={busy} />
+        ) : showCancel(item.status) ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onOpenAction(item, "cancel")}
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            Revoke
+          </button>
+        ) : null}
+        {isAdmin && onDispute && !item.disputeRaised && (showApprove(item.status) || showReject(item.status) || showCancel(item.status)) && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onDispute(item)}
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-900/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            Dispute
+          </button>
+        )}
         {onView && <ViewButton onClick={onView} />}
+        {item.hasReceipt && (
+          <button
+            type="button"
+            title="View payment proof"
+            disabled={busy}
+            onClick={() => {
+              const p = item.paymentProof?.trim();
+              if (p) onOpenProof?.(p);
+              else window.alert("Proof is not available for this transaction.");
+            }}
+            className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <ReceiptIcon />
+          </button>
+        )}
         {/* Mobile chevron */}
         <span className="lg:hidden">
           <ChevronBtn rotated={mobileOpen} onClick={() => setMobileOpen((v) => !v)} />
@@ -611,17 +704,27 @@ export default function PayOutList() {
     return role === "agent" || role === "company" ? role : "admin";
   });
 
-  const [items, setItems] = useState<PayOutItem[] | null>(null);
+  const [items, setItems] = useState<PayOutItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<PayOutItem | null>(null);
   const [modalAction, setModalAction] = useState<ActionType>("approve");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [modalProofDataUrl, setModalProofDataUrl] = useState<string | null>(null);
+  const [modalProofName, setModalProofName] = useState("");
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [resolvedRole, setResolvedRole] = useState<"admin" | "agent" | "company">(panelRole);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [activeTab, setActiveTab] = useState<PayOutStatus | "ALL">("ALL");
+  const [showFilter, setShowFilter] = useState(false);
+  const [search, setSearch] = useState("");
+  const [amount, setAmount] = useState("");
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [page, setPage] = useState(1);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -652,18 +755,20 @@ export default function PayOutList() {
     try {
       const res = await fetch(endpoint, { credentials: "include" });
       if (res.status === 401) {
-        setItems(null);
+        setItems([]);
+        setListError("Please sign in to view PayOuts.");
         return;
       }
       const data = (await res.json()) as { ok?: boolean; items?: PayOutItem[]; error?: string };
       if (!res.ok || !data.ok || !data.items) {
-        setItems(null);
+        setItems([]);
         setListError(data.error ?? "Could not load transactions.");
         return;
       }
+      setListError(null);
       setItems(data.items);
     } catch {
-      setItems(null);
+      setItems([]);
       setListError("Network error.");
     } finally {
       setListLoading(false);
@@ -701,20 +806,67 @@ export default function PayOutList() {
     };
   }, [resolvedRole]);
 
-  const [activeTab, setActiveTab] = useState<PayOutStatus | "ALL">("ALL");
-  const [showFilter, setShowFilter] = useState(false);
-  const [search, setSearch] = useState("");
-  const [amount, setAmount] = useState("");
-  const [filterStatus, setFilterStatus] = useState("All");
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const raiseDispute = useCallback(
+    async (item: PayOutItem) => {
+      if (resolvedRole !== "admin") return;
+      const reason = window.prompt("Dispute reason?", "Other");
+      if (reason === null) return;
+      try {
+        const res = await fetch(`/api/admin/transactions/${item.id}/dispute`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: reason.trim() || "Other" }),
+        });
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !data.ok) {
+          window.alert(data.error ?? "Could not raise dispute.");
+          return;
+        }
+        await loadPayOuts();
+      } catch {
+        window.alert("Network error.");
+      }
+    },
+    [resolvedRole, loadPayOuts],
+  );
 
-  const [page, setPage] = useState(1);
+  function closeActionModal() {
+    setModalOpen(false);
+    setModalError(null);
+    setModalProofDataUrl(null);
+    setModalProofName("");
+  }
+
+  function handleModalProofFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) {
+      setModalProofDataUrl(null);
+      setModalProofName("");
+      return;
+    }
+    if (f.size > MAX_PROOF_BYTES) {
+      setModalError("Proof file must be 5 MB or smaller.");
+      return;
+    }
+    setModalError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const r = reader.result;
+      if (typeof r === "string") {
+        setModalProofDataUrl(r);
+        setModalProofName(f.name);
+      }
+    };
+    reader.readAsDataURL(f);
+  }
 
   if (resolvedRole === "company") {
     return <CompanyPayOutView />;
   }
 
-  const baseData = items ?? (USE_DEMO_DATA ? mockData : []);
+  const baseData = items;
   const totalOrders = baseData.length;
 
   const counts: Partial<Record<PayOutStatus | "ALL", number>> = {
@@ -747,17 +899,26 @@ export default function PayOutList() {
     setSelectedItem(item);
     setModalAction(action);
     setModalError(null);
+    setModalProofDataUrl(null);
+    setModalProofName("");
     setSelectedAgentId("");
     setModalOpen(true);
   }
 
-  async function runAction(item: PayOutItem, action: ActionType) {
+  async function runAction(item: PayOutItem, action: ActionType, opts?: { paymentImage?: string | null }) {
     setActionBusyId(item.id);
     setModalError(null);
     try {
       if (action === "approve" && !showApprove(item.status)) {
         setModalError("Approve only after assignment/processing stage.");
         return;
+      }
+      if (action === "approve") {
+        const proof = (opts?.paymentImage ?? "").trim();
+        if (!item.hasReceipt && !proof) {
+          setModalError("Upload payment proof (screenshot) before approving.");
+          return;
+        }
       }
       let res: Response;
       if (action === "assign") {
@@ -788,11 +949,14 @@ export default function PayOutList() {
                 : "REVOKED";
         const endpoint =
           resolvedRole === "admin" ? `/api/admin/payouts/${item.id}/status` : `/api/agent/payouts/${item.id}/status`;
+        const body: Record<string, string> = { status };
+        const proof = (opts?.paymentImage ?? "").trim();
+        if (proof) body.payment_image = proof;
         res = await fetch(endpoint, {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status }),
+          body: JSON.stringify(body),
         });
       }
       const data = (await res.json()) as { ok?: boolean; error?: string };
@@ -800,7 +964,7 @@ export default function PayOutList() {
         setModalError(data.error ?? "Could not update payout status");
         return;
       }
-      setModalOpen(false);
+      closeActionModal();
       setSelectedItem(null);
       await loadPayOuts();
     } catch {
@@ -818,7 +982,7 @@ export default function PayOutList() {
           <PiContactlessPaymentFill className="w-6 h-6 rotate-180" />
           <h1 className="text-xl font-bold">Pay Out</h1>
         </div>
-        {items !== null && (
+        {!listLoading && !listError && (
           <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
             {resolvedRole === "admin"
               ? "Live: all PayOut requests for admin actions (max 500)."
@@ -832,7 +996,7 @@ export default function PayOutList() {
           {resolvedRole === "admin" ? "Loading admin payouts…" : "Checking agent session…"}
         </div>
       )}
-      {listError && items === null && (
+      {listError && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
           {listError}
         </div>
@@ -993,8 +1157,11 @@ export default function PayOutList() {
               item={item}
               busy={actionBusyId === item.id}
               onOpenAction={openActionModal}
+              onOpenProof={(url) => setProofPreviewUrl(url)}
               onView={() => (window.location.href = `/transactions/${item.id}`)}
               allowAssign={resolvedRole === "admin"}
+              isAdmin={resolvedRole === "admin"}
+              onDispute={raiseDispute}
             />
           ))
         )}
@@ -1010,19 +1177,21 @@ export default function PayOutList() {
 
       <Modal
         isOpen={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setModalError(null);
-        }}
+        onClose={closeActionModal}
         className="max-w-xl p-0 overflow-hidden"
         showCloseButton={false}
       >
         <div className="rounded-xl bg-white dark:bg-gray-900">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-gray-800">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">PayOut Action</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {modalAction === "assign" && "Assign PayOut"}
+              {modalAction === "approve" && "Approve PayOut"}
+              {modalAction === "reject" && "Reject PayOut"}
+              {modalAction === "cancel" && "Revoke assignment"}
+            </h3>
             <button
               type="button"
-              onClick={() => setModalOpen(false)}
+              onClick={closeActionModal}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               x
@@ -1034,9 +1203,6 @@ export default function PayOutList() {
                 {selectedItem.orderId} · {selectedItem.clientName} · ₹{selectedItem.amount.toLocaleString("en-IN")}
               </p>
             )}
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Current action: <span className="font-semibold uppercase">{modalAction}</span>
-            </p>
             {modalAction === "assign" && (
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -1056,32 +1222,72 @@ export default function PayOutList() {
                 </select>
               </div>
             )}
+            {modalAction === "approve" && (
+              <>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Payment proof (screenshot) {!selectedItem?.hasReceipt && <span className="text-red-500">*</span>}
+                  </label>
+                  <input type="file" accept="image/*" className="text-sm text-gray-600 dark:text-gray-300" onChange={handleModalProofFile} />
+                  {modalProofName && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {modalProofName}</p>
+                  )}
+                  {selectedItem?.hasReceipt && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">A proof is already on file; upload a new file to replace it.</p>
+                  )}
+                </div>
+              </>
+            )}
+            {modalAction === "reject" && (
+              <p className="text-sm text-gray-600 dark:text-gray-300">Reject this PayOut request?</p>
+            )}
+            {modalAction === "cancel" && (
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Revoke returns this payout to a state where it can be reassigned. Close only dismisses this dialog.
+              </p>
+            )}
             {modalError && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
                 {modalError}
               </div>
             )}
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {modalAction === "assign" ? (
+              <button
+                type="button"
+                onClick={closeActionModal}
+                className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+              >
+                Close
+              </button>
+              {modalAction === "assign" && (
                 <AssignButton
                   onClick={() => selectedItem && void runAction(selectedItem, "assign")}
                   disabled={!selectedItem || actionBusyId === selectedItem?.id}
                 />
-              ) : (
-                <>
-                  <ApproveButton
-                    onClick={() => selectedItem && void runAction(selectedItem, "approve")}
-                    disabled={!selectedItem || actionBusyId === selectedItem?.id}
-                  />
-                  <RejectButton
-                    onClick={() => selectedItem && void runAction(selectedItem, "reject")}
-                    disabled={!selectedItem || actionBusyId === selectedItem?.id}
-                  />
-                  <CancelButton
-                    onClick={() => selectedItem && void runAction(selectedItem, "cancel")}
-                    disabled={!selectedItem || actionBusyId === selectedItem?.id}
-                  />
-                </>
+              )}
+              {modalAction === "approve" && (
+                <ApproveButton
+                  onClick={() =>
+                    selectedItem && void runAction(selectedItem, "approve", { paymentImage: modalProofDataUrl })
+                  }
+                  disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                />
+              )}
+              {modalAction === "reject" && (
+                <RejectButton
+                  onClick={() => selectedItem && void runAction(selectedItem, "reject")}
+                  disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                />
+              )}
+              {modalAction === "cancel" && (
+                <button
+                  type="button"
+                  disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                  onClick={() => selectedItem && void runAction(selectedItem, "cancel")}
+                  className="rounded-full bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Revoke assignment
+                </button>
               )}
             </div>
           </div>

@@ -110,7 +110,7 @@ function EditableCreditCell({
           e.stopPropagation();
           startEdit();
         }}
-        className="pointer-events-none inline-flex shrink-0 items-center justify-center rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-brand-600 group-hover/credit:pointer-events-auto group-hover/credit:opacity-100 dark:hover:bg-gray-800 dark:hover:text-brand-400"
+        className="inline-flex shrink-0 items-center justify-center rounded p-0.5 text-gray-400 opacity-100 transition-opacity hover:bg-gray-100 hover:text-brand-600 dark:hover:bg-gray-800 dark:hover:text-brand-400"
       >
         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path
@@ -204,6 +204,62 @@ const TABLE_TOOLBAR_ICONS: { id: "menu" | "totals" | "highlight" | "inactive" | 
     ),
   },
 ];
+
+type StatsColKey =
+  | "vendor"
+  | "security"
+  | "manualPayIn"
+  | "approvedPayIn"
+  | "discounted"
+  | "netPayIn"
+  | "payout"
+  | "unsettlePayout"
+  | "settlement"
+  | "net"
+  | "prevBalance"
+  | "commission"
+  | "running"
+  | "runningUnsettled"
+  | "credit"
+  | "finalBalance"
+  | "remainingBalance"
+  | "actions";
+
+const FIN_STATS_COLUMNS: { key: StatsColKey; label: string }[] = [
+  { key: "vendor", label: "Vendor" },
+  { key: "security", label: "Security" },
+  { key: "manualPayIn", label: "Manual PayIn" },
+  { key: "approvedPayIn", label: "Approved PayIn" },
+  { key: "discounted", label: "Discounted" },
+  { key: "netPayIn", label: "Net PayIn" },
+  { key: "payout", label: "Payout" },
+  { key: "unsettlePayout", label: "Unsettle Payout" },
+  { key: "settlement", label: "Settlement" },
+  { key: "net", label: "Net" },
+  { key: "prevBalance", label: "Previous Balance" },
+  { key: "commission", label: "Commission" },
+  { key: "running", label: "Running" },
+  { key: "runningUnsettled", label: "Running Unsettled" },
+  { key: "credit", label: "Credit" },
+  { key: "finalBalance", label: "Final Balance" },
+  { key: "remainingBalance", label: "Remaining Balance" },
+  { key: "actions", label: "Actions" },
+];
+
+function defaultColBoolMap(value: boolean): Record<StatsColKey, boolean> {
+  return Object.fromEntries(FIN_STATS_COLUMNS.map((c) => [c.key, value])) as Record<StatsColKey, boolean>;
+}
+
+/** Rows treated as “inactive” for the toolbar filter (no meaningful pay-in / payout / running flow). */
+function isInactiveVendorRow(r: VendorRow): boolean {
+  return (
+    r.approvedPayIn === 0 &&
+    r.payout === 0 &&
+    r.running === 0 &&
+    r.netPayIn === 0 &&
+    r.security === 0
+  );
+}
 
 /* ── Tooltip wrapper ── */
 function Tip({ label, children }: { label: string; children: React.ReactNode }) {
@@ -494,8 +550,7 @@ export default function AdminDashboard() {
                   {action.icon}
                 </button>
                 <span
-                  className={`pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isHovered ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
-                    }`}
+                  className={`pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] opacity-100 translate-x-0`}
                 >
                   {action.label}
                 </span>
@@ -569,8 +624,7 @@ export default function AdminDashboard() {
                       {item.icon}
                     </button>
                     <span
-                      className={`pointer-events-none absolute right-6 top-1/2 z-30 w-fit max-w-[220px] -translate-y-1/2 whitespace-nowrap rounded-md border border-gray-200 bg-white/95 px-2 py-1 text-right text-[11px] font-medium text-gray-600 shadow-sm transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-gray-700 dark:bg-gray-900/95 dark:text-gray-200 ${isHovered ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
-                        }`}
+                      className={`pointer-events-none absolute right-6 top-1/2 z-30 w-fit max-w-[220px] -translate-y-1/2 whitespace-nowrap rounded-md border border-gray-200 bg-white/95 px-2 py-1 text-right text-[11px] font-medium text-gray-600 shadow-sm transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-gray-700 dark:bg-gray-900/95 dark:text-gray-200 opacity-100 translate-x-0`}
                     >
                       {label}
                     </span>
@@ -752,7 +806,9 @@ export default function AdminDashboard() {
                   <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-blue-50/30 dark:hover:bg-white/[0.015] transition-colors">
                     {/* Vendor name — sticky */}
                     <td className={`${colCell} sticky left-0 z-10 bg-white dark:bg-gray-900 font-semibold text-gray-800 dark:text-gray-200${xh("vendor")}${xv("vendor")}`}>
-                      {row.name}
+                      <Link href={`/agents/${row.id}`} className="text-blue-600 hover:underline dark:text-blue-400">
+                        {row.name}
+                      </Link>
                     </td>
 
                     <td className={`${colCell}${xh("security")}${xv("security")}`}>{row.security > 0 ? row.security.toLocaleString("en-IN") : "0"}</td>
@@ -808,6 +864,7 @@ export default function AdminDashboard() {
                           <button
                             type="button"
                             aria-label="View"
+                            onClick={() => router.push(`/agents/${row.id}`)}
                             className="relative z-10 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-300"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -816,8 +873,7 @@ export default function AdminDashboard() {
                             </svg>
                           </button>
                           <span
-                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${rowHover?.slot === 0 ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
-                              }`}
+                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] opacity-100 translate-x-0`}
                           >
                             View
                           </span>
@@ -842,8 +898,7 @@ export default function AdminDashboard() {
                             </svg>
                           </button>
                           <span
-                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${rowHover?.slot === 1 ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
-                              }`}
+                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] opacity-100 translate-x-0`}
                           >
                             Remove
                           </span>

@@ -1,7 +1,8 @@
 "use client";
 import React, { useEffect, useState } from "react";
 
-export type AgentStaffEditPayload = {
+/** Edit payload for a row from `GET /api/agent/staff` (`payment_methods` items). */
+export type PaymentMethodEditPayload = {
   id: string;
   fullname: string;
   email: string;
@@ -12,20 +13,30 @@ export type AgentStaffEditPayload = {
   enablePayOut: boolean;
   opType: string;
   gateway: string;
-  tags: string[];
+  upiId: string;
+  accountHolderName: string;
+  bankAccountHolder: string;
+  bankName: string;
+  accountNo: string;
+  ifscCode: string;
+  branchName: string;
 };
+
+/** @deprecated Use `PaymentMethodEditPayload` */
+export type AgentStaffEditPayload = PaymentMethodEditPayload;
 
 type Props = {
   onClose: () => void;
   onSuccess?: () => void;
-  editStaff?: AgentStaffEditPayload | null;
+  editPaymentMethod?: PaymentMethodEditPayload | null;
 };
 
-const STEPS = ["Personal Info", "Account Setup", "Permissions"];
+const STEPS = ["Personal & login", "Payment details", "Review"];
 
 const ROLES = ["Peer User", "Vendor", "Merchant", "Sub Admin", "Admin"];
 const OP_TYPES = ["PayIn & PayOut", "PayIn Only", "PayOut Only"];
-const GATEWAYS = ["UPI & Bank Transfer", "UPI Only", "Bank Transfer Only"];
+
+type MethodChannel = "UPI" | "BANK";
 
 function SectionHeading({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
@@ -46,42 +57,58 @@ const inputCls = (active?: boolean) =>
 const selectCls =
   "w-full rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors appearance-none cursor-pointer";
 
-export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props) {
+function channelFromGateway(gw: string): MethodChannel {
+  return gw === "Bank Transfer Only" ? "BANK" : "UPI";
+}
+
+export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod }: Props) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  /* Step 1 — Personal Info */
-  const [fullName,  setFullName]  = useState("");
-  const [email,     setEmail]     = useState("");
-  const [phone,     setPhone]     = useState("");
-  const [role,      setRole]      = useState("Peer User");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [role, setRole] = useState("Peer User");
 
-  /* Step 2 — Account Credentials */
-  const [username,     setUsername]     = useState("");
-  const [password,     setPassword]     = useState("");
-  const [enablePayIn,  setEnablePayIn]  = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [enablePayIn, setEnablePayIn] = useState(false);
   const [enablePayOut, setEnablePayOut] = useState(false);
 
-  /* Step 3 — Permissions */
-  const [opType,  setOpType]  = useState("PayIn & PayOut");
-  const [gateway, setGateway] = useState("UPI & Bank Transfer");
-  const [tags,    setTags]    = useState<string[]>(["UPI", "PEER"]);
+  const [opType, setOpType] = useState("PayIn & PayOut");
+  const [methodChannel, setMethodChannel] = useState<MethodChannel>("UPI");
+  const [upiAccountName, setUpiAccountName] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [bankAccountHolder, setBankAccountHolder] = useState("");
+  const [accountNo, setAccountNo] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  const [branchName, setBranchName] = useState("");
 
   useEffect(() => {
     setErr(null);
-    if (editStaff) {
-      setFullName(editStaff.fullname);
-      setEmail(editStaff.email);
-      setPhone(editStaff.phone);
-      setRole(editStaff.role);
-      setUsername(editStaff.username);
+    if (editPaymentMethod) {
+      setFullName(editPaymentMethod.fullname);
+      setEmail(editPaymentMethod.email);
+      setPhone(editPaymentMethod.phone);
+      setRole(editPaymentMethod.role);
+      setUsername(editPaymentMethod.username);
       setPassword("");
-      setEnablePayIn(editStaff.enablePayIn);
-      setEnablePayOut(editStaff.enablePayOut);
-      setOpType(editStaff.opType);
-      setGateway(editStaff.gateway);
-      setTags(editStaff.tags.length ? editStaff.tags : ["UPI", "PEER"]);
+      setEnablePayIn(editPaymentMethod.enablePayIn);
+      setEnablePayOut(editPaymentMethod.enablePayOut);
+      setOpType(editPaymentMethod.opType);
+      const ch = channelFromGateway(editPaymentMethod.gateway);
+      setMethodChannel(ch);
+      setUpiId(editPaymentMethod.upiId ?? "");
+      setUpiAccountName(
+        ch === "UPI" ? (editPaymentMethod.accountHolderName ?? "") : "",
+      );
+      setBankName(editPaymentMethod.bankName ?? "");
+      setBankAccountHolder(ch === "BANK" ? (editPaymentMethod.bankAccountHolder ?? "") : "");
+      setAccountNo(editPaymentMethod.accountNo ?? "");
+      setIfscCode(editPaymentMethod.ifscCode ?? "");
+      setBranchName(editPaymentMethod.branchName ?? "");
     } else {
       setFullName("");
       setEmail("");
@@ -92,18 +119,57 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
       setEnablePayIn(false);
       setEnablePayOut(false);
       setOpType("PayIn & PayOut");
-      setGateway("UPI & Bank Transfer");
-      setTags(["UPI", "PEER"]);
+      setMethodChannel("UPI");
+      setUpiAccountName("");
+      setUpiId("");
+      setBankName("");
+      setBankAccountHolder("");
+      setAccountNo("");
+      setIfscCode("");
+      setBranchName("");
     }
     setStep(0);
-  }, [editStaff]);
-
-  const TAG_OPTIONS = ["UPI", "PEER", "PAYIN", "PAYOUT"];
-  const toggleTag = (t: string) =>
-    setTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
+  }, [editPaymentMethod]);
 
   const canNext = step < STEPS.length - 1;
   const canPrev = step > 0;
+
+  const gatewayForApi = methodChannel === "BANK" ? "Bank Transfer Only" : "UPI Only";
+
+  function validateStep0(): string | null {
+    if (!username.trim()) return "Username is required.";
+    return null;
+  }
+
+  function validateStep1(): string | null {
+    if (methodChannel === "UPI") {
+      if (!upiId.trim()) return "Enter the UPI ID (e.g. name@paytm).";
+      return null;
+    }
+    if (!bankName.trim() || !accountNo.trim() || !ifscCode.trim() || !bankAccountHolder.trim()) {
+      return "For bank, fill bank name, account number, IFSC, and account holder name.";
+    }
+    return null;
+  }
+
+  function goNext() {
+    setErr(null);
+    if (step === 0) {
+      const e = validateStep0();
+      if (e) {
+        setErr(e);
+        return;
+      }
+    }
+    if (step === 1) {
+      const e = validateStep1();
+      if (e) {
+        setErr(e);
+        return;
+      }
+    }
+    setStep((s) => s + 1);
+  }
 
   async function handleFinalSubmit() {
     setErr(null);
@@ -112,6 +178,14 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
       setErr("Username is required.");
       return;
     }
+    const v1 = validateStep1();
+    if (v1) {
+      setErr(v1);
+      return;
+    }
+
+    const accountHolderForApi =
+      methodChannel === "UPI" ? upiAccountName.trim() || null : bankAccountHolder.trim();
 
     setSaving(true);
     try {
@@ -124,14 +198,19 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
         pay_in_enabled: enablePayIn,
         pay_out_enabled: enablePayOut,
         operation_type: opType,
-        gateway,
-        tags,
+        gateway: gatewayForApi,
+        upi_id: methodChannel === "UPI" ? upiId.trim() : "",
+        bank_name: methodChannel === "BANK" ? bankName.trim() : "",
+        account_no: methodChannel === "BANK" ? accountNo.trim() : "",
+        ifsc_code: methodChannel === "BANK" ? ifscCode.trim() : "",
+        branch_name: methodChannel === "BANK" ? branchName.trim() : "",
+        account_holder_name: accountHolderForApi ?? "",
       };
 
-      if (editStaff) {
+      if (editPaymentMethod) {
         const body: Record<string, unknown> = { ...payload };
         if (password) body.password = password;
-        const res = await fetch(`/api/agent/staff/${editStaff.id}`, {
+        const res = await fetch(`/api/agent/staff/${editPaymentMethod.id}`, {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -139,7 +218,7 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || !data.ok) {
-          setErr(data.error ?? "Could not update staff.");
+          setErr(data.error ?? "Could not update payment method.");
           return;
         }
       } else {
@@ -151,7 +230,7 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || !data.ok) {
-          setErr(data.error ?? "Could not create staff.");
+          setErr(data.error ?? "Could not create payment method.");
           return;
         }
       }
@@ -164,6 +243,8 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
     }
   }
 
+  const title = editPaymentMethod ? "Edit payment method" : "Add payment method";
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
@@ -171,9 +252,8 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
     >
       <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
 
-        {/* ── Modal header ── */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800 shrink-0">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{editStaff ? "Edit staff" : "Create staff"}</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h2>
           <button
             onClick={onClose}
             className="flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 transition-colors"
@@ -184,7 +264,6 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
           </button>
         </div>
 
-        {/* ── Step indicator ── */}
         <div className="flex items-center gap-0 px-6 pt-5 shrink-0">
           {STEPS.map((s, i) => (
             <React.Fragment key={s}>
@@ -209,7 +288,6 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
           ))}
         </div>
 
-        {/* ── Body ── */}
         <div className="flex-1 overflow-y-auto px-6 py-6 bg-gray-50 dark:bg-gray-900/50 mt-5">
           {err && (
             <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
@@ -217,10 +295,8 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
             </div>
           )}
 
-          {/* ── STEP 0: Personal Information + Account Credentials ── */}
           {step === 0 && (
             <div className="space-y-7">
-              {/* Personal Information */}
               <div>
                 <SectionHeading
                   icon={
@@ -228,26 +304,26 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   }
-                  title="Personal Information"
+                  title="Personal information"
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Full Name</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Full name</label>
                     <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
                       placeholder="Enter full name" className={inputCls()} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email Address</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                       placeholder="example@domain.com" className={inputCls()} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Phone Number</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Phone</label>
                     <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Enter phone number" className={inputCls()} />
+                      placeholder="Phone number" className={inputCls()} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">User Role</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Label / role</label>
                     <div className="relative">
                       <select value={role} onChange={(e) => setRole(e.target.value)} className={selectCls}>
                         {ROLES.map((r) => <option key={r}>{r}</option>)}
@@ -260,7 +336,6 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
                 </div>
               </div>
 
-              {/* Account Credentials */}
               <div>
                 <SectionHeading
                   icon={
@@ -268,7 +343,7 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                     </svg>
                   }
-                  title="Account Credentials"
+                  title="Login for this payment method"
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -278,10 +353,10 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                      Password (optional — not saved for payment methods)
+                      Password {editPaymentMethod ? "(optional — leave blank to keep)" : "(optional)"}
                     </label>
                     <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                      placeholder={editStaff ? "••••••••" : "Required"}
+                      placeholder={editPaymentMethod ? "Leave blank to keep" : "Optional"}
                       autoComplete="new-password"
                       className={inputCls(!!password)} />
                   </div>
@@ -310,7 +385,6 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
             </div>
           )}
 
-          {/* ── STEP 1: Account Setup ── */}
           {step === 1 && (
             <div className="space-y-7">
               <div>
@@ -321,60 +395,123 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   }
-                  title="Account Setup"
+                  title="Operation type"
                 />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Operation Type</label>
-                    <div className="relative">
-                      <select value={opType} onChange={(e) => setOpType(e.target.value)} className={selectCls}>
-                        {OP_TYPES.map((o) => <option key={o}>{o}</option>)}
-                      </select>
-                      <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Gateway</label>
-                    <div className="relative">
-                      <select value={gateway} onChange={(e) => setGateway(e.target.value)} className={selectCls}>
-                        {GATEWAYS.map((g) => <option key={g}>{g}</option>)}
-                      </select>
-                      <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
+                <div className="max-w-md">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">How this method is used</label>
+                  <div className="relative">
+                    <select value={opType} onChange={(e) => setOpType(e.target.value)} className={selectCls}>
+                      {OP_TYPES.map((o) => <option key={o}>{o}</option>)}
+                    </select>
+                    <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
                 </div>
               </div>
 
-              {/* Tags */}
               <div>
                 <SectionHeading
                   icon={
-                    <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                    <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                     </svg>
                   }
-                  title="User Tags"
+                  title="Account type"
                 />
-                <div className="flex flex-wrap gap-2">
-                  {TAG_OPTIONS.map((t) => (
-                    <button key={t} onClick={() => toggleTag(t)}
-                      className={`rounded-full px-4 py-1.5 text-sm font-semibold border transition-colors ${
-                        tags.includes(t)
-                          ? "bg-blue-500 text-white border-blue-500"
-                          : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-blue-300"
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Choose UPI or bank. We will ask for the matching details below.</p>
+                <div className="flex flex-wrap gap-3">
+                  {(
+                    [
+                      { id: "UPI" as const, label: "UPI", sub: "Then UPI ID" },
+                      { id: "BANK" as const, label: "Bank", sub: "Then bank details" },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setMethodChannel(opt.id);
+                        setErr(null);
+                      }}
+                      className={`rounded-2xl border px-5 py-3 text-left transition-colors ${
+                        methodChannel === opt.id
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-400"
+                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300"
                       }`}
-                    >{t}</button>
+                    >
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">{opt.label}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{opt.sub}</p>
+                    </button>
                   ))}
                 </div>
               </div>
+
+              {methodChannel === "UPI" ? (
+                <div className="space-y-4">
+                  <SectionHeading
+                    icon={
+                      <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    }
+                    title="UPI details"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Name on UPI (optional)</label>
+                      <input type="text" value={upiAccountName} onChange={(e) => setUpiAccountName(e.target.value)}
+                        placeholder="Display / account name" className={inputCls()} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">UPI ID <span className="text-red-500">*</span></label>
+                      <input type="text" value={upiId} onChange={(e) => setUpiId(e.target.value)}
+                        placeholder="e.g. merchant@okaxis" className={inputCls(!!upiId)} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                <SectionHeading
+                  icon={
+                    <svg className="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  }
+                  title="Bank details"
+                />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Bank name <span className="text-red-500">*</span></label>
+                      <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)}
+                        placeholder="e.g. State Bank of India" className={inputCls(!!bankName)} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Account holder name <span className="text-red-500">*</span></label>
+                      <input type="text" value={bankAccountHolder} onChange={(e) => setBankAccountHolder(e.target.value)}
+                        placeholder="As per bank records" className={inputCls(!!bankAccountHolder)} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Account number <span className="text-red-500">*</span></label>
+                      <input type="text" value={accountNo} onChange={(e) => setAccountNo(e.target.value)}
+                        className={inputCls(!!accountNo)} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">IFSC <span className="text-red-500">*</span></label>
+                      <input type="text" value={ifscCode} onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                        placeholder="e.g. SBIN0001234" className={inputCls(!!ifscCode)} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Branch (optional)</label>
+                      <input type="text" value={branchName} onChange={(e) => setBranchName(e.target.value)}
+                        className={inputCls()} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* ── STEP 2: Review ── */}
           {step === 2 && (
             <div className="space-y-5">
               <SectionHeading
@@ -383,24 +520,35 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 }
-                title="Review & Confirm"
+                title="Review"
               />
               <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 overflow-hidden">
                 {[
-                  { label: "Full Name",       value: fullName   || "—" },
-                  { label: "Email",           value: email      || "—" },
-                  { label: "Phone",           value: phone      || "—" },
-                  { label: "Role",            value: role },
-                  { label: "Username",        value: username   || "—" },
-                  { label: "Enable Pay In",   value: enablePayIn  ? "Yes" : "No" },
-                  { label: "Enable Pay Out",  value: enablePayOut ? "Yes" : "No" },
-                  { label: "Operation Type",  value: opType },
-                  { label: "Gateway",         value: gateway },
-                  { label: "Tags",            value: tags.length ? tags.join(", ") : "None" },
+                  { label: "Full name", value: fullName || "—" },
+                  { label: "Email", value: email || "—" },
+                  { label: "Phone", value: phone || "—" },
+                  { label: "Label / role", value: role },
+                  { label: "Username", value: username || "—" },
+                  { label: "Enable Pay In", value: enablePayIn ? "Yes" : "No" },
+                  { label: "Enable Pay Out", value: enablePayOut ? "Yes" : "No" },
+                  { label: "Operation type", value: opType },
+                  { label: "Method", value: methodChannel === "UPI" ? "UPI" : "Bank transfer" },
+                  ...(methodChannel === "UPI"
+                    ? [
+                        { label: "Name on UPI", value: upiAccountName || "—" },
+                        { label: "UPI ID", value: upiId || "—" },
+                      ]
+                    : [
+                        { label: "Bank", value: bankName || "—" },
+                        { label: "Account holder", value: bankAccountHolder || "—" },
+                        { label: "Account no.", value: accountNo || "—" },
+                        { label: "IFSC", value: ifscCode || "—" },
+                        { label: "Branch", value: branchName || "—" },
+                      ]),
                 ].map((r, i) => (
                   <div key={r.label} className={`flex items-center justify-between px-5 py-3 ${i % 2 === 0 ? "" : "bg-gray-50 dark:bg-gray-700/30"}`}>
                     <span className="text-sm text-gray-500 dark:text-gray-400">{r.label}</span>
-                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">{r.value}</span>
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 text-right max-w-[55%] break-all">{r.value}</span>
                   </div>
                 ))}
               </div>
@@ -408,7 +556,6 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
           )}
         </div>
 
-        {/* ── Footer ── */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
           <button
             type="button"
@@ -434,10 +581,10 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => setStep((s) => s + 1)}
+                onClick={() => goNext()}
                 className="rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 px-5 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 transition-colors"
               >
-                Next Step
+                Next step
               </button>
             ) : (
               <button
@@ -446,7 +593,7 @@ export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props
                 onClick={() => void handleFinalSubmit()}
                 className="rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-50 px-5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm"
               >
-                {saving ? "Saving…" : editStaff ? "Save changes" : "Create staff"}
+                {saving ? "Saving…" : editPaymentMethod ? "Save changes" : "Create payment method"}
               </button>
             )}
           </div>

@@ -207,3 +207,35 @@ export async function PATCH(
 
   return NextResponse.json({ ok: true as const, company: mapPublic(row) });
 }
+
+export async function DELETE(
+  _req: Request,
+  context: { params: { id: string } | Promise<{ id: string }> },
+) {
+  const auth = await requireAdminSession();
+  if (!auth.ok) return auth.response;
+
+  const { id: idRaw } = await getIdParam(context);
+  const id = Number(idRaw);
+  if (!Number.isInteger(id) || id < 1) {
+    return NextResponse.json({ ok: false, error: "Invalid id" }, { status: 400 });
+  }
+
+  try {
+    const [header] = await pool.execute<ResultSetHeader>("DELETE FROM `companies` WHERE `id` = ?", [id]);
+    if (header.affectedRows === 0) {
+      return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+    }
+  } catch (e: unknown) {
+    const err = e as { code?: string; errno?: number };
+    if (err.errno === 1451 || err.code === "ER_ROW_IS_REFERENCED_2") {
+      return NextResponse.json(
+        { ok: false, error: "Cannot delete: company is still referenced by other records." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ ok: false, error: "Delete failed" }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true as const });
+}

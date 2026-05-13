@@ -81,8 +81,38 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
       params.push(nextOut ? 1 : 0);
     }
     if (typeof body.gateway === "string") {
+      const pm = gatewayToPaymentMethod(body.gateway.trim());
       updates.push("`payment_method` = ?");
-      params.push(gatewayToPaymentMethod(body.gateway.trim()));
+      params.push(pm);
+      if (pm === "UPI") {
+        updates.push("`account_no` = NULL", "`ifsc_code` = NULL", "`branch_name` = NULL", "`bank_name` = NULL");
+      } else {
+        updates.push("`upi_id` = NULL");
+      }
+    }
+    if (typeof body.upi_id === "string") {
+      updates.push("`upi_id` = NULLIF(?, '')");
+      params.push(body.upi_id.trim());
+    }
+    if (typeof body.bank_name === "string") {
+      updates.push("`bank_name` = NULLIF(?, '')");
+      params.push(body.bank_name.trim());
+    }
+    if (typeof body.account_no === "string") {
+      updates.push("`account_no` = NULLIF(?, '')");
+      params.push(body.account_no.trim());
+    }
+    if (typeof body.ifsc_code === "string") {
+      updates.push("`ifsc_code` = NULLIF(?, '')");
+      params.push(body.ifsc_code.trim());
+    }
+    if (typeof body.branch_name === "string") {
+      updates.push("`branch_name` = NULLIF(?, '')");
+      params.push(body.branch_name.trim());
+    }
+    if (typeof body.account_holder_name === "string") {
+      updates.push("`account_holder_name` = NULLIF(?, '')");
+      params.push(body.account_holder_name.trim());
     }
     if (body.status === "active" || body.status === "inactive") {
       updates.push("`status` = ?");
@@ -99,7 +129,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
       const fin0 = await loadPayMethodFinancials(auth.agentId, [rowId]);
       return NextResponse.json({
         ok: true as const,
-        staff: payMethodToStaffApi(existing, auth.username, fin0.get(rowId)),
+        payment_method: payMethodToStaffApi(existing, auth.username, fin0.get(rowId)),
       });
     }
 
@@ -122,7 +152,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
       return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
     }
     const fin = await loadPayMethodFinancials(auth.agentId, [rowId]);
-    return NextResponse.json({ ok: true as const, staff: payMethodToStaffApi(row, auth.username, fin.get(rowId)) });
+    return NextResponse.json({ ok: true as const, payment_method: payMethodToStaffApi(row, auth.username, fin.get(rowId)) });
   } catch (e: unknown) {
     if (isMysqlErNoSuchTable(e)) {
       return NextResponse.json({ ok: false, error: PAY_METHODS_TABLE_HINT }, { status: 503 });

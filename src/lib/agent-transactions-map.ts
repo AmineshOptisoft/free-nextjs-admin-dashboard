@@ -18,7 +18,10 @@ export type AgentPayInListItem = {
   assignedOn: string;
   remarks: string;
   hasReceipt?: boolean;
+  /** Raw proof URL or data URL for preview modal */
+  paymentProof?: string | null;
   utrCode?: string;
+  disputeRaised?: boolean;
 };
 
 /** Mirrors PayOutList `PayOutItem` UI shape */
@@ -38,6 +41,10 @@ export type AgentPayOutListItem = {
   assignedTo?: string;
   assignedOn?: string;
   remarks?: string;
+  hasReceipt?: boolean;
+  /** Raw proof URL or data URL for preview modal */
+  paymentProof?: string | null;
+  disputeRaised?: boolean;
 };
 
 export type TxRow = RowDataPacket & {
@@ -59,6 +66,7 @@ export type TxRow = RowDataPacket & {
   bank_name: string | null;
   bank_account_number: string | null;
   ifsc_code: string | null;
+  dispute_raised: number | boolean | null;
 };
 
 function num(v: string | number): number {
@@ -168,7 +176,9 @@ export function rowToPayInItem(r: TxRow): AgentPayInListItem {
     assignedOn: formatDt(r.assigned_date),
     remarks: (r.user_note ?? "").trim() || "—",
     hasReceipt: Boolean(r.payment_image && String(r.payment_image).length > 0),
+    paymentProof: (r.payment_image && String(r.payment_image).trim()) ? String(r.payment_image).trim() : undefined,
     utrCode: utr || undefined,
+    disputeRaised: Number(r.dispute_raised ?? 0) === 1,
   };
 }
 
@@ -189,5 +199,8 @@ export function rowToPayOutItem(r: TxRow): AgentPayOutListItem {
     createdOn: formatDt(r.created_at),
     createdAtIso: toIso(r.created_at),
     remarks: (r.user_note ?? "").trim() || undefined,
+    hasReceipt: Boolean(r.payment_image && String(r.payment_image).length > 0),
+    paymentProof: (r.payment_image && String(r.payment_image).trim()) ? String(r.payment_image).trim() : undefined,
+    disputeRaised: Number(r.dispute_raised ?? 0) === 1,
   };
 }

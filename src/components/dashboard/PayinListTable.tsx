@@ -45,7 +45,7 @@ export default function PayinListTable() {
         if (!res.ok) return;
         const data = (await res.json()) as {
           ok?: boolean;
-          staff?: Array<{
+          payment_methods?: Array<{
             id: string;
             fullname: string;
             gateway: string;
@@ -56,9 +56,9 @@ export default function PayinListTable() {
             };
           }>;
         };
-        if (!mounted || !data.ok || !data.staff) return;
+        if (!mounted || !data.ok || !data.payment_methods) return;
 
-        const mapped = data.staff.map((s, i) => {
+        const mapped = data.payment_methods.map((s, i) => {
           const total = s.financial?.totalPayIn ?? 0;
           const success = s.financial?.successPayIn ?? 0;
           const failed = s.financial?.failedPayIn ?? 0;

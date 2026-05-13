@@ -1,8 +1,10 @@
+import Link from "next/link";
 import React from "react";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
 
 export interface AgentPerformanceRow {
   agentName: string;
+  agentId: string | null;
   totalTransactions: number;
   totalAmount: string;
   completed: string;
@@ -40,8 +42,16 @@ export default function AgentPerformanceTable({ rows }: { rows: AgentPerformance
               </TableRow>
             ) : (
               rows.map((row) => (
-                <TableRow key={row.agentName} className="hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
-                  <TableCell className="px-5 py-3 text-sm font-medium text-brand-600 dark:text-brand-400">{row.agentName}</TableCell>
+                <TableRow key={`${row.agentId ?? "na"}-${row.agentName}`} className="hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
+                  <TableCell className="px-5 py-3 text-sm font-medium text-brand-600 dark:text-brand-400">
+                    {row.agentId ? (
+                      <Link href={`/agents/${row.agentId}`} className="hover:underline">
+                        {row.agentName}
+                      </Link>
+                    ) : (
+                      row.agentName
+                    )}
+                  </TableCell>
                   <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalTransactions}</TableCell>
                   <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalAmount}</TableCell>
                   <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.completed}</TableCell>

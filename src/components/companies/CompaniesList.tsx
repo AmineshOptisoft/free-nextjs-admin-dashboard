@@ -292,6 +292,7 @@ export default function CompaniesList() {
   //   Object.fromEntries(mockCompanies.map((c) => [c.id, c.status]))
   // );
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
+  const [removeSubmitting, setRemoveSubmitting] = useState(false);
 
   useEffect(() => {
     if (!removeConfirmId) return;
@@ -301,17 +302,6 @@ export default function CompaniesList() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [removeConfirmId]);
-
-  // const confirmRemoveCompany = () => {
-  //   if (!removeConfirmId) return;
-  //   setCompanies((prev) => prev.filter((c) => c.id !== removeConfirmId));
-  //   setStatuses((prev) => {
-  //     const next = { ...prev };
-  //     delete next[removeConfirmId];
-  //     return next;
-  //   });
-  //   setRemoveConfirmId(null);
-  // };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -361,6 +351,29 @@ export default function CompaniesList() {
       setLoadError("Network error.");
     }
   };
+
+  const confirmRemoveCompany = useCallback(async () => {
+    if (!removeConfirmId) return;
+    setRemoveSubmitting(true);
+    setLoadError(null);
+    try {
+      const res = await fetch(`/api/companies/${removeConfirmId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setLoadError(data.error ?? "Could not delete company.");
+        return;
+      }
+      setRemoveConfirmId(null);
+      await load();
+    } catch {
+      setLoadError("Network error.");
+    } finally {
+      setRemoveSubmitting(false);
+    }
+  }, [removeConfirmId, load]);
 
   const filtered = companies.filter(
     (c) =>
@@ -471,7 +484,12 @@ export default function CompaniesList() {
                   >
                     <td className="px-5 py-4 text-sm text-gray-500 dark:text-gray-400">{(page - 1) * PAGE_SIZE + idx + 1}</td>
                     <td className="px-5 py-4">
-                      <span className="text-sm font-semibold text-blue-500 block leading-tight">{c.username}</span>
+                      <Link
+                        href={`/companies/${c.id}`}
+                        className="text-sm font-semibold text-blue-500 block leading-tight hover:underline"
+                      >
+                        {c.username}
+                      </Link>
                       <span className="text-xs text-gray-400 dark:text-gray-500">
                         {c.company_code ? `Code: ${c.company_code}` : "No code"}
                       </span>
@@ -597,7 +615,15 @@ export default function CompaniesList() {
 
       {/* ── Modals ── */}
       {showCreate && <CreateCompanyModal onClose={() => setShowCreate(false)} />}
-      {editCompany && <EditModal company={editCompany} onClose={() => setEditCompany(null)} />}
+      {editCompany && (
+        <EditModal
+          company={editCompany}
+          onClose={() => setEditCompany(null)}
+          onSaved={() => {
+            void load();
+          }}
+        />
+      )}
 
       {removeConfirmId !== null && (
         <div
@@ -617,26 +643,31 @@ export default function CompaniesList() {
               Delete company?
             </h3>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              This will remove{" "}
+              This permanently deletes{" "}
               <span className="font-semibold text-gray-900 dark:text-gray-100">
-                {companies.find((c) => c.id === removeConfirmId)?.name ?? "this company"}
-              </span>{" "}
-              from the directory. Refresh the page to restore mock data.
+                {(() => {
+                  const rm = companies.find((c) => c.id === removeConfirmId);
+                  return rm ? `${rm.username} (${rm.brand_name || "—"})` : "this company";
+                })()}
+              </span>
+              . This cannot be undone. If linked transactions exist, the server will refuse deletion.
             </p>
             <div className="mt-6 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
+                disabled={removeSubmitting}
                 onClick={() => setRemoveConfirmId(null)}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={confirmRemoveCompany}
-                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+                disabled={removeSubmitting}
+                onClick={() => void confirmRemoveCompany()}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-50"
               >
-                Delete
+                {removeSubmitting ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>

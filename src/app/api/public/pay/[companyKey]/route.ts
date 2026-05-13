@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
-import { payInDisplayStatus } from "@/lib/payin-lifecycle";
-import { tryAssignPayInTransaction } from "@/lib/payin-assignment";
+import { payInDisplayStatus, publicPayInDisplayMethod, sqlFieldToUtf8 } from "@/lib/payin-lifecycle";
+import { tryAssignPayInTransaction, deleteNotAssignedPayIn, PAYIN_NO_ELIGIBLE_AGENT_MESSAGE } from "@/lib/payin-assignment";
 
 type CompanyRow = RowDataPacket & {
   id: number;
@@ -32,6 +32,7 @@ type TxRow = RowDataPacket & {
   assigned_agent_id: number | null;
   utr_code: string | null;
   payment_image: string | null;
+  qr_code_url: string | null;
 };
 
 function decodeCompanyKey(raw: string): string {
@@ -80,22 +81,23 @@ function mapRequest(tx: TxRow) {
     dbStatus === "NOT_ASSIGNED" || !tx.pay_method_id || !tx.assigned_agent_id;
   return {
     id: String(tx.id),
-    orderId: tx.order_id,
+    orderId: sqlFieldToUtf8(tx.order_id),
     amount: num(tx.amount),
     status: dbStatus,
     displayStatus: payInDisplayStatus(dbStatus),
-    clientName: tx.client_name ?? "",
-    clientUpi: tx.client_upi ?? "",
-    assignedUpi: tx.assigned_upi ?? "",
-    bankName: tx.bank_name ?? "",
-    accountNo: tx.bank_account_number ?? "",
-    ifsc: tx.ifsc_code ?? "",
-    paymentMethod: (tx.payment_method ?? "UPI").toString().toUpperCase() === "BANK" ? "BANK" : "UPI",
-    accountHolderName: tx.account_holder_name ?? "",
+    clientName: sqlFieldToUtf8(tx.client_name),
+    clientUpi: sqlFieldToUtf8(tx.client_upi),
+    assignedUpi: sqlFieldToUtf8(tx.assigned_upi),
+    bankName: sqlFieldToUtf8(tx.bank_name),
+    accountNo: sqlFieldToUtf8(tx.bank_account_number),
+    ifsc: sqlFieldToUtf8(tx.ifsc_code),
+    paymentMethod: publicPayInDisplayMethod(tx),
+    accountHolderName: sqlFieldToUtf8(tx.account_holder_name),
     waitForAgent,
     proofSubmitted,
     hasReceipt: Boolean(tx.payment_image && String(tx.payment_image).trim().length > 0),
-    utrCode: tx.utr_code ?? "",
+    utrCode: sqlFieldToUtf8(tx.utr_code),
+    qrCodeUrl: sqlFieldToUtf8(tx.qr_code_url),
   };
 }
 
@@ -146,8 +148,8 @@ export async function POST(req: Request, context: { params: { companyKey: string
   if (!Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ ok: false, error: "Valid amount required" }, { status: 400 });
   }
-  if (!clientName || !clientUpi) {
-    return NextResponse.json({ ok: false, error: "Client name and UPI required" }, { status: 400 });
+  if (!clientName) {
+    return NextResponse.json({ ok: false, error: "Client name is required" }, { status: 400 });
   }
   if (!preferredMethod) {
     return NextResponse.json({ ok: false, error: "Method must be UPI or BANK" }, { status: 400 });
@@ -157,7 +159,7 @@ export async function POST(req: Request, context: { params: { companyKey: string
     const [rows] = await pool.execute<TxRow[]>(
       `SELECT \`id\`, \`order_id\`, \`amount\`, \`status\`, \`client_name\`, \`client_upi\`, \`assigned_upi\`,
               \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`payment_method\`, \`account_holder_name\`,
-              \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`
+              \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`, \`qr_code_url\`
        FROM \`transactions\` WHERE \`id\` = ? LIMIT 1`,
       [id],
     );
@@ -173,11 +175,15 @@ export async function POST(req: Request, context: { params: { companyKey: string
     });
   }
 
+  function noEligiblePayInResponse() {
+    return NextResponse.json({ ok: false as const, error: PAYIN_NO_ELIGIBLE_AGENT_MESSAGE }, { status: 503 });
+  }
+
   if (idempotencyKey) {
     const [existingRows] = await pool.execute<TxRow[]>(
       `SELECT \`id\`, \`order_id\`, \`amount\`, \`status\`, \`client_name\`, \`client_upi\`, \`assigned_upi\`,
               \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`payment_method\`, \`account_holder_name\`,
-              \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`
+              \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`, \`qr_code_url\`
        FROM \`transactions\`
        WHERE \`company_id\` = ? AND \`type\` = 'PAYIN' AND \`idempotency_key\` = ?
        LIMIT 1`,
@@ -190,10 +196,19 @@ export async function POST(req: Request, context: { params: { companyKey: string
         return respondWithTx(ex);
       }
       if (st === "NOT_ASSIGNED") {
-        await tryAssignPayInTransaction(Number(ex.id), num(ex.amount), pickPreferredMethod(ex.payment_method));
+        try {
+          await tryAssignPayInTransaction(Number(ex.id), num(ex.amount), pickPreferredMethod(ex.payment_method));
+        } catch {
+          await deleteNotAssignedPayIn(Number(ex.id));
+          return noEligiblePayInResponse();
+        }
       }
       const fresh = await loadTxById(Number(ex.id));
       if (!fresh) return NextResponse.json({ ok: false, error: "Could not load request" }, { status: 500 });
+      if (String(fresh.status).toUpperCase() === "NOT_ASSIGNED") {
+        await deleteNotAssignedPayIn(Number(fresh.id));
+        return noEligiblePayInResponse();
+      }
       return respondWithTx(fresh);
     }
   }
@@ -217,7 +232,7 @@ export async function POST(req: Request, context: { params: { companyKey: string
       const [again] = await pool.execute<TxRow[]>(
         `SELECT \`id\`, \`order_id\`, \`amount\`, \`status\`, \`client_name\`, \`client_upi\`, \`assigned_upi\`,
                 \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`payment_method\`, \`account_holder_name\`,
-                \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`
+                \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`, \`qr_code_url\`
          FROM \`transactions\`
          WHERE \`company_id\` = ? AND \`type\` = 'PAYIN' AND \`idempotency_key\` = ?
          LIMIT 1`,
@@ -226,18 +241,38 @@ export async function POST(req: Request, context: { params: { companyKey: string
       const row = again[0];
       if (row) {
         if (String(row.status).toUpperCase() === "NOT_ASSIGNED") {
-          await tryAssignPayInTransaction(Number(row.id), num(row.amount), pickPreferredMethod(row.payment_method));
+          try {
+            await tryAssignPayInTransaction(Number(row.id), num(row.amount), pickPreferredMethod(row.payment_method));
+          } catch {
+            await deleteNotAssignedPayIn(Number(row.id));
+            return noEligiblePayInResponse();
+          }
         }
         const fresh = await loadTxById(Number(row.id));
-        if (fresh) return respondWithTx(fresh);
+        if (fresh) {
+          if (String(fresh.status).toUpperCase() === "NOT_ASSIGNED") {
+            await deleteNotAssignedPayIn(Number(fresh.id));
+            return noEligiblePayInResponse();
+          }
+          return respondWithTx(fresh);
+        }
       }
     }
     throw e;
   }
 
-  await tryAssignPayInTransaction(insertId, amount, preferredMethod);
+  try {
+    await tryAssignPayInTransaction(insertId, amount, preferredMethod);
+  } catch {
+    await deleteNotAssignedPayIn(insertId);
+    return noEligiblePayInResponse();
+  }
   const tx = await loadTxById(insertId);
   if (!tx) return NextResponse.json({ ok: false, error: "Could not load created request" }, { status: 500 });
+  if (String(tx.status).toUpperCase() === "NOT_ASSIGNED") {
+    await deleteNotAssignedPayIn(insertId);
+    return noEligiblePayInResponse();
+  }
 
   return respondWithTx(tx);
 }

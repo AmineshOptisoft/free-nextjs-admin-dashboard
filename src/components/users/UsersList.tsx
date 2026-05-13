@@ -3,7 +3,7 @@
 import Link from "next/link";
 import React, { useCallback, useEffect, useState } from "react";
 import type { PayMethodFinancial } from "@/lib/transactions-pay-method-financials";
-import CreateUserModal, { type AgentStaffEditPayload } from "./CreateUserModal";
+import CreateUserModal, { type PaymentMethodEditPayload } from "./CreateUserModal";
 import Pagination from "../ui/Pagination";
 import { UserIcon } from "@/icons";
 
@@ -42,7 +42,7 @@ interface User {
   financial: FinancialOverview;
 }
 
-type ApiStaff = {
+type ApiPaymentMethod = {
   id: string;
   fullname: string;
   username: string;
@@ -57,6 +57,12 @@ type ApiStaff = {
   status: string;
   last_seen_label: string;
   assigned_to: string;
+  upi_id?: string | null;
+  bank_name?: string | null;
+  account_no?: string | null;
+  ifsc_code?: string | null;
+  branch_name?: string | null;
+  account_holder_name?: string | null;
   financial?: PayMethodFinancial;
 };
 
@@ -79,6 +85,7 @@ function roleLabelToUserRole(roleLabel: string): UserRole {
 
 const TAG_COLORS: Record<string, string> = {
   UPI: "bg-blue-100 text-blue-600",
+  BANK: "bg-amber-100 text-amber-700",
   PEER: "bg-gray-100 text-gray-600",
   PAYIN: "bg-indigo-100 text-indigo-600",
   PAYOUT: "bg-purple-100 text-purple-600",
@@ -88,7 +95,7 @@ function tagsToUserTags(tags: string[]): UserTag[] {
   return tags.map((t) => ({ label: t, color: TAG_COLORS[t] ?? "bg-gray-100 text-gray-600" }));
 }
 
-function staffToUser(s: ApiStaff): User {
+function paymentMethodToUser(s: ApiPaymentMethod): User {
   const status: UserStatus = s.status === "inactive" ? "inactive" : "active";
   return {
     id: s.id,
@@ -96,7 +103,7 @@ function staffToUser(s: ApiStaff): User {
     username: s.username,
     status,
     role: roleLabelToUserRole(s.role_label),
-    tags: tagsToUserTags(s.tags.length ? s.tags : ["STAFF"]),
+    tags: tagsToUserTags(s.tags.length ? s.tags : ["UPI"]),
     indicatorColor: status === "active" ? "bg-green-400" : "bg-gray-300",
     lastSeen: s.last_seen_label || "Never",
     assignedTo: s.assigned_to,
@@ -117,7 +124,8 @@ function staffToUser(s: ApiStaff): User {
   };
 }
 
-function staffToEditPayload(s: ApiStaff): AgentStaffEditPayload {
+function payMethodToEditPayload(s: ApiPaymentMethod): PaymentMethodEditPayload {
+  const isBank = s.gateway === "Bank Transfer Only";
   return {
     id: s.id,
     fullname: s.fullname,
@@ -129,7 +137,13 @@ function staffToEditPayload(s: ApiStaff): AgentStaffEditPayload {
     enablePayOut: s.pay_out_enabled,
     opType: s.operation_type,
     gateway: s.gateway,
-    tags: s.tags.length ? s.tags : ["UPI", "PEER"],
+    upiId: s.upi_id ?? "",
+    accountHolderName: !isBank ? (s.account_holder_name ?? "") : "",
+    bankAccountHolder: isBank ? (s.account_holder_name ?? "") : "",
+    bankName: s.bank_name ?? "",
+    accountNo: s.account_no ?? "",
+    ifscCode: s.ifsc_code ?? "",
+    branchName: s.branch_name ?? "",
   };
 }
 
@@ -409,7 +423,7 @@ function opFilterMatch(opFilter: string, u: User): boolean {
 
 function gwFilterMatch(gwFilter: string, u: User): boolean {
   const g = u.gateway;
-  if (gwFilter === "UPI & Bank Transfer") return g === "UPI & Bank Transfer";
+  if (gwFilter === "All") return true;
   if (gwFilter === "UPI") return g === "UPI Only" || g === "UPI & Bank Transfer";
   if (gwFilter === "Bank Transfer") return g === "Bank Transfer Only" || g === "UPI & Bank Transfer";
   return true;
@@ -417,8 +431,8 @@ function gwFilterMatch(gwFilter: string, u: User): boolean {
 
 export default function UsersList() {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editStaff, setEditStaff] = useState<AgentStaffEditPayload | null>(null);
-  const [rawStaff, setRawStaff] = useState<ApiStaff[]>([]);
+  const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethodEditPayload | null>(null);
+  const [rawPaymentMethods, setRawPaymentMethods] = useState<ApiPaymentMethod[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -431,7 +445,7 @@ export default function UsersList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All Roles");
   const [opFilter, setOpFilter] = useState("PayIn & PayOut");
-  const [gwFilter, setGwFilter] = useState("UPI & Bank Transfer");
+  const [gwFilter, setGwFilter] = useState("All");
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
@@ -439,24 +453,24 @@ export default function UsersList() {
     setLoadError(null);
     try {
       const res = await fetch("/api/agent/staff", { credentials: "include" });
-      const data = (await res.json()) as { ok?: boolean; staff?: ApiStaff[]; error?: string };
+      const data = (await res.json()) as { ok?: boolean; payment_methods?: ApiPaymentMethod[]; error?: string };
       if (res.status === 401) {
         setLoadError("AGENT_AUTH");
-        setRawStaff([]);
+        setRawPaymentMethods([]);
         setUsers([]);
         return;
       }
-      if (!res.ok || !data.ok || !data.staff) {
-        setLoadError(data.error ?? "Could not load staff.");
-        setRawStaff([]);
+      if (!res.ok || !data.ok || !data.payment_methods) {
+        setLoadError(data.error ?? "Could not load payment methods.");
+        setRawPaymentMethods([]);
         setUsers([]);
         return;
       }
-      setRawStaff(data.staff);
-      setUsers(data.staff.map(staffToUser));
+      setRawPaymentMethods(data.payment_methods);
+      setUsers(data.payment_methods.map(paymentMethodToUser));
     } catch {
       setLoadError("Network error.");
-      setRawStaff([]);
+      setRawPaymentMethods([]);
       setUsers([]);
     } finally {
       setLoading(false);
@@ -467,10 +481,10 @@ export default function UsersList() {
     void load();
   }, [load]);
 
-  async function patchFlags(staffId: string, payIn: boolean, payOut: boolean) {
-    setPatchingId(staffId);
+  async function patchFlags(methodId: string, payIn: boolean, payOut: boolean) {
+    setPatchingId(methodId);
     try {
-      const res = await fetch(`/api/agent/staff/${staffId}`, {
+      const res = await fetch(`/api/agent/staff/${methodId}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -489,10 +503,10 @@ export default function UsersList() {
     }
   }
 
-  async function deleteStaff(staffId: string) {
-    if (!window.confirm("Delete this staff member?")) return;
+  async function deletePaymentMethod(methodId: string) {
+    if (!window.confirm("Delete this payment method?")) return;
     try {
-      const res = await fetch(`/api/agent/staff/${staffId}`, { method: "DELETE", credentials: "include" });
+      const res = await fetch(`/api/agent/staff/${methodId}`, { method: "DELETE", credentials: "include" });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
         setLoadError(data.error ?? "Could not delete.");
@@ -525,7 +539,7 @@ export default function UsersList() {
     return (
       <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/20 px-6 py-8 text-center">
         <p className="text-gray-800 dark:text-gray-200 font-medium mb-2">Agent sign-in required</p>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Manage staff after signing in as an agent.</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Manage payment methods after signing in as an agent.</p>
         <Link
           href="/signin/agent"
           className="inline-flex rounded-full bg-purple-600 hover:bg-purple-700 px-5 py-2.5 text-sm font-semibold text-white"
@@ -549,7 +563,7 @@ export default function UsersList() {
         <button
           type="button"
           onClick={() => {
-            setEditStaff(null);
+            setEditPaymentMethod(null);
             setShowCreateModal(true);
           }}
           className="inline-flex items-center gap-2 rounded-full bg-blue-500 hover:bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm shrink-0"
@@ -557,7 +571,7 @@ export default function UsersList() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
           </svg>
-          Add staff
+          Add payment method
         </button>
       </div>
 
@@ -728,7 +742,7 @@ export default function UsersList() {
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
-                Gateway
+                Method
               </label>
               <div className="relative">
                 <select
@@ -736,7 +750,7 @@ export default function UsersList() {
                   onChange={(e) => setGwFilter(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
                 >
-                  {["UPI & Bank Transfer", "UPI", "Bank Transfer"].map((g) => (
+                  {["All", "UPI", "Bank Transfer"].map((g) => (
                     <option key={g}>
                       {g}
                     </option>
@@ -757,18 +771,18 @@ export default function UsersList() {
       )}
 
       <div className="flex items-center gap-2">
-        <h2 className="text-base font-bold text-gray-800 dark:text-white">Staff directory</h2>
+        <h2 className="text-base font-bold text-gray-800 dark:text-white">Payment methods</h2>
         <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:text-gray-300">
-          {loading ? "…" : `${filtered.length} staff`}
+          {loading ? "…" : `${filtered.length} methods`}
         </span>
       </div>
 
       {showCreateModal && (
         <CreateUserModal
-          editStaff={editStaff}
+          editPaymentMethod={editPaymentMethod}
           onClose={() => {
             setShowCreateModal(false);
-            setEditStaff(null);
+            setEditPaymentMethod(null);
           }}
           onSuccess={() => void load()}
         />
@@ -780,7 +794,7 @@ export default function UsersList() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] py-14 text-center text-gray-400">
-          No staff yet. Use Add staff to create one.
+          No payment methods yet. Use Add payment method to create one.
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -791,13 +805,13 @@ export default function UsersList() {
               patchBusy={patchingId === u.id}
               onPatchFlags={(payIn, payOut) => void patchFlags(u.id, payIn, payOut)}
               onEdit={() => {
-                const s = rawStaff.find((x) => x.id === u.id);
+                const s = rawPaymentMethods.find((x) => x.id === u.id);
                 if (s) {
-                  setEditStaff(staffToEditPayload(s));
+                  setEditPaymentMethod(payMethodToEditPayload(s));
                   setShowCreateModal(true);
                 }
               }}
-              onDelete={() => void deleteStaff(u.id)}
+              onDelete={() => void deletePaymentMethod(u.id)}
             />
           ))}
         </div>
@@ -808,13 +822,13 @@ export default function UsersList() {
               key={u.id}
               user={u}
               onEdit={() => {
-                const s = rawStaff.find((x) => x.id === u.id);
+                const s = rawPaymentMethods.find((x) => x.id === u.id);
                 if (s) {
-                  setEditStaff(staffToEditPayload(s));
+                  setEditPaymentMethod(payMethodToEditPayload(s));
                   setShowCreateModal(true);
                 }
               }}
-              onDelete={() => void deleteStaff(u.id)}
+              onDelete={() => void deletePaymentMethod(u.id)}
             />
           ))}
         </div>

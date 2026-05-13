@@ -17,6 +17,7 @@ type DisputeRow = RowDataPacket & {
   dispute_reason: string | null;
   created_at: Date | string | null;
   company_name: string | null;
+  agent_username: string | null;
 };
 
 function num(v: string | number): number {
@@ -27,6 +28,7 @@ function num(v: string | number): number {
 
 function toPaymentStatus(type: string, status: string): string {
   const s = String(status ?? "").toUpperCase();
+  if (s.includes("REJECT") || s.includes("REVOK") || s === "FAILED") return "FAILED";
   const isApproved = s.includes("APPROVED");
   if (String(type).toUpperCase() === "PAYIN") return isApproved ? "PAYIN_APPROVED" : "PAYIN_PENDING";
   return isApproved ? "PAYOUT_APPROVED" : "PAYOUT_PENDING";
@@ -67,9 +69,11 @@ export async function GET(req: Request) {
        t.\`id\`, t.\`order_id\`, t.\`amount\`, t.\`type\`, t.\`status\`,
        t.\`client_name\`, t.\`client_upi\`, t.\`utr_code\`, t.\`assigned_upi\`,
        t.\`dispute_raised\`, t.\`dispute_reason\`, t.\`created_at\`,
-       c.\`brand_name\` AS company_name
+       c.\`brand_name\` AS company_name,
+       a.\`username\` AS agent_username
      FROM \`transactions\` t
      LEFT JOIN \`companies\` c ON c.\`id\` = t.\`company_id\`
+     LEFT JOIN \`agents\` a ON a.\`id\` = t.\`assigned_agent_id\`
      WHERE (t.\`dispute_raised\` = 1 OR (t.\`dispute_reason\` IS NOT NULL AND t.\`dispute_reason\` <> ''))
      ORDER BY t.\`id\` DESC
      LIMIT ${limit}`,
@@ -84,7 +88,7 @@ export async function GET(req: Request) {
       paymentStatus: toPaymentStatus(r.type, r.status),
       orderId: r.order_id,
       companyName: (r.company_name ?? "").trim() || "—",
-      subAdminName: "—",
+      subAdminName: (r.agent_username ?? "").trim() || "—",
       clientName: (r.client_name ?? "").trim() || "—",
       clientUpi: (r.client_upi ?? "").trim() || "—",
       utrCode: (r.utr_code ?? "").trim() || "—",

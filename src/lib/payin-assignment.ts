@@ -183,3 +183,15 @@ export async function tryAssignPayInTransaction(
 
   return { assigned: false, reason: "Assignment conflict — please retry." };
 }
+
+/** Shown when auto-assign finds no eligible account and the draft PAYIN row is removed. */
+export const PAYIN_NO_ELIGIBLE_AGENT_MESSAGE =
+  "No agent payment account is available right now. The PayIn was not created — please try again later.";
+
+/** Delete a PAYIN that never left NOT_ASSIGNED (safe guard: only that status). */
+export async function deleteNotAssignedPayIn(txId: number): Promise<void> {
+  await pool.execute(
+    `DELETE FROM \`transactions\` WHERE \`id\` = ? AND \`type\` = 'PAYIN' AND UPPER(TRIM(\`status\`)) = 'NOT_ASSIGNED'`,
+    [txId],
+  );
+}

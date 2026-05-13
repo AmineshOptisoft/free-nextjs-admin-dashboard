@@ -42,15 +42,29 @@ export async function GET(req: Request) {
      LIMIT ${limit}`,
   );
 
-  const payins: Array<{ id: string; amount: number; status: string; assignedAgentName: string }> = [];
-  const payouts: Array<{ id: string; amount: number; status: string; assignedAgentName: string }> = [];
+  const payins: Array<{
+    id: string;
+    amount: number;
+    status: string;
+    assignedAgentName: string;
+    assignedAgentId: string | null;
+  }> = [];
+  const payouts: Array<{
+    id: string;
+    amount: number;
+    status: string;
+    assignedAgentName: string;
+    assignedAgentId: string | null;
+  }> = [];
 
   for (const r of rows) {
+    const aid = r.assigned_agent_id != null ? String(r.assigned_agent_id) : null;
     const item = {
       id: String(r.id),
       amount: num(r.amount),
       status: String(r.status || "").toUpperCase(),
       assignedAgentName: (r.assigned_agent_name ?? "").trim() || "Unassigned",
+      assignedAgentId: aid,
     };
     if (String(r.type).toUpperCase() === "PAYIN") payins.push(item);
     else payouts.push(item);

@@ -18,6 +18,9 @@ type Tx = {
   amount: number;
   status: string;
   assignedAgentName?: string;
+  assignedAgentId?: string | null;
+  /** Company payin/payout list uses this label; keep in sync for vendor performance. */
+  assignedToLabel?: string;
 };
 
 
@@ -126,11 +129,28 @@ export default function TransactionReport() {
 
   const agentPerformanceRows: AgentPerformanceRow[] = useMemo(() => {
     const all = [...payIns, ...payOuts];
-    const grouped = new Map<string, { totalTransactions: number; totalAmount: number; completedAmount: number; completedCount: number }>();
+    const grouped = new Map<
+      string,
+      {
+        agentId: string | null;
+        totalTransactions: number;
+        totalAmount: number;
+        completedAmount: number;
+        completedCount: number;
+      }
+    >();
     for (const t of all) {
-      const key = (t.assignedAgentName || "").trim();
-      if (!key || key.toLowerCase() === "unassigned" || key.toLowerCase() === "overall") continue;
-      const row = grouped.get(key) ?? { totalTransactions: 0, totalAmount: 0, completedAmount: 0, completedCount: 0 };
+      const key = (t.assignedAgentName ?? t.assignedToLabel ?? "").trim();
+      if (!key || key === "—" || key.toLowerCase() === "unassigned" || key.toLowerCase() === "overall") continue;
+      const aid = t.assignedAgentId ? String(t.assignedAgentId) : null;
+      const row = grouped.get(key) ?? {
+        agentId: aid,
+        totalTransactions: 0,
+        totalAmount: 0,
+        completedAmount: 0,
+        completedCount: 0,
+      };
+      if (!row.agentId && aid) row.agentId = aid;
       row.totalTransactions += 1;
       row.totalAmount += t.amount || 0;
       const s = (t.status || "").toUpperCase();
@@ -142,6 +162,7 @@ export default function TransactionReport() {
     }
     const rows = Array.from(grouped.entries()).map(([agentName, r]) => ({
       agentName,
+      agentId: r.agentId,
       totalTransactions: r.totalTransactions,
       totalAmount: inr(r.totalAmount),
       completed: inr(r.completedAmount),

@@ -3,11 +3,12 @@ import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
-import { tryAssignPayInTransaction } from "@/lib/payin-assignment";
+import { tryAssignPayInTransaction, deleteNotAssignedPayIn, PAYIN_NO_ELIGIBLE_AGENT_MESSAGE } from "@/lib/payin-assignment";
 import { requireCompanySession } from "@/lib/require-company-api";
 
 type TxRow = RowDataPacket & {
   id: number;
+  assigned_agent_id: number | null;
   order_id: string;
   amount: string | number;
   status: string;
@@ -39,6 +40,8 @@ function agentLabel(full: string | null, user: string | null): string {
 function mapRow(r: TxRow) {
   const created = r.created_at ? new Date(r.created_at as string | Date).toISOString() : undefined;
   const assignedAt = r.assigned_date ? new Date(r.assigned_date as string | Date).toISOString() : undefined;
+  const label = agentLabel(r.agent_fullname, r.agent_username);
+  const aid = r.assigned_agent_id != null && Number(r.assigned_agent_id) > 0 ? String(r.assigned_agent_id) : null;
   return {
     id: String(r.id),
     orderId: r.order_id,
@@ -52,7 +55,9 @@ function mapRow(r: TxRow) {
     createdAtIso: created,
     remarks: r.user_note ?? "",
     assignedAtIso: assignedAt,
-    assignedToLabel: agentLabel(r.agent_fullname, r.agent_username),
+    assignedToLabel: label,
+    assignedAgentName: label !== "—" ? label : undefined,
+    assignedAgentId: aid,
   };
 }
 
@@ -68,7 +73,7 @@ export async function GET(req: Request) {
   let sql = `
     SELECT t.\`id\`, t.\`order_id\`, t.\`amount\`, t.\`status\`, t.\`client_name\`, t.\`client_upi\`,
            t.\`assigned_upi\`, t.\`utr_code\`, t.\`payment_image\`, t.\`created_at\`, t.\`user_note\`,
-           t.\`assigned_date\`,
+           t.\`assigned_date\`, t.\`assigned_agent_id\`,
            a.\`fullname\` AS \`agent_fullname\`, a.\`username\` AS \`agent_username\`
     FROM \`transactions\` t
     LEFT JOIN \`agents\` a ON a.\`id\` = t.\`assigned_agent_id\`
@@ -76,10 +81,10 @@ export async function GET(req: Request) {
   `;
   const params: (number | string)[] = [auth.companyId];
   if (status) {
-    sql += " AND `status` = ? ";
+    sql += " AND t.`status` = ? ";
     params.push(status);
   }
-  sql += " ORDER BY `id` DESC LIMIT " + String(limit);
+  sql += " ORDER BY t.`id` DESC LIMIT " + String(limit);
 
   const [rows] = await pool.execute<TxRow[]>(sql, params);
   return NextResponse.json({ ok: true as const, payins: rows.map(mapRow) });
@@ -119,27 +124,38 @@ export async function POST(req: Request) {
     [randomCode, orderId, amount, clientName, clientUpi, auth.companyId, note],
   );
 
-  const assign = await tryAssignPayInTransaction(Number(res.insertId), amount);
+  const insertId = Number(res.insertId);
+  try {
+    await tryAssignPayInTransaction(insertId, amount);
+  } catch {
+    await deleteNotAssignedPayIn(insertId);
+    return NextResponse.json({ ok: false as const, error: PAYIN_NO_ELIGIBLE_AGENT_MESSAGE }, { status: 503 });
+  }
 
   const [rows] = await pool.execute<TxRow[]>(
     `SELECT t.\`id\`, t.\`order_id\`, t.\`amount\`, t.\`status\`, t.\`client_name\`, t.\`client_upi\`,
             t.\`assigned_upi\`, t.\`utr_code\`, t.\`payment_image\`, t.\`created_at\`, t.\`user_note\`,
-            t.\`assigned_date\`,
+            t.\`assigned_date\`, t.\`assigned_agent_id\`,
             a.\`fullname\` AS \`agent_fullname\`, a.\`username\` AS \`agent_username\`
      FROM \`transactions\` t
      LEFT JOIN \`agents\` a ON a.\`id\` = t.\`assigned_agent_id\`
      WHERE t.\`id\` = ? AND t.\`company_id\` = ? LIMIT 1`,
-    [res.insertId, auth.companyId],
+    [insertId, auth.companyId],
   );
   const row = rows[0];
-  if (!row) return NextResponse.json({ ok: false, error: "Could not load created payin" }, { status: 500 });
+  if (!row) {
+    await deleteNotAssignedPayIn(insertId);
+    return NextResponse.json({ ok: false, error: "Could not load created payin" }, { status: 500 });
+  }
+  if (String(row.status).toUpperCase() === "NOT_ASSIGNED") {
+    await deleteNotAssignedPayIn(insertId);
+    return NextResponse.json({ ok: false as const, error: PAYIN_NO_ELIGIBLE_AGENT_MESSAGE }, { status: 503 });
+  }
 
   return NextResponse.json({
     ok: true as const,
     payin: mapRow(row),
-    assignment: assign.assigned ? "ASSIGNED" : "WAITING_AGENT",
-    message: assign.assigned
-      ? "PayIn request created and assigned. Share assigned UPI details with client."
-      : "No eligible account available now. Request is in agent wait queue.",
+    assignment: "ASSIGNED",
+    message: "PayIn request created and assigned. Share assigned payment details with the client.",
   });
 }

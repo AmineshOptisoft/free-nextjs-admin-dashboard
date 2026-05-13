@@ -65,7 +65,7 @@ export default function EditAgentModal({ agent, onClose, onSaved }: Props) {
       <div className="absolute inset-0 bg-black/40 dark:bg-black/60" onClick={onClose} />
       <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-900 shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">Edit agent — {agent.username}</h2>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Edit vendor — {agent.username}</h2>
           <button type="button" onClick={onClose} className="rounded-full p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
             ✕
           </button>

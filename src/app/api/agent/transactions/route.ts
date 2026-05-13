@@ -8,7 +8,7 @@ const SELECT_PAYIN = `
   \`client_name\`, \`client_upi\`, \`assigned_upi\`, \`user_upi\`,
   \`utr_code\`, \`payment_image\`, \`user_note\`,
   \`created_at\`, \`assigned_date\`,
-  \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`
+  \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`dispute_raised\`
 `;
 
 export async function GET(req: Request) {

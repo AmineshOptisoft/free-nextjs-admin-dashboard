@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
 import { IoIosWarning } from "react-icons/io";
@@ -27,21 +27,6 @@ interface DisputeItem {
   reason: DisputeReason;
   createdOn: string;
 }
-
-const mockData: DisputeItem[] = [
-  { id: "1",  ref: "#G690HL0X9N4", amount: 2500,  disputeStatus: "RESOLVED", paymentStatus: "PAYIN_APPROVED",  orderId: "GF1gKHbvHQ8X88W",   companyName: "Leo", subAdminName: "Jatinvp112",  clientName: "BT247_Shrikant99", clientUpi: "SKIP_UPI", utrCode: "950517965557",  assignedUpi: "gpay-11552523466@okbizaxis",  reason: "Pp",           createdOn: "Fri 08 May 2026, 14:00" },
-  { id: "2",  ref: "#H1070SA5K9",  amount: 500,   disputeStatus: "RESOLVED", paymentStatus: "PAYIN_APPROVED",  orderId: "MVT7F3Ol4Aye2AH",   companyName: "Leo", subAdminName: "Kanhal33",    clientName: "0510411",          clientUpi: "SKIP_UPI", utrCode: "088703338360",  assignedUpi: "9660830603@okbizaxis",       reason: "Received",     createdOn: "Fri 08 May 2026, 13:55" },
-  { id: "3",  ref: "#KP23MN7XQZ",  amount: 1200,  disputeStatus: "PENDING",  paymentStatus: "PAYIN_PENDING",   orderId: "KP23MN7XQZrBCD9",   companyName: "Leo", subAdminName: "RajeshAdmin",  clientName: "BT247_Ramesh44",   clientUpi: "SKIP_UPI", utrCode: "112233445566",  assignedUpi: "7894561230@axisbank",        reason: "Wrong Amount", createdOn: "Fri 08 May 2026, 13:50" },
-  { id: "4",  ref: "#LQ34NO8YRA",  amount: 3000,  disputeStatus: "PENDING",  paymentStatus: "PAYIN_PENDING",   orderId: "LQ34NO8YRAsCDE0",   companyName: "Leo", subAdminName: "SureshVP",    clientName: "PLYBG_Suresh77",   clientUpi: "SKIP_UPI", utrCode: "223344556677",  assignedUpi: "8905672341@hdfcbank",        reason: "Not Credited", createdOn: "Fri 08 May 2026, 13:45" },
-  { id: "5",  ref: "#MR45OP9ZSB",  amount: 750,   disputeStatus: "PENDING",  paymentStatus: "PAYOUT_PENDING",  orderId: "MR45OP9ZSBtDEF1",   companyName: "Leo", subAdminName: "ArunMgr",     clientName: "BT247_Arun22",     clientUpi: "SKIP_UPI", utrCode: "334455667788",  assignedUpi: "9016783452@sbi",             reason: "Duplicate",    createdOn: "Fri 08 May 2026, 13:40" },
-  { id: "6",  ref: "#NS56PQ0ATC",  amount: 5500,  disputeStatus: "RESOLVED", paymentStatus: "PAYOUT_APPROVED", orderId: "NS56PQ0ATCuEFG2",   companyName: "Leo", subAdminName: "VijayOps",    clientName: "PLYBG_Vijay55",    clientUpi: "SKIP_UPI", utrCode: "445566778899",  assignedUpi: "gpay-9127654321@okbizaxis",  reason: "Pp",           createdOn: "Fri 08 May 2026, 13:35" },
-  { id: "7",  ref: "#OT67QR1BUD",  amount: 8000,  disputeStatus: "RESOLVED", paymentStatus: "PAYIN_APPROVED",  orderId: "OT67QR1BUDvFGH3",   companyName: "Leo", subAdminName: "NeelamSr",    clientName: "BT247_Neela33",    clientUpi: "SKIP_UPI", utrCode: "556677889900",  assignedUpi: "9238765432@icicibank",       reason: "Received",     createdOn: "Fri 08 May 2026, 13:30" },
-  { id: "8",  ref: "#PU78RS2CVE",  amount: 2200,  disputeStatus: "EXPIRED",  paymentStatus: "FAILED",          orderId: "PU78RS2CVEwGHI4",   companyName: "Leo", subAdminName: "PranavIT",    clientName: "PLYBG_Pranav88",   clientUpi: "SKIP_UPI", utrCode: "667788990011",  assignedUpi: "9349876543@kotakbank",       reason: "Other",        createdOn: "Fri 08 May 2026, 12:00" },
-  { id: "9",  ref: "#QV89ST3DWF",  amount: 1800,  disputeStatus: "EXPIRED",  paymentStatus: "FAILED",          orderId: "QV89ST3DWFxHIJ5",   companyName: "Leo", subAdminName: "ManojHead",   clientName: "BT247_Manoj66",    clientUpi: "SKIP_UPI", utrCode: "778899001122",  assignedUpi: "9450987654@yesbank",         reason: "Wrong Amount", createdOn: "Fri 08 May 2026, 11:30" },
-  { id: "10", ref: "#RW90TU4EXG",  amount: 4200,  disputeStatus: "PENDING",  paymentStatus: "PAYIN_PENDING",   orderId: "RW90TU4EXGyIJK6",   companyName: "Leo", subAdminName: "DivyaCFO",    clientName: "PLYBG_Divya11",    clientUpi: "SKIP_UPI", utrCode: "889900112233",  assignedUpi: "9561098765@axisbank",        reason: "Not Credited", createdOn: "Fri 08 May 2026, 11:00" },
-];
-
-const USE_DEMO_DATA = false;
 
 const STATUS_TABS: { label: string; value: DisputeStatus | "ALL" }[] = [
   { label: "All",      value: "ALL" },
@@ -226,18 +211,24 @@ export default function DisputeList() {
       setLoadError(null);
       try {
         const res = await fetch("/api/admin/disputes?limit=500", { credentials: "include" });
-        const data = (await res.json()) as { ok?: boolean; items?: DisputeItem[]; error?: string };
         if (!mounted) return;
-        if (!res.ok || !data.ok || !data.items) {
-          setLoadError(data.error ?? "Could not load disputes.");
-          setItems(USE_DEMO_DATA ? mockData : []);
+        if (res.status === 401) {
+          setItems([]);
+          setLoadError("Please sign in to view disputes.");
           return;
         }
+        const data = (await res.json()) as { ok?: boolean; items?: DisputeItem[]; error?: string };
+        if (!res.ok || !data.ok || !data.items) {
+          setLoadError(data.error ?? "Could not load disputes.");
+          setItems([]);
+          return;
+        }
+        setLoadError(null);
         setItems(data.items);
       } catch {
         if (!mounted) return;
         setLoadError("Network error.");
-        setItems(USE_DEMO_DATA ? mockData : []);
+        setItems([]);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -247,7 +238,7 @@ export default function DisputeList() {
     };
   }, []);
 
-  const baseData = useMemo(() => (items.length ? items : USE_DEMO_DATA ? mockData : []), [items]);
+  const baseData = items;
   const totalOrders = baseData.length;
 
   const counts: Partial<Record<DisputeStatus | "ALL", number>> = {
@@ -275,10 +266,23 @@ export default function DisputeList() {
   return (
     <div className="flex flex-col gap-4">
       {/* Page header */}
-      <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-        <IoIosWarning className="w-6 h-6" />
-        <h1 className="text-xl font-bold ">Disputes</h1>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+          <IoIosWarning className="w-6 h-6" />
+          <h1 className="text-xl font-bold ">Disputes</h1>
+        </div>
+        {!loading && !loadError && (
+          <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+            Live: disputes from the admin API (max 500).
+          </p>
+        )}
       </div>
+
+      {loadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+          {loadError}
+        </div>
+      )}
 
       {/* Advanced Search panel */}
       {showFilter && (
@@ -426,7 +430,7 @@ export default function DisputeList() {
           <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-6 py-12 text-center text-gray-400">
             Loading disputes...
           </div>
-        ) : filtered.length === 0 ? (
+        ) : loadError ? null : filtered.length === 0 ? (
           <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-6 py-12 text-center text-gray-400">
             No disputes found.
           </div>
@@ -434,11 +438,6 @@ export default function DisputeList() {
           paginated.map((item) => <DisputeCard key={item.id} item={item} />)
         )}
       </div>
-      {loadError && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
-          {loadError}
-        </div>
-      )}
 
       {/* Pagination */}
       <Pagination

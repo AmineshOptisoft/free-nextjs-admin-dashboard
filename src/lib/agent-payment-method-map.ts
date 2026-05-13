@@ -2,13 +2,20 @@ import type { RowDataPacket } from "mysql2/promise";
 import type { PayMethodFinancial } from "@/lib/transactions-pay-method-financials";
 import { emptyPayMethodFinancial } from "@/lib/transactions-pay-method-financials";
 
-/** Row shape for `pay_methods` used by agent Payment Method / staff APIs. */export type PayMethodRow = RowDataPacket & {
+/** Row shape for `pay_methods` used by agent payment-method APIs. */
+export type PayMethodRow = RowDataPacket & {
   id: number;
   agent_id: number | null;
   full_name: string;
   username: string | null;
   email: string | null;
+  upi_id: string | null;
   payment_method: "UPI" | "BANK" | string;
+  account_no: string | null;
+  ifsc_code: string | null;
+  branch_name: string | null;
+  bank_name: string | null;
+  account_holder_name: string | null;
   enable_pay_in: number | boolean;
   enable_pay_out: number | boolean;
   status: string;
@@ -27,7 +34,7 @@ export function gatewayToPaymentMethod(gateway: string): "UPI" | "BANK" {
 }
 
 export function paymentMethodToGateway(pm: string): string {
-  return pm === "BANK" ? "Bank Transfer Only" : "UPI & Bank Transfer";
+  return pm === "BANK" ? "Bank Transfer Only" : "UPI Only";
 }
 
 function operationTypeFromFlags(payIn: boolean, payOut: boolean): string {
@@ -45,7 +52,8 @@ function lastSeenLabel(last: Date | string | null): string {
 }
 
 /** API payload expected by `UsersList` / `CreateUserModal`. `financial` comes from `transactions`. */
-export function payMethodToStaffApi(r: PayMethodRow, assignedTo: string, financial?: PayMethodFinancial) {  const payIn = boolPay(r.enable_pay_in);
+export function payMethodToStaffApi(r: PayMethodRow, assignedTo: string, financial?: PayMethodFinancial) {
+  const payIn = boolPay(r.enable_pay_in);
   const payOut = boolPay(r.enable_pay_out);
   const pm = r.payment_method === "BANK" ? "BANK" : "UPI";
   const tags = [pm];
@@ -71,10 +79,17 @@ export function payMethodToStaffApi(r: PayMethodRow, assignedTo: string, financi
     assigned_to: assignedTo,
     created_at: r.created_at,
     updated_at: r.updated_at,
+    upi_id: (r.upi_id ?? "").trim() || null,
+    bank_name: (r.bank_name ?? "").trim() || null,
+    account_no: (r.account_no ?? "").trim() || null,
+    ifsc_code: (r.ifsc_code ?? "").trim() || null,
+    branch_name: (r.branch_name ?? "").trim() || null,
+    account_holder_name: (r.account_holder_name ?? "").trim() || null,
     financial: financial ?? emptyPayMethodFinancial(),
   };
 }
 export const PAY_METHOD_SELECT = `
-  \`id\`, \`agent_id\`, \`full_name\`, \`username\`, \`email\`, \`payment_method\`,
+  \`id\`, \`agent_id\`, \`full_name\`, \`username\`, \`email\`, \`upi_id\`, \`payment_method\`,
+  \`account_no\`, \`ifsc_code\`, \`branch_name\`, \`bank_name\`, \`account_holder_name\`,
   \`enable_pay_in\`, \`enable_pay_out\`, \`status\`, \`last_activity\`, \`created_at\`, \`updated_at\`
 `;

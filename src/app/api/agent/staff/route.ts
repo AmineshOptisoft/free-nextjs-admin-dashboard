@@ -25,8 +25,8 @@ export async function GET() {
 
     const ids = rows.map((r) => r.id);
     const financialByPm = await loadPayMethodFinancials(auth.agentId, ids);
-    const staff = rows.map((r) => payMethodToStaffApi(r, auth.username, financialByPm.get(r.id)));
-    return NextResponse.json({ ok: true as const, staff });
+    const payment_methods = rows.map((r) => payMethodToStaffApi(r, auth.username, financialByPm.get(r.id)));
+    return NextResponse.json({ ok: true as const, payment_methods });
   } catch (e: unknown) {
     if (isMysqlErNoSuchTable(e)) {
       return NextResponse.json({ ok: false, error: PAY_METHODS_TABLE_HINT }, { status: 503 });
@@ -52,14 +52,41 @@ export async function POST(req: Request) {
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const payIn = Boolean(body.pay_in_enabled);
   const payOut = Boolean(body.pay_out_enabled);
-  const gateway = typeof body.gateway === "string" ? body.gateway.trim() : "UPI & Bank Transfer";
+  const gateway = typeof body.gateway === "string" ? body.gateway.trim() : "UPI Only";
   const paymentMethod = gatewayToPaymentMethod(gateway);
+
+  const upiId = typeof body.upi_id === "string" ? body.upi_id.trim() : "";
+  const bankName = typeof body.bank_name === "string" ? body.bank_name.trim() : "";
+  const accountNo = typeof body.account_no === "string" ? body.account_no.trim() : "";
+  const ifscCode = typeof body.ifsc_code === "string" ? body.ifsc_code.trim() : "";
+  const branchName = typeof body.branch_name === "string" ? body.branch_name.trim() : "";
+  const accountHolder = typeof body.account_holder_name === "string" ? body.account_holder_name.trim() : "";
 
   if (!username) {
     return NextResponse.json({ ok: false, error: "Username is required" }, { status: 400 });
   }
 
+  if (paymentMethod === "UPI") {
+    if (!upiId) {
+      return NextResponse.json({ ok: false, error: "UPI ID is required for UPI payment methods" }, { status: 400 });
+    }
+  } else {
+    if (!bankName || !accountNo || !ifscCode || !accountHolder) {
+      return NextResponse.json(
+        { ok: false, error: "Bank name, account number, IFSC, and account holder name are required for bank payment methods" },
+        { status: 400 },
+      );
+    }
+  }
+
   const fullNameDb = fullname || username;
+
+  const upiDb = paymentMethod === "UPI" ? upiId : null;
+  const holderDb = paymentMethod === "UPI" ? (accountHolder || null) : accountHolder;
+  const bankNameDb = paymentMethod === "BANK" ? bankName : null;
+  const accountNoDb = paymentMethod === "BANK" ? accountNo : null;
+  const ifscDb = paymentMethod === "BANK" ? ifscCode : null;
+  const branchDb = paymentMethod === "BANK" ? (branchName || null) : null;
 
   try {
     const [result] = await pool.execute<ResultSetHeader>(
@@ -69,12 +96,26 @@ export async function POST(req: Request) {
         \`pay_in_limit\`, \`pay_out_limit\`, \`enable_pay_in\`, \`enable_pay_out\`, \`status\`,
         \`today_total_pay_in_amount\`, \`today_total_pay_out_amount\`, \`last_activity\`
       ) VALUES (
-        ?, ?, ?, NULLIF(?, ''), NULL, ?,
-        NULL, NULL, NULL, NULL, NULL,
+        ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?,
+        NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
         0, 0, ?, ?, 'ACTIVE',
         0, 0, NOW()
       )`,
-      [auth.agentId, fullNameDb, username, email, paymentMethod, payIn ? 1 : 0, payOut ? 1 : 0],
+      [
+        auth.agentId,
+        fullNameDb,
+        username,
+        email,
+        upiDb,
+        paymentMethod,
+        accountNoDb,
+        ifscDb,
+        branchDb,
+        bankNameDb,
+        holderDb,
+        payIn ? 1 : 0,
+        payOut ? 1 : 0,
+      ],
     );
 
     const id = result.insertId;
@@ -87,7 +128,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Could not load created row" }, { status: 500 });
     }
     const fin = await loadPayMethodFinancials(auth.agentId, [id]);
-    return NextResponse.json({ ok: true as const, staff: payMethodToStaffApi(row, auth.username, fin.get(id)) });
+    return NextResponse.json({ ok: true as const, payment_method: payMethodToStaffApi(row, auth.username, fin.get(id)) });
   } catch (e: unknown) {
     if (isMysqlErNoSuchTable(e)) {
       return NextResponse.json({ ok: false, error: PAY_METHODS_TABLE_HINT }, { status: 503 });

@@ -140,7 +140,7 @@ const activityTypeStyle: Record<ActivityType, string> = {
 
 const fmt = (n: number) => "₹" + Math.abs(n).toLocaleString("en-IN");
 
-/** Row from `GET /api/admin/agents/[id]/pay-methods` (same shape as agent staff list). */
+/** Row from `GET /api/admin/agents/[id]/pay-methods` (same shape as agent `payment_methods` list). */
 type PayMethodStaffApi = {
   id: string;
   fullname: string;
@@ -250,7 +250,7 @@ function AgentPayMethodFinancialOverview({ data }: { data: NonNullable<PayMethod
   );
 }
 
-/** Staff-directory style card (matches agent Payment Method / Users list). */
+/** Payment-method card (matches agent `/users` list). */
 function AgentPayMethodCard({ pm }: { pm: PayMethodStaffApi }) {
   const [finOpen, setFinOpen] = useState(false);
   const fin = pm.financial ?? {
@@ -487,10 +487,10 @@ export default function AgentDetail({ id }: { id: string }) {
       const pmData = (await pmRes.json().catch(() => ({}))) as {
         ok?: boolean;
         error?: string;
-        staff?: PayMethodStaffApi[];
+        payment_methods?: PayMethodStaffApi[];
       };
-      if (pmRes.ok && pmData.ok && Array.isArray(pmData.staff)) {
-        const normalized: PayMethodStaffApi[] = pmData.staff.map((s) => {
+      if (pmRes.ok && pmData.ok && Array.isArray(pmData.payment_methods)) {
+        const normalized: PayMethodStaffApi[] = pmData.payment_methods.map((s) => {
           const row = s as PayMethodStaffApi & { tags?: string[]; assigned_to?: string };
           return {
             ...row,
@@ -620,7 +620,11 @@ export default function AgentDetail({ id }: { id: string }) {
           </h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button className="rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm">
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm"
+          >
             Edit Vendor
           </button>
           <button
