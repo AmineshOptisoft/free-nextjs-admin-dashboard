@@ -1,9 +1,25 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
-interface Props {
+export type AgentStaffEditPayload = {
+  id: string;
+  fullname: string;
+  email: string;
+  phone: string;
+  role: string;
+  username: string;
+  enablePayIn: boolean;
+  enablePayOut: boolean;
+  opType: string;
+  gateway: string;
+  tags: string[];
+};
+
+type Props = {
   onClose: () => void;
-}
+  onSuccess?: () => void;
+  editStaff?: AgentStaffEditPayload | null;
+};
 
 const STEPS = ["Personal Info", "Account Setup", "Permissions"];
 
@@ -30,8 +46,10 @@ const inputCls = (active?: boolean) =>
 const selectCls =
   "w-full rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors appearance-none cursor-pointer";
 
-export default function CreateUserModal({ onClose }: Props) {
+export default function CreateUserModal({ onClose, onSuccess, editStaff }: Props) {
   const [step, setStep] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   /* Step 1 — Personal Info */
   const [fullName,  setFullName]  = useState("");
@@ -40,8 +58,8 @@ export default function CreateUserModal({ onClose }: Props) {
   const [role,      setRole]      = useState("Peer User");
 
   /* Step 2 — Account Credentials */
-  const [username,     setUsername]     = useState("leo");
-  const [password,     setPassword]     = useState("........");
+  const [username,     setUsername]     = useState("");
+  const [password,     setPassword]     = useState("");
   const [enablePayIn,  setEnablePayIn]  = useState(false);
   const [enablePayOut, setEnablePayOut] = useState(false);
 
@@ -50,12 +68,101 @@ export default function CreateUserModal({ onClose }: Props) {
   const [gateway, setGateway] = useState("UPI & Bank Transfer");
   const [tags,    setTags]    = useState<string[]>(["UPI", "PEER"]);
 
+  useEffect(() => {
+    setErr(null);
+    if (editStaff) {
+      setFullName(editStaff.fullname);
+      setEmail(editStaff.email);
+      setPhone(editStaff.phone);
+      setRole(editStaff.role);
+      setUsername(editStaff.username);
+      setPassword("");
+      setEnablePayIn(editStaff.enablePayIn);
+      setEnablePayOut(editStaff.enablePayOut);
+      setOpType(editStaff.opType);
+      setGateway(editStaff.gateway);
+      setTags(editStaff.tags.length ? editStaff.tags : ["UPI", "PEER"]);
+    } else {
+      setFullName("");
+      setEmail("");
+      setPhone("");
+      setRole("Peer User");
+      setUsername("");
+      setPassword("");
+      setEnablePayIn(false);
+      setEnablePayOut(false);
+      setOpType("PayIn & PayOut");
+      setGateway("UPI & Bank Transfer");
+      setTags(["UPI", "PEER"]);
+    }
+    setStep(0);
+  }, [editStaff]);
+
   const TAG_OPTIONS = ["UPI", "PEER", "PAYIN", "PAYOUT"];
   const toggleTag = (t: string) =>
     setTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
 
   const canNext = step < STEPS.length - 1;
   const canPrev = step > 0;
+
+  async function handleFinalSubmit() {
+    setErr(null);
+    const u = username.trim();
+    if (!u) {
+      setErr("Username is required.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        fullname: fullName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        role_label: role,
+        username: u,
+        pay_in_enabled: enablePayIn,
+        pay_out_enabled: enablePayOut,
+        operation_type: opType,
+        gateway,
+        tags,
+      };
+
+      if (editStaff) {
+        const body: Record<string, unknown> = { ...payload };
+        if (password) body.password = password;
+        const res = await fetch(`/api/agent/staff/${editStaff.id}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !data.ok) {
+          setErr(data.error ?? "Could not update staff.");
+          return;
+        }
+      } else {
+        const res = await fetch("/api/agent/staff", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, password }),
+        });
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !data.ok) {
+          setErr(data.error ?? "Could not create staff.");
+          return;
+        }
+      }
+      onSuccess?.();
+      onClose();
+    } catch {
+      setErr("Network error.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div
@@ -66,7 +173,7 @@ export default function CreateUserModal({ onClose }: Props) {
 
         {/* ── Modal header ── */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800 shrink-0">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Create User</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{editStaff ? "Edit staff" : "Create staff"}</h2>
           <button
             onClick={onClose}
             className="flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 transition-colors"
@@ -104,6 +211,11 @@ export default function CreateUserModal({ onClose }: Props) {
 
         {/* ── Body ── */}
         <div className="flex-1 overflow-y-auto px-6 py-6 bg-gray-50 dark:bg-gray-900/50 mt-5">
+          {err && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+              {err}
+            </div>
+          )}
 
           {/* ── STEP 0: Personal Information + Account Credentials ── */}
           {step === 0 && (
@@ -165,8 +277,12 @@ export default function CreateUserModal({ onClose }: Props) {
                       className={inputCls(!!username)} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Password</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                      Password (optional — not saved for payment methods)
+                    </label>
                     <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                      placeholder={editStaff ? "••••••••" : "Required"}
+                      autoComplete="new-password"
                       className={inputCls(!!password)} />
                   </div>
                   <div>
@@ -295,8 +411,9 @@ export default function CreateUserModal({ onClose }: Props) {
         {/* ── Footer ── */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
           <button
-            onClick={() => canPrev && setStep((s) => s - 1)}
-            disabled={!canPrev}
+            type="button"
+            onClick={() => canPrev && !saving && setStep((s) => s - 1)}
+            disabled={!canPrev || saving}
             className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors ${
               canPrev
                 ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
@@ -315,17 +432,21 @@ export default function CreateUserModal({ onClose }: Props) {
             </button>
             {canNext ? (
               <button
+                type="button"
+                disabled={saving}
                 onClick={() => setStep((s) => s + 1)}
-                className="rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-5 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 transition-colors"
+                className="rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 px-5 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 transition-colors"
               >
                 Next Step
               </button>
             ) : (
               <button
-                onClick={onClose}
-                className="rounded-lg bg-blue-500 hover:bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm"
+                type="button"
+                disabled={saving}
+                onClick={() => void handleFinalSubmit()}
+                className="rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-50 px-5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm"
               >
-                Create User
+                {saving ? "Saving…" : editStaff ? "Save changes" : "Create staff"}
               </button>
             )}
           </div>

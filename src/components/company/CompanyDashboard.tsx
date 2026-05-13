@@ -1,12 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
 import { PieChartIcon } from "@/icons";
 
 type SummaryCard = { title: string; value: string; sub: string };
 type TxnRow = {
+  id: string;
   transactionId: string;
   date: string;
   type: "PAYIN" | "PAYOUT";
@@ -17,18 +18,11 @@ type TxnRow = {
 };
 
 const cards: SummaryCard[] = [
-  { title: "Total Payin Operations", value: "2", sub: "Operations ( Today )" },
-  { title: "Total Payout Operations", value: "0", sub: "Operations ( Today )" },
+  { title: "Total Payin Operations", value: "0", sub: "Operations" },
+  { title: "Total Payout Operations", value: "0", sub: "Operations" },
   { title: "Total Payin", value: "₹0", sub: "Total Amount" },
   { title: "Total PayOut", value: "₹0", sub: "Total Amount" },
-  { title: "Success Rate", value: "0%", sub: "Success Rate ( today )" },
-];
-
-const rows: TxnRow[] = [
-  { transactionId: "EX1177850329469152", date: "2026-05-11 01:11 PM", type: "PAYIN", amount: "₹1K", method: "UPI", utr: "Not Provided", status: "EXPIRED" },
-  { transactionId: "EX11778943450877473", date: "2026-05-11 03:27 PM", type: "PAYIN", amount: "₹1K", method: "UPI", utr: "Not Provided", status: "EXPIRED" },
-  { transactionId: "EX11778148206529376", date: "2026-05-07 02:05 PM", type: "PAYIN", amount: "₹12,13,12", method: "UPI", utr: "Not Provided", status: "EXPIRED" },
-  { transactionId: "EX1177814764362937", date: "2026-05-07 02:52 PM", type: "PAYIN", amount: "₹123", method: "UPI", utr: "Not Provided", status: "EXPIRED" },
+  { title: "Success Rate", value: "0%", sub: "Completion Rate" },
 ];
 
 const statusStyles: Record<TxnRow["status"], string> = {
@@ -36,6 +30,13 @@ const statusStyles: Record<TxnRow["status"], string> = {
   APPROVED: "bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400",
   PENDING: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300",
 };
+
+function toUiStatus(raw: string): TxnRow["status"] {
+  const s = raw.toUpperCase();
+  if (s.includes("APPROVED")) return "APPROVED";
+  if (s.includes("EXPIRED") || s.includes("REJECTED") || s.includes("REVOKED")) return "EXPIRED";
+  return "PENDING";
+}
 
 function OverviewCard({ card }: { card: SummaryCard }) {
   return (
@@ -48,6 +49,152 @@ function OverviewCard({ card }: { card: SummaryCard }) {
 }
 
 export default function CompanyDashboard() {
+  const [payIns, setPayIns] = useState<
+    {
+      id: string;
+      orderId: string;
+      amount: number;
+      status: string;
+      createdAtIso?: string;
+      assignedUpi?: string;
+      utrCode?: string;
+    }[]
+  >([]);
+  const [payOuts, setPayOuts] = useState<
+    {
+      id: string;
+      orderId: string;
+      amount: number;
+      status: string;
+      createdAtIso?: string;
+      bankName?: string;
+      remarks?: string;
+    }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [piRes, poRes] = await Promise.all([
+          fetch("/api/company/payins?limit=100", { credentials: "include" }),
+          fetch("/api/company/payouts?limit=100", { credentials: "include" }),
+        ]);
+        const pi = (await piRes.json()) as {
+          ok?: boolean;
+          payins?: {
+            id: string;
+            orderId: string;
+            amount: number;
+            status: string;
+            createdAtIso?: string;
+            assignedUpi?: string;
+            utrCode?: string;
+          }[];
+          error?: string;
+        };
+        const po = (await poRes.json()) as {
+          ok?: boolean;
+          payouts?: {
+            id: string;
+            orderId: string;
+            amount: number;
+            status: string;
+            createdAtIso?: string;
+            bankName?: string;
+            remarks?: string;
+          }[];
+          error?: string;
+        };
+        if (!mounted) return;
+        if (!piRes.ok || !poRes.ok || !pi.ok || !po.ok) {
+          setError(pi.error ?? po.error ?? "Could not load dashboard data.");
+          return;
+        }
+        setPayIns(pi.payins ?? []);
+        setPayOuts(po.payouts ?? []);
+      } catch {
+        if (mounted) setError("Network error.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const liveCards = useMemo(() => {
+    if (!payIns.length && !payOuts.length) return cards;
+    const payInAmount = payIns.reduce((s, t) => s + (t.amount || 0), 0);
+    const payOutAmount = payOuts.reduce((s, t) => s + (t.amount || 0), 0);
+    const all = [...payIns, ...payOuts];
+    const success = all.filter((t) => {
+      const s = t.status.toUpperCase();
+      return s === "APPROVED" || s === "APPROVED_BY_ADMIN" || s === "APPROVED_BY_AGENT";
+    }).length;
+    const rate = all.length ? ((success / all.length) * 100).toFixed(2) : "0.00";
+    return [
+      { title: "Total Payin Operations", value: String(payIns.length), sub: "Operations" },
+      { title: "Total Payout Operations", value: String(payOuts.length), sub: "Operations" },
+      { title: "Total Payin", value: `₹${Math.round(payInAmount).toLocaleString("en-IN")}`, sub: "Total Amount" },
+      { title: "Total PayOut", value: `₹${Math.round(payOutAmount).toLocaleString("en-IN")}`, sub: "Total Amount" },
+      { title: "Success Rate", value: `${rate}%`, sub: "Completion Rate" },
+    ];
+  }, [payIns, payOuts]);
+
+  const recentRows = useMemo(() => {
+    type M = { at: number; row: TxnRow };
+    const merged: M[] = [
+      ...payIns.map((t) => ({
+        at: t.createdAtIso ? new Date(t.createdAtIso).getTime() : 0,
+        row: {
+          id: t.id,
+          transactionId: t.orderId,
+          date: t.createdAtIso ? new Date(t.createdAtIso).toLocaleString("en-IN") : "—",
+          type: "PAYIN" as const,
+          amount: `₹${Math.round(t.amount || 0).toLocaleString("en-IN")}`,
+          method: "UPI",
+          utr: t.utrCode || "Not Provided",
+          status: toUiStatus(t.status),
+        },
+      })),
+      ...payOuts.map((t) => ({
+        at: t.createdAtIso ? new Date(t.createdAtIso).getTime() : 0,
+        row: {
+          id: t.id,
+          transactionId: t.orderId,
+          date: t.createdAtIso ? new Date(t.createdAtIso).toLocaleString("en-IN") : "—",
+          type: "PAYOUT" as const,
+          amount: `₹${Math.round(t.amount || 0).toLocaleString("en-IN")}`,
+          method: "BANK",
+          utr: t.remarks || "Not Provided",
+          status: toUiStatus(t.status),
+        },
+      })),
+    ];
+    merged.sort((a, b) => b.at - a.at);
+    return merged.slice(0, 20).map((m) => m.row);
+  }, [payIns, payOuts]);
+
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return recentRows;
+    return recentRows.filter(
+      (r) =>
+        r.transactionId.toLowerCase().includes(q) ||
+        r.utr.toLowerCase().includes(q) ||
+        r.status.toLowerCase().includes(q) ||
+        r.type.toLowerCase().includes(q) ||
+        r.id.includes(q),
+    );
+  }, [recentRows, searchQuery]);
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
@@ -61,17 +208,22 @@ export default function CompanyDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => (
+        {liveCards.map((card) => (
           <OverviewCard key={card.title} card={card} />
         ))}
       </div>
+
+      {loading && <div className="text-sm text-gray-500">Loading dashboard data...</div>}
+      {error && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{error}</div>}
 
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/3">
         <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">Recent Transactions</h3>
           <input
             type="text"
-            placeholder="Search txn ID, UTR..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search order ID, UTR, status…"
             className="h-9 min-w-[230px] rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-white/3 dark:text-gray-200"
           />
         </div>
@@ -90,29 +242,41 @@ export default function CompanyDashboard() {
               </TableRow>
             </TableHeader>
             <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {rows.map((row) => (
-                <TableRow key={row.transactionId} className="hover:bg-gray-50/60 dark:hover:bg-white/2">
-                  <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.transactionId}</TableCell>
-                  <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.date}</TableCell>
-                  <TableCell className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200">{row.type}</TableCell>
-                  <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.amount}</TableCell>
-                  <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.method}</TableCell>
-                  <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.utr}</TableCell>
-                  <TableCell className="px-4 py-3 text-sm">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyles[row.status]}`}>
-                      {row.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="px-4 py-3 text-sm">
-                    <button className="rounded-md border border-brand-200 px-2 py-1 text-brand-500 dark:border-brand-800 dark:text-brand-300">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    </button>
-                  </TableCell>
+              {filteredRows.length === 0 ? (
+                <TableRow>
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No transactions to show.
+                  </td>
                 </TableRow>
-              ))}
+              ) : (
+                filteredRows.map((row) => (
+                  <TableRow key={`${row.type}-${row.id}`} className="hover:bg-gray-50/60 dark:hover:bg-white/2">
+                    <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.transactionId}</TableCell>
+                    <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.date}</TableCell>
+                    <TableCell className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200">{row.type}</TableCell>
+                    <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.amount}</TableCell>
+                    <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.method}</TableCell>
+                    <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.utr}</TableCell>
+                    <TableCell className="px-4 py-3 text-sm">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyles[row.status]}`}>
+                        {row.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-sm">
+                      <Link
+                        href={`/company-dashboard/trx/${row.id}`}
+                        className="inline-flex rounded-md border border-brand-200 px-2 py-1 text-brand-500 hover:bg-brand-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-900/20"
+                        title="View details"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>

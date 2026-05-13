@@ -1,7 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 import { ApexOptions } from "apexcharts";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -18,32 +18,50 @@ const generateDates = (days: number) => {
   return dates;
 };
 
-const seed = (base: number, variance: number, len: number) =>
-  Array.from({ length: len }, () =>
-    Math.round(base + (Math.random() - 0.5) * 2 * variance)
-  );
-
-const DATA: Record<Period, { categories: string[]; success: number[]; failed: number[] }> = {
-  "7 Days": {
-    categories: generateDates(7),
-    success: seed(280, 80, 7),
-    failed: seed(18, 8, 7),
-  },
-  "30 Days": {
-    categories: generateDates(30),
-    success: seed(270, 90, 30),
-    failed: seed(17, 7, 30),
-  },
-  "3 Months": {
-    categories: generateDates(90),
-    success: seed(260, 100, 90),
-    failed: seed(16, 8, 90),
-  },
-};
-
 export default function TransactionVolumeChart() {
   const [period, setPeriod] = useState<Period>("30 Days");
-  const d = DATA[period];
+  const [payins, setPayins] = useState<Array<{ status: string; createdAtIso?: string }>>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/agent/transactions?type=PAYIN&limit=500", { credentials: "include" });
+        const data = (await res.json()) as { ok?: boolean; items?: Array<{ status: string; createdAtIso?: string }> };
+        if (!mounted || !res.ok || !data.ok || !data.items) return;
+        setPayins(data.items);
+      } catch {
+        // keep empty
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const d = useMemo(() => {
+    const days = period === "7 Days" ? 7 : period === "30 Days" ? 30 : 90;
+    const categories = generateDates(days);
+    const success = Array(days).fill(0) as number[];
+    const failed = Array(days).fill(0) as number[];
+
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (days - 1));
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    for (const t of payins) {
+      if (!t.createdAtIso) continue;
+      const ms = new Date(t.createdAtIso).getTime();
+      if (!Number.isFinite(ms)) continue;
+      const idx = Math.floor((ms - start.getTime()) / dayMs);
+      if (idx < 0 || idx >= days) continue;
+      if (t.status === "APPROVED") success[idx] += 1;
+      else if (t.status === "EXPIRED") failed[idx] += 1;
+    }
+
+    return { categories, success, failed };
+  }, [period, payins]);
 
   const options: ApexOptions = {
     chart: {

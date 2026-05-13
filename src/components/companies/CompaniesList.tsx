@@ -17,6 +17,8 @@ export type Company = {
   net_pay_in: number;
   net_pay_out: number;
   settlement_amount: number;
+  today_pay_in: number;
+  today_pay_out: number;
 };
 
 interface EditModalProps {
@@ -454,13 +456,13 @@ export default function CompaniesList() {
                         <span className="inline-flex items-center gap-1">
                           <span className="text-xs text-gray-500 dark:text-gray-400">In:</span>
                           <span className="rounded px-1.5 py-0.5 text-xs font-semibold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                            {fmt(0)}
+                            {fmt(c.today_pay_in ?? 0)}
                           </span>
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <span className="text-xs text-gray-500 dark:text-gray-400">Out:</span>
                           <span className="rounded px-1.5 py-0.5 text-xs font-semibold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                            {fmt(0)}
+                            {fmt(c.today_pay_out ?? 0)}
                           </span>
                         </span>
                       </div>

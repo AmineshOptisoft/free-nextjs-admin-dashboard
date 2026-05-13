@@ -1,0 +1,193 @@
+import type { RowDataPacket } from "mysql2/promise";
+
+/** Mirrors PayInList `PayInItem` UI shape */
+export type AgentPayInListItem = {
+  id: string;
+  ref: string;
+  amount: number;
+  status: "PENDING" | "APPROVED" | "EXPIRED" | "RECEIPT_PENDING" | "UNASSIGNED" | "PROCESSING";
+  orderId: string;
+  clientName: string;
+  clientUpi: string;
+  assignedUpi: string;
+  createdOn: string;
+  createdAtIso?: string;
+  totalAmount: number;
+  discountAmount: number;
+  assignedTo: string;
+  assignedOn: string;
+  remarks: string;
+  hasReceipt?: boolean;
+  utrCode?: string;
+};
+
+/** Mirrors PayOutList `PayOutItem` UI shape */
+export type AgentPayOutListItem = {
+  id: string;
+  ref: string;
+  amount: number;
+  status: "CREATED" | "UNASSIGNED" | "PENDING" | "PROCESSING" | "EXPIRED" | "APPROVED" | "DECLINED";
+  orderId: string;
+  clientName: string;
+  clientUpi: string;
+  bankName: string;
+  accountNo: string;
+  ifsc: string;
+  createdOn: string;
+  createdAtIso?: string;
+  assignedTo?: string;
+  assignedOn?: string;
+  remarks?: string;
+};
+
+export type TxRow = RowDataPacket & {
+  id: number;
+  random_code: string;
+  order_id: string;
+  amount: string | number;
+  status: string;
+  type: string;
+  client_name: string | null;
+  client_upi: string | null;
+  assigned_upi: string | null;
+  user_upi: string | null;
+  utr_code: string | null;
+  payment_image: string | null;
+  user_note: string | null;
+  created_at: Date | string | null;
+  assigned_date: Date | string | null;
+  bank_name: string | null;
+  bank_account_number: string | null;
+  ifsc_code: string | null;
+};
+
+function num(v: string | number): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const n = Number.parseFloat(String(v));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatDt(v: Date | string | null | undefined): string {
+  if (v == null) return "—";
+  const d = typeof v === "string" ? new Date(v) : v;
+  if (Number.isNaN(d.getTime())) return "—";
+  try {
+    return d.toLocaleString("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function toIso(v: Date | string | null | undefined): string | undefined {
+  if (v == null) return undefined;
+  const d = typeof v === "string" ? new Date(v) : v;
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+export function mapDbStatusToPayInUi(status: string): AgentPayInListItem["status"] {
+  switch (status) {
+    case "NOT_ASSIGNED":
+      return "UNASSIGNED";
+    case "PENDING":
+      return "PENDING";
+    case "PAID":
+      return "RECEIPT_PENDING";
+    case "APPROVED":
+    case "APPROVED_BY_AGENT":
+    case "APPROVED_BY_ADMIN":
+      return "APPROVED";
+    case "EXPIRED_APPROVED_BY_ADMIN":
+    case "EXPIRED_APPROVED_BY_AGENT":
+      return "APPROVED";
+    case "EXPIRED":
+      return "EXPIRED";
+    case "RE_ASSIGNED":
+      return "PROCESSING";
+    case "REJECTED":
+    case "REVOKED":
+      return "EXPIRED";
+    default:
+      return "PROCESSING";
+  }
+}
+
+export function mapDbStatusToPayOutUi(status: string): AgentPayOutListItem["status"] {
+  switch (status) {
+    case "NOT_ASSIGNED":
+      return "UNASSIGNED";
+    case "PENDING":
+      return "PENDING";
+    case "PAID":
+      return "PROCESSING";
+    case "APPROVED":
+    case "APPROVED_BY_AGENT":
+    case "APPROVED_BY_ADMIN":
+      return "APPROVED";
+    case "EXPIRED_APPROVED_BY_ADMIN":
+    case "EXPIRED_APPROVED_BY_AGENT":
+      return "APPROVED";
+    case "EXPIRED":
+      return "EXPIRED";
+    case "RE_ASSIGNED":
+      return "PROCESSING";
+    case "REJECTED":
+    case "REVOKED":
+      return "DECLINED";
+    default:
+      return "PENDING";
+  }
+}
+
+export function rowToPayInItem(r: TxRow): AgentPayInListItem {
+  const amt = num(r.amount);
+  const ui = mapDbStatusToPayInUi(r.status);
+  const assignedUpi = (r.assigned_upi ?? "").trim() || "—";
+  const utr = (r.utr_code ?? "").trim();
+  return {
+    id: String(r.id),
+    ref: `#${String(r.order_id).slice(0, 10)}`,
+    amount: amt,
+    status: ui,
+    orderId: r.order_id,
+    clientName: (r.client_name ?? "").trim() || "—",
+    clientUpi: (r.client_upi ?? r.user_upi ?? "").trim() || "—",
+    assignedUpi,
+    createdOn: formatDt(r.created_at),
+    createdAtIso: toIso(r.created_at),
+    totalAmount: amt,
+    discountAmount: 0,
+    assignedTo: "—",
+    assignedOn: formatDt(r.assigned_date),
+    remarks: (r.user_note ?? "").trim() || "—",
+    hasReceipt: Boolean(r.payment_image && String(r.payment_image).length > 0),
+    utrCode: utr || undefined,
+  };
+}
+
+export function rowToPayOutItem(r: TxRow): AgentPayOutListItem {
+  const amt = num(r.amount);
+  const ui = mapDbStatusToPayOutUi(r.status);
+  return {
+    id: String(r.id),
+    ref: `#${String(r.order_id).slice(0, 10)}`,
+    amount: amt,
+    status: ui,
+    orderId: r.order_id,
+    clientName: (r.client_name ?? "").trim() || "—",
+    clientUpi: (r.client_upi ?? r.user_upi ?? "").trim() || "—",
+    bankName: (r.bank_name ?? "").trim() || "—",
+    accountNo: (r.bank_account_number ?? "").trim() || "—",
+    ifsc: (r.ifsc_code ?? "").trim() || "—",
+    createdOn: formatDt(r.created_at),
+    createdAtIso: toIso(r.created_at),
+    remarks: (r.user_note ?? "").trim() || undefined,
+  };
+}

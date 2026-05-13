@@ -1,31 +1,18 @@
 "use client";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import type { AgentPayInListItem } from "@/lib/agent-transactions-map";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
+import { Modal } from "../ui/modal";
 import { PiContactlessPaymentFill } from "react-icons/pi";
+import CompanyPayInView from "./CompanyPayInView";
 
 const PAGE_SIZE = 5;
+const USE_DEMO_DATA = false;
 
 type PayInStatus = "PENDING" | "APPROVED" | "EXPIRED" | "RECEIPT_PENDING" | "UNASSIGNED" | "PROCESSING";
 
-interface PayInItem {
-  id: string;
-  ref: string;
-  amount: number;
-  status: PayInStatus;
-  orderId: string;
-  clientName: string;
-  clientUpi: string;
-  assignedUpi: string;
-  createdOn: string;
-  totalAmount: number;
-  discountAmount: number;
-  assignedTo: string;
-  assignedOn: string;
-  remarks: string;
-  hasReceipt?: boolean;
-  utrCode?: string;
-}
+type PayInItem = AgentPayInListItem;
 
 const mockData: PayInItem[] = [
   {
@@ -151,7 +138,9 @@ const statusStyle: Record<PayInStatus, string> = {
 };
 
 const showApprove = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING";
-const showDispute = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING";
+const showReject = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING" || s === "RECEIPT_PENDING";
+const showCancel = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING" || s === "RECEIPT_PENDING";
+const showActionButtons = (s: PayInStatus) => showApprove(s) || showReject(s) || showCancel(s);
 
 function MoneyIcon() {
   return (
@@ -196,9 +185,13 @@ function DetailField({ label, value, isLink }: { label: string; value: string; i
   );
 }
 
-function ApproveButton() {
+function ApproveButton({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
   return (
-    <button className="flex items-center gap-1.5 rounded-full bg-gray-900 dark:bg-white px-4 py-2 text-sm font-semibold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 transition-colors shadow-sm whitespace-nowrap">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-1.5 rounded-full bg-gray-900 dark:bg-white px-4 py-2 text-sm font-semibold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 transition-colors shadow-sm whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+    >
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
       </svg>
@@ -207,13 +200,43 @@ function ApproveButton() {
   );
 }
 
-function DisputeButton() {
+function RejectButton({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
   return (
-    <button className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+    >
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
       </svg>
-      Dispute
+      Reject
+    </button>
+  );
+}
+
+function CancelButton({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      </svg>
+      Cancel
+    </button>
+  );
+}
+
+function ViewButton({ onClick }: { onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-900/20 transition-colors"
+    >
+      View
     </button>
   );
 }
@@ -231,7 +254,17 @@ function ChevronBtn({ rotated, onClick }: { rotated: boolean; onClick: () => voi
   );
 }
 
-function PayInCard({ item }: { item: PayInItem }) {
+function PayInCard({
+  item,
+  onOpenAction,
+  onView,
+  busy,
+}: {
+  item: PayInItem;
+  onOpenAction: (item: PayInItem, initialAction: "approve" | "reject" | "cancel") => void;
+  onView?: () => void;
+  busy?: boolean;
+}) {
   // Desktop: chevron toggles extra details (Total Amount, Discount, etc.)
   // Mobile: chevron toggles all details
   const [extraOpen, setExtraOpen] = useState(false);
@@ -253,7 +286,8 @@ function PayInCard({ item }: { item: PayInItem }) {
 
       {/* right-side action buttons */}
       <div className="flex items-center gap-2 shrink-0">
-        {showDispute(item.status) && <DisputeButton />}
+        {showApprove(item.status) && <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />}
+        {onView && <ViewButton onClick={onView} />}
         {item.hasReceipt && (
           <button className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
             <ReceiptIcon />
@@ -267,12 +301,6 @@ function PayInCard({ item }: { item: PayInItem }) {
         <span className="hidden lg:inline-flex">
           <ChevronBtn rotated={extraOpen} onClick={() => setExtraOpen((v) => !v)} />
         </span>
-        {/* Mobile approve (in header) */}
-        {showApprove(item.status) && (
-          <span className="lg:hidden">
-            <ApproveButton />
-          </span>
-        )}
       </div>
     </div>
   );
@@ -304,11 +332,7 @@ function PayInCard({ item }: { item: PayInItem }) {
           <div className="shrink-0">
             <DetailField label="Created On" value={item.createdOn} />
           </div>
-          {showApprove(item.status) && (
-            <div className="ml-auto shrink-0">
-              <ApproveButton />
-            </div>
-          )}
+          <div className="ml-auto shrink-0" />
         </div>
 
         {/* Extra rows (toggled by chevron) */}
@@ -357,9 +381,80 @@ function PayInCard({ item }: { item: PayInItem }) {
 
 const STATUS_FILTER_OPTIONS = ["All", "PENDING", "APPROVED", "EXPIRED", "RECEIPT_PENDING", "UNASSIGNED", "PROCESSING"];
 
+type ActionType = "approve" | "reject" | "cancel";
+
 export default function PayInList() {
+  const [panelRole] = useState<"admin" | "agent" | "company">(() => {
+    if (typeof window === "undefined") return "admin";
+    const role = localStorage.getItem("tepay_role");
+    return role === "agent" || role === "company" ? role : "admin";
+  });
+  const [resolvedRole, setResolvedRole] = useState<"admin" | "agent" | "company">(panelRole);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { ok?: boolean; role?: "admin" | "agent" | "company" };
+        if (!mounted || !data.ok || !data.role) return;
+        setResolvedRole(data.role);
+        localStorage.setItem("tepay_role", data.role);
+      } catch {
+        // fallback to localStorage role
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const [activeTab, setActiveTab] = useState<PayInStatus | "ALL">("ALL");
   const [showFilter, setShowFilter] = useState(false);
+
+  const [items, setItems] = useState<PayInItem[] | null>(null);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<PayInItem | null>(null);
+  const [modalAction, setModalAction] = useState<ActionType>("approve");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalUtr, setModalUtr] = useState("");
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  const loadPayIns = useCallback(async () => {
+    setListLoading(true);
+    setListError(null);
+    const endpoint =
+      resolvedRole === "admin"
+        ? "/api/admin/transactions?type=PAYIN&limit=500"
+        : "/api/agent/transactions?type=PAYIN&limit=500";
+    try {
+      const res = await fetch(endpoint, { credentials: "include" });
+      if (res.status === 401) {
+        setItems(null);
+        return;
+      }
+      const data = (await res.json()) as { ok?: boolean; items?: PayInItem[]; error?: string };
+      if (!res.ok || !data.ok || !data.items) {
+        setItems(null);
+        setListError(data.error ?? "Could not load transactions.");
+        return;
+      }
+      setItems(data.items);
+    } catch {
+      setItems(null);
+      setListError("Network error.");
+    } finally {
+      setListLoading(false);
+    }
+  }, [resolvedRole]);
+
+  useEffect(() => {
+    if (resolvedRole === "company") return;
+    void loadPayIns();
+  }, [resolvedRole, loadPayIns]);
 
   // Advanced search state
   const [search, setSearch] = useState("");
@@ -370,19 +465,20 @@ export default function PayInList() {
   // Pagination
   const [page, setPage] = useState(1);
 
-  const totalOrders = 90674;
+  const baseData = items ?? (USE_DEMO_DATA ? mockData : []);
+  const totalOrders = baseData.length;
 
   const counts: Partial<Record<PayInStatus | "ALL", number>> = {
-    ALL: mockData.length,
-    PENDING: mockData.filter((d) => d.status === "PENDING").length,
-    APPROVED: mockData.filter((d) => d.status === "APPROVED").length,
-    EXPIRED: mockData.filter((d) => d.status === "EXPIRED").length,
-    RECEIPT_PENDING: mockData.filter((d) => d.status === "RECEIPT_PENDING").length,
-    UNASSIGNED: mockData.filter((d) => d.status === "UNASSIGNED").length,
-    PROCESSING: mockData.filter((d) => d.status === "PROCESSING").length,
+    ALL: baseData.length,
+    PENDING: baseData.filter((d) => d.status === "PENDING").length,
+    APPROVED: baseData.filter((d) => d.status === "APPROVED").length,
+    EXPIRED: baseData.filter((d) => d.status === "EXPIRED").length,
+    RECEIPT_PENDING: baseData.filter((d) => d.status === "RECEIPT_PENDING").length,
+    UNASSIGNED: baseData.filter((d) => d.status === "UNASSIGNED").length,
+    PROCESSING: baseData.filter((d) => d.status === "PROCESSING").length,
   };
 
-  const filtered = mockData.filter((d) => {
+  const filtered = baseData.filter((d) => {
     if (activeTab !== "ALL" && d.status !== activeTab) return false;
     if (search && !d.orderId.toLowerCase().includes(search.toLowerCase()) &&
       !d.clientName.toLowerCase().includes(search.toLowerCase()) &&
@@ -395,13 +491,81 @@ export default function PayInList() {
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  function openActionModal(item: PayInItem, action: ActionType) {
+    setSelectedItem(item);
+    setModalAction(action);
+    setModalUtr(item.utrCode ?? "");
+    setModalError(null);
+    setModalOpen(true);
+  }
+
+  async function runAction(item: PayInItem, action: ActionType, utrInput?: string) {
+    setActionBusyId(item.id);
+    setModalError(null);
+    let status = "";
+    if (action === "approve") status = resolvedRole === "admin" ? "APPROVED_BY_ADMIN" : "APPROVED_BY_AGENT";
+    if (action === "reject") status = "REJECTED";
+    if (action === "cancel") status = resolvedRole === "admin" ? "RE_ASSIGNED" : "REVOKED";
+
+    const body: Record<string, string> = { status };
+    if (action === "approve" && (utrInput ?? "").trim()) body.utr_code = (utrInput ?? "").trim();
+
+    try {
+      const endpoint =
+        resolvedRole === "admin" ? `/api/admin/payins/${item.id}/status` : `/api/agent/payins/${item.id}/status`;
+      const res = await fetch(endpoint, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setModalError(data.error ?? "Could not update transaction.");
+        return;
+      }
+      setModalOpen(false);
+      setSelectedItem(null);
+      setModalUtr("");
+      await loadPayIns();
+    } catch {
+      setModalError("Network error.");
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
+  if (resolvedRole === "company") {
+    return <CompanyPayInView />;
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Page header */}
-      <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-        <PiContactlessPaymentFill className="w-6 h-6" />
-        <h1 className="text-xl font-bold">Pay In</h1>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+          <PiContactlessPaymentFill className="w-6 h-6" />
+          <h1 className="text-xl font-bold">Pay In</h1>
+        </div>
+      {items !== null && (
+          <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+            {resolvedRole === "admin"
+              ? "Live: all PayIn requests for admin actions (max 500)."
+              : "Live: transactions assigned to your agent account (max 500)."}
+          </p>
+        )}
       </div>
+
+      {listLoading && (
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          {resolvedRole === "admin" ? "Loading admin payins…" : "Checking agent session…"}
+        </div>
+      )}
+      {listError && items === null && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+          {listError}
+        </div>
+      )}
 
       {showFilter && (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
@@ -584,7 +748,15 @@ export default function PayInList() {
             No transactions found.
           </div>
         ) : (
-          paginated.map((item) => <PayInCard key={item.id} item={item} />)
+          paginated.map((item) => (
+            <PayInCard
+              key={item.id}
+              item={item}
+              onOpenAction={openActionModal}
+              onView={() => (window.location.href = `/transactions/${item.id}`)}
+              busy={actionBusyId === item.id}
+            />
+          ))
         )}
       </div>
 
@@ -595,6 +767,66 @@ export default function PayInList() {
         pageSize={PAGE_SIZE}
         onPageChange={setPage}
       />
+
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setModalError(null);
+        }}
+        className="max-w-xl p-0 overflow-hidden"
+        showCloseButton={false}
+      >
+        <div className="rounded-xl bg-white dark:bg-gray-900">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-gray-800">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">PayIn Action</h3>
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              x
+            </button>
+          </div>
+          <div className="space-y-4 px-5 py-4">
+            {selectedItem && (
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {selectedItem.orderId} · {selectedItem.clientName} · ₹{selectedItem.amount.toLocaleString("en-IN")}
+              </p>
+            )}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                UTR Code (optional, but recommended for approve)
+              </label>
+              <input
+                value={modalUtr}
+                onChange={(e) => setModalUtr(e.target.value)}
+                placeholder="Enter UTR if missing"
+                className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              />
+            </div>
+            {modalError && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {modalError}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <ApproveButton
+                onClick={() => selectedItem && void runAction(selectedItem, "approve", modalUtr)}
+                disabled={!selectedItem || actionBusyId === selectedItem?.id}
+              />
+              <RejectButton
+                onClick={() => selectedItem && void runAction(selectedItem, "reject", modalUtr)}
+                disabled={!selectedItem || actionBusyId === selectedItem?.id}
+              />
+              <CancelButton
+                onClick={() => selectedItem && void runAction(selectedItem, "cancel", modalUtr)}
+                disabled={!selectedItem || actionBusyId === selectedItem?.id}
+              />
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

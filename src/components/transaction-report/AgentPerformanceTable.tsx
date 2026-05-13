@@ -29,26 +29,37 @@ export default function AgentPerformanceTable({ rows }: { rows: AgentPerformance
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {rows.map((row) => (
-              <TableRow key={row.agentName} className="hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
-                <TableCell className="px-5 py-3 text-sm font-medium text-brand-600 dark:text-brand-400">{row.agentName}</TableCell>
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalTransactions}</TableCell>
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalAmount}</TableCell>
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.completed}</TableCell>
-                <TableCell className="px-5 py-3 text-sm">
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                      row.completionRate === "0%"
-                        ? "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
-                        : "bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400"
-                    }`}
-                  >
-                    {row.completionRate}
-                  </span>
-                </TableCell>
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.avgProcessingTime}</TableCell>
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell className="px-5 py-6 text-sm text-gray-400">No agent-assigned transactions found.</TableCell>
+                <TableCell className="px-5 py-6 text-sm text-gray-400">-</TableCell>
+                <TableCell className="px-5 py-6 text-sm text-gray-400">-</TableCell>
+                <TableCell className="px-5 py-6 text-sm text-gray-400">-</TableCell>
+                <TableCell className="px-5 py-6 text-sm text-gray-400">-</TableCell>
+                <TableCell className="px-5 py-6 text-sm text-gray-400">-</TableCell>
               </TableRow>
-            ))}
+            ) : (
+              rows.map((row) => (
+                <TableRow key={row.agentName} className="hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
+                  <TableCell className="px-5 py-3 text-sm font-medium text-brand-600 dark:text-brand-400">{row.agentName}</TableCell>
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalTransactions}</TableCell>
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalAmount}</TableCell>
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.completed}</TableCell>
+                  <TableCell className="px-5 py-3 text-sm">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                        row.completionRate === "0%"
+                          ? "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
+                          : "bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400"
+                      }`}
+                    >
+                      {row.completionRate}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.avgProcessingTime}</TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>

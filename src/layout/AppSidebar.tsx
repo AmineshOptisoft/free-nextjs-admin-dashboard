@@ -146,6 +146,7 @@ const AppSidebar: React.FC = () => {
 
   /* Panel switcher */
   const [panel, setPanel] = useState<PanelType>("admin");
+  const [lockedRole, setLockedRole] = useState<PanelType | null>(null);
   const [panelDropOpen, setPanelDropOpen] = useState(false);
   const panelDropRef = useRef<HTMLDivElement>(null);
 
@@ -155,8 +156,31 @@ const AppSidebar: React.FC = () => {
     if (saved === "admin" || saved === "agent" || saved === "company") setPanel(saved);
   }, []);
 
+  /* Lock panel from current login role if available */
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { ok?: boolean; role?: PanelType };
+        if (!mounted || !data.ok || !data.role) return;
+        setLockedRole(data.role);
+        setPanel(data.role);
+        localStorage.setItem("tepay_panel", data.role);
+        localStorage.setItem("tepay_role", data.role);
+      } catch {
+        // keep previous behavior on failures
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   /* Save panel choice */
   const switchPanel = (p: PanelType) => {
+    if (lockedRole && p !== lockedRole) return;
     setPanel(p);
     setPanelDropOpen(false);
     localStorage.setItem("tepay_panel", p);
@@ -173,8 +197,9 @@ const AppSidebar: React.FC = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const effectivePanel = lockedRole ?? panel;
   const currentSections =
-    panel === "admin" ? adminSections : panel === "agent" ? agentSections : companySections;
+    effectivePanel === "admin" ? adminSections : effectivePanel === "agent" ? agentSections : companySections;
 
   /* Submenu state */
   const [openSubmenu, setOpenSubmenu] = useState<{ sectionKey: string; index: number } | null>(null);
@@ -198,7 +223,7 @@ const AppSidebar: React.FC = () => {
       });
     });
     if (!matched) setOpenSubmenu(null);
-  }, [pathname, isActive, panel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pathname, isActive, effectivePanel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (openSubmenu !== null) {
@@ -334,19 +359,19 @@ const AppSidebar: React.FC = () => {
       {/* ── Panel Switcher ── */}
       <div ref={panelDropRef} className={`relative mb-5 ${showLabel ? "" : "flex justify-center"}`}>
         <button
-          onClick={() => setPanelDropOpen((v) => !v)}
+          onClick={() => !lockedRole && setPanelDropOpen((v) => !v)}
           className={`flex items-center gap-2 rounded-xl border transition-colors w-full
-            ${PANEL_THEME[panel].borderBgText}
+            ${PANEL_THEME[effectivePanel].borderBgText}
             ${showLabel ? "px-3 py-2.5" : "justify-center p-2.5"}`}
         >
           {/* Icon */}
-          <span className={`flex items-center justify-center w-6 h-6 rounded-lg shrink-0 ${PANEL_THEME[panel].iconBg}`}>
-            {panel === "admin" ? (
+          <span className={`flex items-center justify-center w-6 h-6 rounded-lg shrink-0 ${PANEL_THEME[effectivePanel].iconBg}`}>
+            {effectivePanel === "admin" ? (
               <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
                   d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-            ) : panel === "agent" ? (
+            ) : effectivePanel === "agent" ? (
               <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
                   d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -362,28 +387,32 @@ const AppSidebar: React.FC = () => {
           {showLabel && (
             <>
               <div className="flex-1 text-left min-w-0">
-                <p className="text-xs font-bold leading-tight truncate">{PANEL_LABELS[panel]}</p>
-                <p className="text-[10px] opacity-60 leading-tight">Switch panel</p>
+                <p className="text-xs font-bold leading-tight truncate">{PANEL_LABELS[effectivePanel]}</p>
+                <p className="text-[10px] opacity-60 leading-tight">
+                  {lockedRole ? "Role locked by login" : "Switch panel"}
+                </p>
               </div>
-              <svg
-                className={`w-4 h-4 shrink-0 transition-transform duration-200 ${panelDropOpen ? "rotate-180" : ""}`}
-                fill="none" viewBox="0 0 24 24" stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              {!lockedRole && (
+                <svg
+                  className={`w-4 h-4 shrink-0 transition-transform duration-200 ${panelDropOpen ? "rotate-180" : ""}`}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              )}
             </>
           )}
         </button>
 
         {/* Dropdown options */}
-        {panelDropOpen && showLabel && (
+        {panelDropOpen && showLabel && !lockedRole && (
           <div className="absolute top-full left-0 right-0 mt-1.5 z-50 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg overflow-hidden">
             {(["admin", "agent", "company"] as PanelType[]).map((p) => (
               <button
                 key={p}
                 onClick={() => switchPanel(p)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors
-                  ${panel === p ? PANEL_THEME[p].activeItemBg : "hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                  ${effectivePanel === p ? PANEL_THEME[p].activeItemBg : "hover:bg-gray-50 dark:hover:bg-gray-800"}`}
               >
                 <span className={`flex items-center justify-center w-6 h-6 rounded-lg shrink-0 ${PANEL_THEME[p].iconBg}`}>
                   {p === "admin" ? (
@@ -410,7 +439,7 @@ const AppSidebar: React.FC = () => {
                     {p === "admin" ? "Full system access" : p === "agent" ? "Operations access" : "Company operations"}
                   </p>
                 </div>
-                {panel === p && (
+                {effectivePanel === p && (
                   <svg className={`w-4 h-4 shrink-0 ${p === "admin" ? "text-blue-500" : p === "agent" ? "text-purple-500" : "text-teal-500"}`}
                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />

@@ -117,7 +117,7 @@ export default function EditAgentModal({ agent, onClose, onSaved }: Props) {
               <option value="blocked">blocked</option>
             </select>
           </div>
-          <div className="sm:col-span-2">
+          {/* <div className="sm:col-span-2">
             <label className={labelCls}>New password (optional)</label>
             <input
               type="password"
@@ -126,7 +126,7 @@ export default function EditAgentModal({ agent, onClose, onSaved }: Props) {
               className={inputCls}
               disabled={saving}
             />
-          </div>
+          </div> */}
         </div>
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50">
           <button type="button" onClick={onClose} disabled={saving} className="rounded-xl border px-4 py-2 text-sm font-semibold">

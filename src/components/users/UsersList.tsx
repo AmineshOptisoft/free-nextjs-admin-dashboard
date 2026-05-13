@@ -1,19 +1,28 @@
 "use client";
-import React, { useState } from "react";
-import CreateUserModal from "./CreateUserModal";
+
+import Link from "next/link";
+import React, { useCallback, useEffect, useState } from "react";
+import type { PayMethodFinancial } from "@/lib/transactions-pay-method-financials";
+import CreateUserModal, { type AgentStaffEditPayload } from "./CreateUserModal";
 import Pagination from "../ui/Pagination";
 import { UserIcon } from "@/icons";
 
 const PAGE_SIZE = 6;
 
 type UserStatus = "active" | "inactive";
-type UserRole   = "peer" | "agent" | "merchant" | "admin";
+type UserRole = "peer" | "agent" | "merchant" | "admin";
 
-interface UserTag { label: string; color: string }
+interface UserTag {
+  label: string;
+  color: string;
+}
 interface FinancialOverview {
-  totalPayIn: number; totalPayOut: number;
-  successPayIn: number; failedPayIn: number;
-  successPayOut: number; failedPayOut: number;
+  totalPayIn: number;
+  totalPayOut: number;
+  successPayIn: number;
+  failedPayIn: number;
+  successPayOut: number;
+  failedPayOut: number;
 }
 
 interface User {
@@ -33,46 +42,144 @@ interface User {
   financial: FinancialOverview;
 }
 
-const mockUsers: User[] = [
-  { id:"1",  name:"Jagdamba rajputi tailor", username:"fjhg@123",        status:"active",   role:"peer",     tags:[{label:"UPI",color:"bg-blue-100 text-blue-600"},{label:"PEER",color:"bg-gray-100 text-gray-600"},{label:"PAYIN",color:"bg-indigo-100 text-indigo-600"}], indicatorColor:"bg-green-400", lastSeen:"Never", assignedTo:"Kanhal33",   payInEnabled:true,  payOutEnabled:false, operationType:"PayIn & PayOut", gateway:"UPI & Bank Transfer", financial:{totalPayIn:452367,totalPayOut:0,successPayIn:420000,failedPayIn:32367,successPayOut:0,failedPayOut:0} },
-  { id:"2",  name:"Sarariya @(gap2",        username:"Sarariya@(gap2@jsjddk", status:"active", role:"peer",  tags:[{label:"UPI",color:"bg-blue-100 text-blue-600"},{label:"PEER",color:"bg-gray-100 text-gray-600"},{label:"PAYIN",color:"bg-indigo-100 text-indigo-600"}], indicatorColor:"bg-green-400", lastSeen:"Never", assignedTo:"Swariya105", payInEnabled:true,  payOutEnabled:false, operationType:"PayIn & PayOut", gateway:"UPI & Bank Transfer", financial:{totalPayIn:312450,totalPayOut:0,successPayIn:298000,failedPayIn:14450,successPayOut:0,failedPayOut:0} },
-  { id:"3",  name:"Rahul Mehta",             username:"rahulm@upi",       status:"active",   role:"agent",   tags:[{label:"UPI",color:"bg-blue-100 text-blue-600"},{label:"PAYIN",color:"bg-indigo-100 text-indigo-600"},{label:"PAYOUT",color:"bg-purple-100 text-purple-600"}], indicatorColor:"bg-blue-400",  lastSeen:"2h ago",  assignedTo:"Leo_admin",  payInEnabled:true,  payOutEnabled:true,  operationType:"PayIn & PayOut", gateway:"UPI & Bank Transfer", financial:{totalPayIn:876540,totalPayOut:345678,successPayIn:820000,failedPayIn:56540,successPayOut:330000,failedPayOut:15678} },
-  { id:"4",  name:"Priya Sharma",            username:"priyas@bank",      status:"active",   role:"merchant",tags:[{label:"PEER",color:"bg-gray-100 text-gray-600"},{label:"PAYIN",color:"bg-indigo-100 text-indigo-600"}], indicatorColor:"bg-green-400", lastSeen:"Just now", assignedTo:"Rajesh_ops", payInEnabled:true,  payOutEnabled:false, operationType:"PayIn",          gateway:"Bank Transfer",       financial:{totalPayIn:1234567,totalPayOut:0,successPayIn:1190000,failedPayIn:44567,successPayOut:0,failedPayOut:0} },
-  { id:"5",  name:"Suresh Kumar",            username:"sureshk@gpay",     status:"inactive", role:"peer",    tags:[{label:"UPI",color:"bg-blue-100 text-blue-600"},{label:"PEER",color:"bg-gray-100 text-gray-600"}], indicatorColor:"bg-gray-300",  lastSeen:"3d ago",  assignedTo:"Neha_fin",   payInEnabled:false, payOutEnabled:false, operationType:"PayIn & PayOut", gateway:"UPI",                 financial:{totalPayIn:56780,totalPayOut:12345,successPayIn:50000,failedPayIn:6780,successPayOut:11000,failedPayOut:1345} },
-  { id:"6",  name:"Anjali Nair",             username:"anjalin@okaxis",   status:"active",   role:"agent",   tags:[{label:"UPI",color:"bg-blue-100 text-blue-600"},{label:"PAYIN",color:"bg-indigo-100 text-indigo-600"},{label:"PAYOUT",color:"bg-purple-100 text-purple-600"}], indicatorColor:"bg-green-400", lastSeen:"5m ago",  assignedTo:"Leo_admin",  payInEnabled:true,  payOutEnabled:true,  operationType:"PayIn & PayOut", gateway:"UPI & Bank Transfer", financial:{totalPayIn:654321,totalPayOut:234567,successPayIn:620000,failedPayIn:34321,successPayOut:220000,failedPayOut:14567} },
-  { id:"7",  name:"Vikram Patel",            username:"vikramp@sbi",      status:"inactive", role:"merchant",tags:[{label:"PEER",color:"bg-gray-100 text-gray-600"},{label:"PAYOUT",color:"bg-purple-100 text-purple-600"}], indicatorColor:"bg-red-400",   lastSeen:"1w ago",  assignedTo:"Suresh_mgr", payInEnabled:false, payOutEnabled:true,  operationType:"PayOut",         gateway:"Bank Transfer",       financial:{totalPayIn:0,totalPayOut:456789,successPayIn:0,failedPayIn:0,successPayOut:440000,failedPayOut:16789} },
-  { id:"8",  name:"Deepak Gupta",            username:"deepakg@paytm",    status:"active",   role:"peer",    tags:[{label:"UPI",color:"bg-blue-100 text-blue-600"},{label:"PEER",color:"bg-gray-100 text-gray-600"},{label:"PAYIN",color:"bg-indigo-100 text-indigo-600"}], indicatorColor:"bg-green-400", lastSeen:"Never",   assignedTo:"Kanhal33",   payInEnabled:true,  payOutEnabled:false, operationType:"PayIn",          gateway:"UPI",                 financial:{totalPayIn:234560,totalPayOut:0,successPayIn:220000,failedPayIn:14560,successPayOut:0,failedPayOut:0} },
-];
+type ApiStaff = {
+  id: string;
+  fullname: string;
+  username: string;
+  email: string | null;
+  phone: string | null;
+  role_label: string;
+  pay_in_enabled: boolean;
+  pay_out_enabled: boolean;
+  operation_type: string;
+  gateway: string;
+  tags: string[];
+  status: string;
+  last_seen_label: string;
+  assigned_to: string;
+  financial?: PayMethodFinancial;
+};
 
-const fmt = (n: number) => n > 0 ? "₹" + n.toLocaleString("en-IN") : "₹0";
+const emptyFinancial: FinancialOverview = {
+  totalPayIn: 0,
+  totalPayOut: 0,
+  successPayIn: 0,
+  failedPayIn: 0,
+  successPayOut: 0,
+  failedPayOut: 0,
+};
 
-/* ── Toggle switch ── */
-function Toggle({ enabled, color }: { enabled: boolean; color: "green" | "red" }) {
-  const [on, setOn] = useState(enabled);
-  const trackOn  = color === "green" ? "bg-green-400" : "bg-red-400";
+function roleLabelToUserRole(roleLabel: string): UserRole {
+  const r = roleLabel.toLowerCase();
+  if (r.includes("merchant")) return "merchant";
+  if (r.includes("agent") && !r.includes("sub")) return "agent";
+  if (r.includes("admin")) return "admin";
+  return "peer";
+}
+
+const TAG_COLORS: Record<string, string> = {
+  UPI: "bg-blue-100 text-blue-600",
+  PEER: "bg-gray-100 text-gray-600",
+  PAYIN: "bg-indigo-100 text-indigo-600",
+  PAYOUT: "bg-purple-100 text-purple-600",
+};
+
+function tagsToUserTags(tags: string[]): UserTag[] {
+  return tags.map((t) => ({ label: t, color: TAG_COLORS[t] ?? "bg-gray-100 text-gray-600" }));
+}
+
+function staffToUser(s: ApiStaff): User {
+  const status: UserStatus = s.status === "inactive" ? "inactive" : "active";
+  return {
+    id: s.id,
+    name: s.fullname || s.username,
+    username: s.username,
+    status,
+    role: roleLabelToUserRole(s.role_label),
+    tags: tagsToUserTags(s.tags.length ? s.tags : ["STAFF"]),
+    indicatorColor: status === "active" ? "bg-green-400" : "bg-gray-300",
+    lastSeen: s.last_seen_label || "Never",
+    assignedTo: s.assigned_to,
+    payInEnabled: s.pay_in_enabled,
+    payOutEnabled: s.pay_out_enabled,
+    operationType: s.operation_type,
+    gateway: s.gateway,
+    financial: s.financial
+      ? {
+          totalPayIn: s.financial.totalPayIn,
+          totalPayOut: s.financial.totalPayOut,
+          successPayIn: s.financial.successPayIn,
+          failedPayIn: s.financial.failedPayIn,
+          successPayOut: s.financial.successPayOut,
+          failedPayOut: s.financial.failedPayOut,
+        }
+      : { ...emptyFinancial },
+  };
+}
+
+function staffToEditPayload(s: ApiStaff): AgentStaffEditPayload {
+  return {
+    id: s.id,
+    fullname: s.fullname,
+    email: s.email ?? "",
+    phone: s.phone ?? "",
+    role: s.role_label,
+    username: s.username,
+    enablePayIn: s.pay_in_enabled,
+    enablePayOut: s.pay_out_enabled,
+    opType: s.operation_type,
+    gateway: s.gateway,
+    tags: s.tags.length ? s.tags : ["UPI", "PEER"],
+  };
+}
+
+const fmt = (n: number) => (n > 0 ? "₹" + n.toLocaleString("en-IN") : "₹0");
+
+function Toggle({
+  enabled,
+  color,
+  disabled,
+  onChange,
+}: {
+  enabled: boolean;
+  color: "green" | "red";
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const trackOn = color === "green" ? "bg-green-400" : "bg-red-400";
   return (
     <button
-      onClick={() => setOn((v) => !v)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${on ? trackOn : "bg-gray-200 dark:bg-gray-700"}`}
+      type="button"
+      disabled={disabled}
+      onClick={() => !disabled && onChange(!enabled)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+        enabled ? trackOn : "bg-gray-200 dark:bg-gray-700"
+      } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
     >
-      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
+      <span
+        className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+          enabled ? "translate-x-6" : "translate-x-1"
+        }`}
+      />
     </button>
   );
 }
 
-/* ── Financial Overview accordion ── */
 function FinancialOverview({ data }: { data: User["financial"] }) {
   return (
     <div className="grid grid-cols-2 gap-3 px-1 pt-3">
       {[
-        { label: "Total Pay In",    value: fmt(data.totalPayIn) },
-        { label: "Total Pay Out",   value: fmt(data.totalPayOut) },
-        { label: "Success Pay In",  value: fmt(data.successPayIn) },
-        { label: "Failed Pay In",   value: fmt(data.failedPayIn) },
+        { label: "Total Pay In", value: fmt(data.totalPayIn) },
+        { label: "Total Pay Out", value: fmt(data.totalPayOut) },
+        { label: "Success Pay In", value: fmt(data.successPayIn) },
+        { label: "Failed Pay In", value: fmt(data.failedPayIn) },
         { label: "Success Pay Out", value: fmt(data.successPayOut) },
-        { label: "Failed Pay Out",  value: fmt(data.failedPayOut) },
+        { label: "Failed Pay Out", value: fmt(data.failedPayOut) },
       ].map((r) => (
-        <div key={r.label} className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2">
+        <div
+          key={r.label}
+          className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2"
+        >
           <span className="text-xs text-gray-500 dark:text-gray-400">{r.label}</span>
           <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{r.value}</span>
         </div>
@@ -81,36 +188,51 @@ function FinancialOverview({ data }: { data: User["financial"] }) {
   );
 }
 
-/* ── Single user card ── */
-function UserCard({ user }: { user: User }) {
+function UserCard({
+  user,
+  patchBusy,
+  onPatchFlags,
+  onEdit,
+  onDelete,
+}: {
+  user: User;
+  patchBusy: boolean;
+  onPatchFlags: (payIn: boolean, payOut: boolean) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const [finOpen, setFinOpen] = useState(false);
 
   return (
     <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
       <div className="p-4">
-        {/* Avatar + name */}
         <div className="flex items-start gap-3 mb-3">
           <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 shrink-0">
             <svg className="w-5 h-5 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.8}
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+              />
             </svg>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate">{user.name}</p>
             <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{user.username}</p>
           </div>
         </div>
 
-        {/* Tags row */}
         <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
           {user.tags.map((t) => (
-            <span key={t.label} className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${t.color}`}>{t.label}</span>
+            <span key={t.label} className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${t.color}`}>
+              {t.label}
+            </span>
           ))}
           <span className={`w-2.5 h-2.5 rounded-full ${user.indicatorColor} ml-1`} />
         </div>
 
-        {/* Activity row */}
-        <div className="flex items-center gap-2 mb-4 text-xs text-gray-400 dark:text-gray-500">
+        <div className="flex items-center gap-2 mb-3 text-xs text-gray-400 dark:text-gray-500">
           <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -122,32 +244,66 @@ function UserCard({ user }: { user: User }) {
           <span className="truncate">{user.assignedTo}</span>
         </div>
 
-        {/* Pay In / Pay Out toggles */}
+        <div className="flex gap-2 mb-3">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.04]"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="flex-1 rounded-lg border border-red-200 dark:border-red-900/40 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10"
+          >
+            Delete
+          </button>
+        </div>
+
         <div className="grid grid-cols-2 gap-2">
-          <div className={`flex items-center justify-between rounded-xl px-3 py-2 ${user.payInEnabled ? "bg-green-50 dark:bg-green-900/10" : "bg-gray-50 dark:bg-gray-800"}`}>
+          <div
+            className={`flex items-center justify-between rounded-xl px-3 py-2 ${
+              user.payInEnabled ? "bg-green-50 dark:bg-green-900/10" : "bg-gray-50 dark:bg-gray-800"
+            }`}
+          >
             <div className="flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4" />
               </svg>
               <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Pay In</span>
             </div>
-            <Toggle enabled={user.payInEnabled} color="green" />
+            <Toggle
+              enabled={user.payInEnabled}
+              color="green"
+              disabled={patchBusy}
+              onChange={(next) => onPatchFlags(next, user.payOutEnabled)}
+            />
           </div>
-          <div className={`flex items-center justify-between rounded-xl px-3 py-2 ${user.payOutEnabled ? "bg-purple-50 dark:bg-purple-900/10" : "bg-red-50 dark:bg-red-900/10"}`}>
+          <div
+            className={`flex items-center justify-between rounded-xl px-3 py-2 ${
+              user.payOutEnabled ? "bg-purple-50 dark:bg-purple-900/10" : "bg-red-50 dark:bg-red-900/10"
+            }`}
+          >
             <div className="flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8V20m0 0l4-4m-4 4l-4-4" />
               </svg>
               <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Pay Out</span>
             </div>
-            <Toggle enabled={user.payOutEnabled} color="red" />
+            <Toggle
+              enabled={user.payOutEnabled}
+              color="red"
+              disabled={patchBusy}
+              onChange={(next) => onPatchFlags(user.payInEnabled, next)}
+            />
           </div>
         </div>
       </div>
 
-      {/* Financial Overview accordion */}
       <div className="border-t border-gray-100 dark:border-gray-800">
         <button
+          type="button"
           onClick={() => setFinOpen((v) => !v)}
           className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
         >
@@ -157,7 +313,12 @@ function UserCard({ user }: { user: User }) {
             </svg>
             Financial Overview
           </div>
-          <svg className={`w-4 h-4 transition-transform duration-200 ${finOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg
+            className={`w-4 h-4 transition-transform duration-200 ${finOpen ? "rotate-180" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
@@ -171,8 +332,15 @@ function UserCard({ user }: { user: User }) {
   );
 }
 
-/* ── List row view ── */
-function UserRow({ user }: { user: User }) {
+function UserRow({
+  user,
+  onEdit,
+  onDelete,
+}: {
+  user: User;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div className="flex items-center gap-4 px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors">
       <div className="flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/30 shrink-0">
@@ -185,11 +353,23 @@ function UserRow({ user }: { user: User }) {
           <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{user.name}</span>
           <span className="text-xs text-gray-400 dark:text-gray-500">{user.username}</span>
           {user.tags.map((t) => (
-            <span key={t.label} className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${t.color}`}>{t.label}</span>
+            <span key={t.label} className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${t.color}`}>
+              {t.label}
+            </span>
           ))}
           <span className={`w-2 h-2 rounded-full ${user.indicatorColor}`} />
         </div>
-        <p className="text-xs text-gray-400 mt-0.5">{user.assignedTo} · {user.lastSeen}</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          {user.assignedTo} · {user.lastSeen}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button type="button" onClick={onEdit} className="text-xs font-semibold text-blue-600 hover:underline">
+          Edit
+        </button>
+        <button type="button" onClick={onDelete} className="text-xs font-semibold text-red-600 hover:underline">
+          Delete
+        </button>
       </div>
       <div className="flex items-center gap-3 shrink-0">
         <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
@@ -200,7 +380,11 @@ function UserRow({ user }: { user: User }) {
           <span className={`w-1.5 h-1.5 rounded-full ${user.payOutEnabled ? "bg-purple-400" : "bg-gray-300"}`} />
           Pay Out
         </div>
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${user.status === "active" ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-500"}`}>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            user.status === "active" ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-500"
+          }`}
+        >
           {user.status}
         </span>
       </div>
@@ -208,69 +392,217 @@ function UserRow({ user }: { user: User }) {
   );
 }
 
-/* ── Main page ── */
+function roleFilterMatch(roleFilter: string, u: User): boolean {
+  if (roleFilter === "All Roles") return true;
+  const map: Record<string, UserRole> = {
+    Peer: "peer",
+    Agent: "agent",
+    Merchant: "merchant",
+    Admin: "admin",
+  };
+  const want = map[roleFilter];
+  return want === undefined || u.role === want;
+}
+
+function opFilterMatch(opFilter: string, u: User): boolean {
+  const t = u.operationType;
+  if (opFilter === "PayIn & PayOut") return t === "PayIn & PayOut";
+  if (opFilter === "PayIn") return t === "PayIn Only" || t === "PayIn & PayOut";
+  if (opFilter === "PayOut") return t === "PayOut Only" || t === "PayIn & PayOut";
+  return true;
+}
+
+function gwFilterMatch(gwFilter: string, u: User): boolean {
+  const g = u.gateway;
+  if (gwFilter === "UPI & Bank Transfer") return g === "UPI & Bank Transfer";
+  if (gwFilter === "UPI") return g === "UPI Only" || g === "UPI & Bank Transfer";
+  if (gwFilter === "Bank Transfer") return g === "Bank Transfer Only" || g === "UPI & Bank Transfer";
+  return true;
+}
+
 export default function UsersList() {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [viewMode,     setViewMode]     = useState<"grid" | "list">("grid");
-  const [searchOpen,   setSearchOpen]   = useState(false);
-  const [filtersOpen,  setFiltersOpen]  = useState(false);
-  const [searchQuery,  setSearchQuery]  = useState("");
-  const [roleFilter,   setRoleFilter]   = useState("All Roles");
-  const [opFilter,     setOpFilter]     = useState("PayIn & PayOut");
-  const [gwFilter,     setGwFilter]     = useState("UPI & Bank Transfer");
+  const [editStaff, setEditStaff] = useState<AgentStaffEditPayload | null>(null);
+  const [rawStaff, setRawStaff] = useState<ApiStaff[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [patchingId, setPatchingId] = useState<string | null>(null);
 
-  // Pagination
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("All Roles");
+  const [opFilter, setOpFilter] = useState("PayIn & PayOut");
+  const [gwFilter, setGwFilter] = useState("UPI & Bank Transfer");
   const [page, setPage] = useState(1);
 
-  const filtered = mockUsers.filter((u) => {
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/agent/staff", { credentials: "include" });
+      const data = (await res.json()) as { ok?: boolean; staff?: ApiStaff[]; error?: string };
+      if (res.status === 401) {
+        setLoadError("AGENT_AUTH");
+        setRawStaff([]);
+        setUsers([]);
+        return;
+      }
+      if (!res.ok || !data.ok || !data.staff) {
+        setLoadError(data.error ?? "Could not load staff.");
+        setRawStaff([]);
+        setUsers([]);
+        return;
+      }
+      setRawStaff(data.staff);
+      setUsers(data.staff.map(staffToUser));
+    } catch {
+      setLoadError("Network error.");
+      setRawStaff([]);
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function patchFlags(staffId: string, payIn: boolean, payOut: boolean) {
+    setPatchingId(staffId);
+    try {
+      const res = await fetch(`/api/agent/staff/${staffId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pay_in_enabled: payIn, pay_out_enabled: payOut }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setLoadError(data.error ?? "Could not update.");
+        return;
+      }
+      await load();
+    } catch {
+      setLoadError("Network error.");
+    } finally {
+      setPatchingId(null);
+    }
+  }
+
+  async function deleteStaff(staffId: string) {
+    if (!window.confirm("Delete this staff member?")) return;
+    try {
+      const res = await fetch(`/api/agent/staff/${staffId}`, { method: "DELETE", credentials: "include" });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setLoadError(data.error ?? "Could not delete.");
+        return;
+      }
+      await load();
+    } catch {
+      setLoadError("Network error.");
+    }
+  }
+
+  const filtered = users.filter((u) => {
     if (statusFilter !== "all" && u.status !== statusFilter) return false;
-    if (searchQuery && !u.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !u.username.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (
+      searchQuery &&
+      !u.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !u.username.toLowerCase().includes(searchQuery.toLowerCase())
+    ) {
+      return false;
+    }
+    if (!roleFilterMatch(roleFilter, u)) return false;
+    if (!opFilterMatch(opFilter, u)) return false;
+    if (!gwFilterMatch(gwFilter, u)) return false;
     return true;
   });
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  if (loadError === "AGENT_AUTH") {
+    return (
+      <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/20 px-6 py-8 text-center">
+        <p className="text-gray-800 dark:text-gray-200 font-medium mb-2">Agent sign-in required</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Manage staff after signing in as an agent.</p>
+        <Link
+          href="/signin/agent"
+          className="inline-flex rounded-full bg-purple-600 hover:bg-purple-700 px-5 py-2.5 text-sm font-semibold text-white"
+        >
+          Agent sign in
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
-      {/* ── Page header ── */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
           <UserIcon className="w-6 h-6" />
-          <h1 className="text-lg font-bold">Payment Method</h1>
+          <div>
+            <h1 className="text-lg font-bold">Payment Method</h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Rows in pay_methods for this agent</p>
+          </div>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
+          type="button"
+          onClick={() => {
+            setEditStaff(null);
+            setShowCreateModal(true);
+          }}
           className="inline-flex items-center gap-2 rounded-full bg-blue-500 hover:bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm shrink-0"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
           </svg>
-          Create User
+          Add staff
         </button>
       </div>
 
-      {/* ── Toolbar ── */}
+      {loadError && loadError !== "AGENT_AUTH" && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+          {loadError}
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {/* Left: Search + Filters toggles */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setSearchOpen((v) => !v); if (filtersOpen) setFiltersOpen(false); }}
+            type="button"
+            onClick={() => {
+              setSearchOpen((v) => !v);
+              if (filtersOpen) setFiltersOpen(false);
+            }}
             className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium border transition-colors ${
               searchOpen
                 ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent"
                 : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
             }`}
           >
-            {searchOpen
-              ? <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-              : <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            }
+            {searchOpen ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            )}
             Search
           </button>
           <button
-            onClick={() => { setFiltersOpen((v) => !v); if (searchOpen) setSearchOpen(false); }}
+            type="button"
+            onClick={() => {
+              setFiltersOpen((v) => !v);
+              if (searchOpen) setSearchOpen(false);
+            }}
             className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium border transition-colors ${
               filtersOpen
                 ? "bg-blue-500 text-white border-transparent"
@@ -284,26 +616,47 @@ export default function UsersList() {
           </button>
         </div>
 
-        {/* Right: Status pills + view icons */}
         <div className="flex items-center gap-2">
           {(["all", "active", "inactive"] as const).map((s) => (
-            <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }}
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                setStatusFilter(s);
+                setPage(1);
+              }}
               className={`rounded-full px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
                 statusFilter === s
                   ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
                   : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
               }`}
-            >{s === "all" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}</button>
+            >
+              {s === "all" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
           ))}
           <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden ml-1">
-            <button onClick={() => setViewMode("grid")}
-              className={`p-2 transition-colors ${viewMode === "grid" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700"}`}>
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              className={`p-2 transition-colors ${
+                viewMode === "grid"
+                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                  : "bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700"
+              }`}
+            >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
               </svg>
             </button>
-            <button onClick={() => setViewMode("list")}
-              className={`p-2 transition-colors ${viewMode === "list" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700"}`}>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              className={`p-2 transition-colors ${
+                viewMode === "list"
+                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                  : "bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700"
+              }`}
+            >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
@@ -312,11 +665,15 @@ export default function UsersList() {
         </div>
       </div>
 
-      {/* ── Search panel ── */}
       {searchOpen && (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-4 py-3">
           <div className="relative">
-            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
@@ -324,49 +681,90 @@ export default function UsersList() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search users by name, email, or ID..."
+              placeholder="Search by name or username…"
               className="w-full rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-10 pr-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
             />
           </div>
         </div>
       )}
 
-      {/* ── Filters panel ── */}
       {filtersOpen && (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-5 py-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">User Role</label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                User Role
+              </label>
               <div className="relative">
-                <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer">
-                  {["All Roles","Peer","Agent","Merchant","Admin"].map((r) => <option key={r}>{r}</option>)}
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
+                >
+                  {["All Roles", "Peer", "Agent", "Merchant", "Admin"].map((r) => (
+                    <option key={r}>
+                      {r}
+                    </option>
+                  ))}
                 </select>
-                <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Operation Type</label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                Operation Type
+              </label>
               <div className="relative">
-                <select value={opFilter} onChange={(e) => setOpFilter(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer">
-                  {["PayIn & PayOut","PayIn","PayOut"].map((o) => <option key={o}>{o}</option>)}
+                <select
+                  value={opFilter}
+                  onChange={(e) => setOpFilter(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
+                >
+                  {["PayIn & PayOut", "PayIn", "PayOut"].map((o) => (
+                    <option key={o}>
+                      {o}
+                    </option>
+                  ))}
                 </select>
-                <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Gateway</label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                Gateway
+              </label>
               <div className="relative">
-                <select value={gwFilter} onChange={(e) => setGwFilter(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer">
-                  {["UPI & Bank Transfer","UPI","Bank Transfer"].map((g) => <option key={g}>{g}</option>)}
+                <select
+                  value={gwFilter}
+                  onChange={(e) => setGwFilter(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
+                >
+                  {["UPI & Bank Transfer", "UPI", "Bank Transfer"].map((g) => (
+                    <option key={g}>
+                      {g}
+                    </option>
+                  ))}
                 </select>
-                <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
@@ -375,39 +773,73 @@ export default function UsersList() {
         </div>
       )}
 
-      {/* ── User Directory heading ── */}
       <div className="flex items-center gap-2">
-        <h2 className="text-base font-bold text-gray-800 dark:text-white">User Directory</h2>
+        <h2 className="text-base font-bold text-gray-800 dark:text-white">Staff directory</h2>
         <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:text-gray-300">
-          {filtered.length} users
+          {loading ? "…" : `${filtered.length} staff`}
         </span>
       </div>
 
-      {/* ── Create User Modal ── */}
-      {showCreateModal && <CreateUserModal onClose={() => setShowCreateModal(false)} />}
+      {showCreateModal && (
+        <CreateUserModal
+          editStaff={editStaff}
+          onClose={() => {
+            setShowCreateModal(false);
+            setEditStaff(null);
+          }}
+          onSuccess={() => void load()}
+        />
+      )}
 
-      {/* ── Grid / List ── */}
-      {filtered.length === 0 ? (
+      {loading ? (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] py-14 text-center text-gray-400">
-          No users found.
+          Loading…
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] py-14 text-center text-gray-400">
+          No staff yet. Use Add staff to create one.
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {paginated.map((u) => <UserCard key={u.id} user={u} />)}
+          {paginated.map((u) => (
+            <UserCard
+              key={u.id}
+              user={u}
+              patchBusy={patchingId === u.id}
+              onPatchFlags={(payIn, payOut) => void patchFlags(u.id, payIn, payOut)}
+              onEdit={() => {
+                const s = rawStaff.find((x) => x.id === u.id);
+                if (s) {
+                  setEditStaff(staffToEditPayload(s));
+                  setShowCreateModal(true);
+                }
+              }}
+              onDelete={() => void deleteStaff(u.id)}
+            />
+          ))}
         </div>
       ) : (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
-          {paginated.map((u) => <UserRow key={u.id} user={u} />)}
+          {paginated.map((u) => (
+            <UserRow
+              key={u.id}
+              user={u}
+              onEdit={() => {
+                const s = rawStaff.find((x) => x.id === u.id);
+                if (s) {
+                  setEditStaff(staffToEditPayload(s));
+                  setShowCreateModal(true);
+                }
+              }}
+              onDelete={() => void deleteStaff(u.id)}
+            />
+          ))}
         </div>
       )}
 
-      {/* Pagination */}
-      <Pagination
-        total={filtered.length}
-        page={page}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
-      />
+      {!loading && filtered.length > 0 && (
+        <Pagination total={filtered.length} page={page} pageSize={PAGE_SIZE} onPageChange={setPage} />
+      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import EditAgentModal from "./EditAgentModal";
+import ResetAgentPasswordModal from "./ResetAgentPasswordModal";
 import Pagination from "../ui/Pagination";
 import type { Agent, AgentDetailApi } from "./types";
 
@@ -77,21 +78,51 @@ function mapApiToView(a: AgentDetailApi) {
 }
 
 type ActivityStatus = "EXPIRED" | "APPROVED" | "PENDING" | "PROCESSING" | "FAILED";
-type ActivityType   = "PAYIN" | "PAYOUT";
+type ActivityType = "PAYIN" | "PAYOUT";
 interface Activity {
-  id: string; date: string; orderId: string; type: ActivityType; amount: number; status: ActivityStatus;
+  id: string;
+  date: string;
+  orderId: string;
+  type: ActivityType;
+  amount: number;
+  statusLabel: string;
+  category: ActivityStatus;
 }
 
-function getMockActivity(agentId: string): Activity[] {
-  const base = parseInt(agentId) * 1000;
-  return [
-    { id:"1", date:"5/8/2026", orderId:`EXT${base}177823454545518338`, type:"PAYIN",  amount:5000,  status:"EXPIRED" },
-    { id:"2", date:"5/8/2026", orderId:`EXT${base}177823418578626526`, type:"PAYIN",  amount:1000,  status:"EXPIRED" },
-    { id:"3", date:"5/8/2026", orderId:`EXT${base}177823415236912369`, type:"PAYIN",  amount:20000, status:"EXPIRED" },
-    { id:"4", date:"5/8/2026", orderId:`EXT${base}177823398651116181`, type:"PAYIN",  amount:500,   status:"EXPIRED" },
-    { id:"5", date:"5/8/2026", orderId:`EXT${base}177823312345678901`, type:"PAYIN",  amount:3000,  status:"APPROVED" },
-    { id:"6", date:"5/7/2026", orderId:`EXT${base}177812345678901234`, type:"PAYOUT", amount:2000,  status:"PROCESSING" },
-  ];
+function mapDbToActivityCategory(raw: string): ActivityStatus {
+  const s = raw.toUpperCase();
+  if (s.includes("APPROVED")) return "APPROVED";
+  if (s.includes("EXPIRED")) return "EXPIRED";
+  if (s.includes("REJECTED") || s.includes("REVOKED") || s.includes("FAILED")) return "FAILED";
+  if (s.includes("NOT_ASSIGNED") || s === "PAID" || s.includes("RE_ASSIGNED")) return "PROCESSING";
+  if (s.includes("PENDING")) return "PENDING";
+  return "PENDING";
+}
+
+function mapApiRowToActivity(t: {
+  id: string;
+  orderId: string;
+  amount: number;
+  status: string;
+  type: string;
+  createdAt: string | null;
+}): Activity {
+  const d = t.createdAt ? new Date(t.createdAt) : null;
+  const dateStr =
+    d && !Number.isNaN(d.getTime())
+      ? `${d.toLocaleDateString("en-IN", { day: "numeric", month: "numeric", year: "numeric" })}\n${d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}`
+      : "—";
+  const typ: ActivityType = t.type === "PAYOUT" ? "PAYOUT" : "PAYIN";
+  const statusUpper = (t.status || "").toUpperCase();
+  return {
+    id: t.id,
+    date: dateStr,
+    orderId: t.orderId,
+    type: typ,
+    amount: t.amount,
+    statusLabel: statusUpper.replace(/_/g, " ") || "—",
+    category: mapDbToActivityCategory(statusUpper),
+  };
 }
 
 const activityStatusStyle: Record<ActivityStatus, string> = {
@@ -108,6 +139,32 @@ const activityTypeStyle: Record<ActivityType, string> = {
 };
 
 const fmt = (n: number) => "₹" + Math.abs(n).toLocaleString("en-IN");
+
+/** Row from `GET /api/admin/agents/[id]/pay-methods` (same shape as agent staff list). */
+type PayMethodStaffApi = {
+  id: string;
+  fullname: string;
+  username: string;
+  email: string | null;
+  phone?: string | null;
+  role_label?: string;
+  gateway: string;
+  operation_type: string;
+  pay_in_enabled: boolean;
+  pay_out_enabled: boolean;
+  status: string;
+  last_seen_label: string;
+  tags: string[];
+  assigned_to: string;
+  financial?: {
+    totalPayIn: number;
+    totalPayOut: number;
+    successPayIn: number;
+    failedPayIn: number;
+    successPayOut: number;
+    failedPayOut: number;
+  };
+};
 
 const ACT_PAGE_SIZE = 5;
 
@@ -136,6 +193,206 @@ function InfoRow({ label, value, valueClass = "" }: { label: string; value: stri
   );
 }
 
+const PAY_METHOD_TAG_COLORS: Record<string, string> = {
+  UPI: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300",
+  BANK: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  PEER: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  PAYIN: "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300",
+  PAYOUT: "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300",
+};
+
+function formatFinRupee(n: number) {
+  return n > 0 ? "₹" + n.toLocaleString("en-IN") : "₹0";
+}
+
+function PayMethodToggle({
+  enabled,
+  color,
+}: {
+  enabled: boolean;
+  color: "green" | "red";
+}) {
+  const trackOn = color === "green" ? "bg-green-400" : "bg-red-400";
+  return (
+    <span
+      role="presentation"
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+        enabled ? trackOn : "bg-gray-200 dark:bg-gray-700"
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+          enabled ? "translate-x-6" : "translate-x-1"
+        }`}
+      />
+    </span>
+  );
+}
+
+function AgentPayMethodFinancialOverview({ data }: { data: NonNullable<PayMethodStaffApi["financial"]> }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 px-1 pt-3">
+      {[
+        { label: "Total Pay In", value: formatFinRupee(data.totalPayIn) },
+        { label: "Total Pay Out", value: formatFinRupee(data.totalPayOut) },
+        { label: "Success Pay In", value: formatFinRupee(data.successPayIn) },
+        { label: "Failed Pay In", value: formatFinRupee(data.failedPayIn) },
+        { label: "Success Pay Out", value: formatFinRupee(data.successPayOut) },
+        { label: "Failed Pay Out", value: formatFinRupee(data.failedPayOut) },
+      ].map((r) => (
+        <div
+          key={r.label}
+          className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2"
+        >
+          <span className="text-xs text-gray-500 dark:text-gray-400">{r.label}</span>
+          <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{r.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Staff-directory style card (matches agent Payment Method / Users list). */
+function AgentPayMethodCard({ pm }: { pm: PayMethodStaffApi }) {
+  const [finOpen, setFinOpen] = useState(false);
+  const fin = pm.financial ?? {
+    totalPayIn: 0,
+    totalPayOut: 0,
+    successPayIn: 0,
+    failedPayIn: 0,
+    successPayOut: 0,
+    failedPayOut: 0,
+  };
+  const tags = pm.tags?.length ? pm.tags : ["UPI"];
+  const indicator = pm.status === "active" ? "bg-green-400" : "bg-gray-300";
+  const displayName = pm.fullname?.trim() || pm.username;
+  const subName = pm.username;
+
+  return (
+    <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 shrink-0">
+            <svg className="w-5 h-5 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.8}
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+              />
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate">{displayName}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{subName}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
+          {tags.map((t) => (
+            <span
+              key={`${pm.id}-${t}`}
+              className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${PAY_METHOD_TAG_COLORS[t] ?? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}
+            >
+              {t}
+            </span>
+          ))}
+          <span className={`w-2.5 h-2.5 rounded-full ${indicator} ml-1`} title={pm.status} />
+        </div>
+
+        <div className="flex items-center gap-2 mb-1 text-xs text-gray-400 dark:text-gray-500 flex-wrap">
+          <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+          <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>{pm.last_seen_label}</span>
+          <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          <span className="truncate">{pm.assigned_to || "—"}</span>
+        </div>
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-3">{pm.gateway}</p>
+
+        <div className="flex gap-2 mb-3">
+          <button
+            type="button"
+            disabled
+            title="Edit agent ke Payment Method page se hota hai"
+            className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 py-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-70"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            disabled
+            title="Delete agent ke Payment Method page se hota hai"
+            className="flex-1 rounded-lg border border-red-100 dark:border-red-900/30 py-1.5 text-xs font-semibold text-gray-400 dark:text-red-900/40 cursor-not-allowed opacity-70"
+          >
+            Delete
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div
+            className={`flex items-center justify-between rounded-xl px-3 py-2 ${
+              pm.pay_in_enabled ? "bg-green-50 dark:bg-green-900/10" : "bg-gray-50 dark:bg-gray-800"
+            }`}
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <svg className="w-3.5 h-3.5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4" />
+              </svg>
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">Pay In</span>
+            </div>
+            <PayMethodToggle enabled={pm.pay_in_enabled} color="green" />
+          </div>
+          <div
+            className={`flex items-center justify-between rounded-xl px-3 py-2 ${
+              pm.pay_out_enabled ? "bg-purple-50 dark:bg-purple-900/10" : "bg-red-50 dark:bg-red-900/10"
+            }`}
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <svg className="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8V20m0 0l4-4m-4 4l-4-4" />
+              </svg>
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">Pay Out</span>
+            </div>
+            <PayMethodToggle enabled={pm.pay_out_enabled} color="red" />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 dark:border-gray-800">
+        <button
+          type="button"
+          onClick={() => setFinOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
+        >
+          <div className="flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            Financial Overview
+          </div>
+          <svg
+            className={`w-4 h-4 transition-transform duration-200 ${finOpen ? "rotate-180" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {finOpen ? (
+          <div className="px-4 pb-4">
+            <AgentPayMethodFinancialOverview data={fin} />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function AgentDetail({ id }: { id: string }) {
   const [detail, setDetail] = useState<AgentDetailApi | null>(null);
   const [loading, setLoading] = useState(true);
@@ -143,43 +400,119 @@ export default function AgentDetail({ id }: { id: string }) {
   const [notFound, setNotFound] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [toggleBusy, setToggleBusy] = useState(false);
-  const [resetBusy, setResetBusy] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"accounts" | "stats">("stats");
   const [actPage, setActPage] = useState(1);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [txError, setTxError] = useState<string | null>(null);
+  const [payMethods, setPayMethods] = useState<PayMethodStaffApi[]>([]);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActPage(1);
+  }, [id]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     setNotFound(false);
+    setTxError(null);
+    setActivities([]);
+    setPayMethods([]);
+    setAccountsError(null);
     const idNum = Number(id);
     if (!Number.isInteger(idNum) || idNum < 1) {
       setNotFound(true);
       setDetail(null);
+      setPayMethods([]);
+      setAccountsError(null);
       setLoading(false);
       return;
     }
     try {
-      const res = await fetch(`/api/agents/${id}`, { credentials: "include" });
-      const data = (await res.json()) as { ok?: boolean; agent?: AgentDetailApi; error?: string };
-      if (res.status === 401) {
+      const [agentRes, txRes, pmRes] = await Promise.all([
+        fetch(`/api/agents/${id}`, { credentials: "include" }),
+        fetch(`/api/admin/agents/${id}/transactions`, { credentials: "include" }),
+        fetch(`/api/admin/agents/${id}/pay-methods`, { credentials: "include" }),
+      ]);
+
+      if (agentRes.status === 401) {
         setLoadError("Admin sign-in required.");
         setDetail(null);
+        setPayMethods([]);
+        setAccountsError(null);
         return;
       }
-      if (res.status === 404) {
+
+      const agentData = (await agentRes.json().catch(() => ({}))) as {
+        ok?: boolean;
+        agent?: AgentDetailApi;
+        error?: string;
+      };
+
+      if (agentRes.status === 404) {
         setNotFound(true);
         setDetail(null);
+        setPayMethods([]);
+        setAccountsError(null);
         return;
       }
-      if (!res.ok || !data.ok || !data.agent) {
-        setLoadError(data.error ?? "Could not load agent.");
+      if (!agentRes.ok || !agentData.ok || !agentData.agent) {
+        setLoadError(agentData.error ?? "Could not load agent.");
         setDetail(null);
+        setPayMethods([]);
+        setAccountsError(null);
         return;
       }
-      setDetail(data.agent);
+
+      setDetail(agentData.agent);
+
+      const txData = (await txRes.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        transactions?: {
+          id: string;
+          orderId: string;
+          amount: number;
+          status: string;
+          type: string;
+          createdAt: string | null;
+        }[];
+      };
+
+      if (txRes.ok && txData.ok && Array.isArray(txData.transactions)) {
+        setActivities(txData.transactions.map(mapApiRowToActivity));
+        setTxError(null);
+      } else {
+        setActivities([]);
+        setTxError(txData.error ?? "Could not load transactions.");
+      }
+
+      const pmData = (await pmRes.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        staff?: PayMethodStaffApi[];
+      };
+      if (pmRes.ok && pmData.ok && Array.isArray(pmData.staff)) {
+        const normalized: PayMethodStaffApi[] = pmData.staff.map((s) => {
+          const row = s as PayMethodStaffApi & { tags?: string[]; assigned_to?: string };
+          return {
+            ...row,
+            tags: Array.isArray(row.tags) ? row.tags : ["UPI"],
+            assigned_to: typeof row.assigned_to === "string" ? row.assigned_to : "",
+          };
+        });
+        setPayMethods(normalized);
+        setAccountsError(null);
+      } else {
+        setPayMethods([]);
+        setAccountsError(pmData.error ?? "Could not load payment accounts.");
+      }
     } catch {
       setLoadError("Network error.");
       setDetail(null);
+      setPayMethods([]);
+      setAccountsError(null);
     } finally {
       setLoading(false);
     }
@@ -189,20 +522,41 @@ export default function AgentDetail({ id }: { id: string }) {
     void load();
   }, [load]);
 
-  const activity = getMockActivity(id);
-  const actPaginated = activity.slice((actPage - 1) * ACT_PAGE_SIZE, actPage * ACT_PAGE_SIZE);
-  const totalTx = activity.length;
-  const completed = activity.filter((a) => a.status === "APPROVED").length;
-  const processing = activity.filter((a) => a.status === "PROCESSING").length;
-  const failed = activity.filter((a) => a.status === "EXPIRED" || a.status === "FAILED").length;
-  const payins = activity.filter((a) => a.type === "PAYIN");
-  const completedPayins = payins.filter((a) => a.status === "APPROVED").length;
-  const payinVolume = payins.reduce((s, a) => s + a.amount, 0);
-  const payinSuccess = payins.length ? ((completedPayins / payins.length) * 100).toFixed(2) : "0.00";
-  const payouts = activity.filter((a) => a.type === "PAYOUT");
-  const completedPayouts = payouts.filter((a) => a.status === "APPROVED").length;
-  const payoutVolume = payouts.reduce((s, a) => s + a.amount, 0);
-  const payoutSuccess = payouts.length ? ((completedPayouts / payouts.length) * 100).toFixed(2) : "0.00";
+  const actPaginated = useMemo(
+    () => activities.slice((actPage - 1) * ACT_PAGE_SIZE, actPage * ACT_PAGE_SIZE),
+    [activities, actPage],
+  );
+
+  const stats = useMemo(() => {
+    const totalTx = activities.length;
+    const completed = activities.filter((a) => a.category === "APPROVED").length;
+    const processing = activities.filter(
+      (a) => a.category === "PROCESSING" || a.category === "PENDING",
+    ).length;
+    const failed = activities.filter((a) => a.category === "EXPIRED" || a.category === "FAILED").length;
+    const payins = activities.filter((a) => a.type === "PAYIN");
+    const payouts = activities.filter((a) => a.type === "PAYOUT");
+    const completedPayins = payins.filter((a) => a.category === "APPROVED").length;
+    const payinVolume = payins.reduce((s, a) => s + a.amount, 0);
+    const payinSuccess = payins.length ? ((completedPayins / payins.length) * 100).toFixed(2) : "0.00";
+    const completedPayouts = payouts.filter((a) => a.category === "APPROVED").length;
+    const payoutVolume = payouts.reduce((s, a) => s + a.amount, 0);
+    const payoutSuccess = payouts.length ? ((completedPayouts / payouts.length) * 100).toFixed(2) : "0.00";
+    return {
+      totalTx,
+      completed,
+      processing,
+      failed,
+      payinsCount: payins.length,
+      completedPayins,
+      payinVolume,
+      payinSuccess,
+      payoutsCount: payouts.length,
+      completedPayouts,
+      payoutVolume,
+      payoutSuccess,
+    };
+  }, [activities]);
 
   async function patchStatus(next: string) {
     if (!detail) return;
@@ -218,26 +572,6 @@ export default function AgentDetail({ id }: { id: string }) {
       if (res.ok && data.ok) await load();
     } finally {
       setToggleBusy(false);
-    }
-  }
-
-  async function resetPassword() {
-    if (!detail) return;
-    const pwd = window.prompt("New password (min 6 characters recommended):");
-    if (pwd == null || pwd === "") return;
-    setResetBusy(true);
-    try {
-      const res = await fetch(`/api/agents/${detail.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ password: pwd }),
-      });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !data.ok) window.alert(data.error ?? "Could not reset password.");
-      else window.alert("Password updated.");
-    } finally {
-      setResetBusy(false);
     }
   }
 
@@ -307,11 +641,10 @@ export default function AgentDetail({ id }: { id: string }) {
           </button>
           <button
             type="button"
-            disabled={resetBusy}
-            onClick={() => void resetPassword()}
-            className="rounded-xl bg-red-500 hover:bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm disabled:opacity-50"
+            onClick={() => setPasswordModalOpen(true)}
+            className="rounded-xl bg-violet-600 hover:bg-violet-700 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm"
           >
-            Reset Password
+            New password
           </button>
         </div>
       </div>
@@ -379,7 +712,16 @@ export default function AgentDetail({ id }: { id: string }) {
                 </div>
               ))}
             </div>
-            <button className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm">
+            <button
+              type="button"
+              className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm"
+              onClick={() => {
+                setActiveTab("stats");
+                setTimeout(() => {
+                  document.getElementById("recent-activity")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }, 0);
+              }}
+            >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -413,15 +755,21 @@ export default function AgentDetail({ id }: { id: string }) {
               {/* Section heading */}
               <h2 className="text-base font-bold text-gray-800 dark:text-white">Transaction Statistics</h2>
 
+              {txError && (
+                <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+                  {txError}
+                </div>
+              )}
+
               {/* 4 stat cards */}
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                <StatCard label="Total Transactions" value={totalTx} iconBg="bg-blue-100 dark:bg-blue-900/30"
+                <StatCard label="Total Transactions" value={stats.totalTx} iconBg="bg-blue-100 dark:bg-blue-900/30"
                   icon={<svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>} />
-                <StatCard label="Completed" value={completed} iconBg="bg-green-100 dark:bg-green-900/30"
+                <StatCard label="Completed" value={stats.completed} iconBg="bg-green-100 dark:bg-green-900/30"
                   icon={<svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
-                <StatCard label="Processing" value={processing} iconBg="bg-yellow-100 dark:bg-yellow-900/30"
+                <StatCard label="Processing" value={stats.processing} iconBg="bg-yellow-100 dark:bg-yellow-900/30"
                   icon={<svg className="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>} />
-                <StatCard label="Failed/Rejected" value={failed} iconBg="bg-red-100 dark:bg-red-900/30"
+                <StatCard label="Failed/Rejected" value={stats.failed} iconBg="bg-red-100 dark:bg-red-900/30"
                   icon={<svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
               </div>
 
@@ -438,10 +786,16 @@ export default function AgentDetail({ id }: { id: string }) {
                     <h3 className="text-sm font-bold text-green-700 dark:text-green-400">Pay-In Statistics</h3>
                   </div>
                   {[
-                    { label: "Total Pay-Ins:",       value: payins.length.toString() },
-                    { label: "Completed Pay-Ins:",   value: completedPayins.toString() },
-                    { label: "Total Volume:",        value: payinVolume >= 1000 ? `₹${(payinVolume/1000).toFixed(0)}K` : fmt(payinVolume) },
-                    { label: "Success Rate:",        value: `${payinSuccess}%` },
+                    { label: "Total Pay-Ins:", value: stats.payinsCount.toString() },
+                    { label: "Completed Pay-Ins:", value: stats.completedPayins.toString() },
+                    {
+                      label: "Total Volume:",
+                      value:
+                        stats.payinVolume >= 1000
+                          ? `₹${(stats.payinVolume / 1000).toFixed(0)}K`
+                          : fmt(stats.payinVolume),
+                    },
+                    { label: "Success Rate:", value: `${stats.payinSuccess}%` },
                   ].map((r) => (
                     <div key={r.label} className="flex items-center justify-between py-1.5 border-b border-green-100 dark:border-green-900/30 last:border-0">
                       <span className="text-xs text-gray-500 dark:text-gray-400">{r.label}</span>
@@ -461,10 +815,10 @@ export default function AgentDetail({ id }: { id: string }) {
                     <h3 className="text-sm font-bold text-blue-700 dark:text-blue-400">Pay-Out Statistics</h3>
                   </div>
                   {[
-                    { label: "Total Pay-Outs:",      value: payouts.length.toString() },
-                    { label: "Completed Pay-Outs:",  value: completedPayouts.toString() },
-                    { label: "Total Volume:",        value: fmt(payoutVolume) },
-                    { label: "Success Rate:",        value: `${payoutSuccess}%` },
+                    { label: "Total Pay-Outs:", value: stats.payoutsCount.toString() },
+                    { label: "Completed Pay-Outs:", value: stats.completedPayouts.toString() },
+                    { label: "Total Volume:", value: fmt(stats.payoutVolume) },
+                    { label: "Success Rate:", value: `${stats.payoutSuccess}%` },
                   ].map((r) => (
                     <div key={r.label} className="flex items-center justify-between py-1.5 border-b border-blue-100 dark:border-blue-900/30 last:border-0">
                       <span className="text-xs text-gray-500 dark:text-gray-400">{r.label}</span>
@@ -475,14 +829,14 @@ export default function AgentDetail({ id }: { id: string }) {
               </div>
 
               {/* Recent Activity */}
-              <div>
+              <div id="recent-activity" className="scroll-mt-24">
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-3">Recent Activity</h3>
                 <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[520px] text-sm">
+                    <table className="w-full min-w-[560px] text-sm">
                       <thead>
                         <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-white/[0.02]">
-                          {["Date", "Order ID", "Type", "Amount", "Status"].map((h) => (
+                          {["Date", "Order ID", "Type", "Amount", "Status", "Actions"].map((h) => (
                             <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                               {h}
                             </th>
@@ -490,33 +844,82 @@ export default function AgentDetail({ id }: { id: string }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {actPaginated.map((a) => (
-                          <tr key={a.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors">
-                            <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.date}</td>
-                            <td className="px-4 py-3 text-xs font-mono text-gray-600 dark:text-gray-300 break-all max-w-[180px]">{a.orderId}</td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${activityTypeStyle[a.type]}`}>
-                                {a.type}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">
-                              ₹{a.amount.toLocaleString("en-IN")}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${activityStatusStyle[a.status]}`}>
-                                {a.status}
-                              </span>
+                        {actPaginated.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
+                              {txError ? "Could not load activity." : "No assigned transactions yet."}
                             </td>
                           </tr>
-                        ))}
+                        ) : (
+                          actPaginated.map((a) => (
+                            <tr key={a.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors">
+                              <td className="px-4 py-3">
+                                {a.date.split("\n").map((line, i) => (
+                                  <p
+                                    key={i}
+                                    className={`text-xs ${i === 0 ? "font-medium text-gray-700 dark:text-gray-200" : "text-gray-400"}`}
+                                  >
+                                    {line}
+                                  </p>
+                                ))}
+                              </td>
+                              <td className="px-4 py-3 text-xs font-mono text-gray-600 dark:text-gray-300 break-all max-w-[180px]">
+                                {a.orderId}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${activityTypeStyle[a.type]}`}
+                                >
+                                  {a.type}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">
+                                ₹{a.amount.toLocaleString("en-IN")}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${activityStatusStyle[a.category]}`}
+                                >
+                                  {a.statusLabel}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <Link
+                                  href={`/transactions/${a.id}`}
+                                  title="View transaction"
+                                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-blue-500 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                    />
+                                  </svg>
+                                </Link>
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-white/[0.02]">
                     <p className="text-xs text-gray-400 shrink-0">
-                      Showing {(actPage - 1) * ACT_PAGE_SIZE + 1} to {Math.min(actPage * ACT_PAGE_SIZE, activity.length)} of {activity.length} entries
+                      {activities.length === 0
+                        ? "No entries"
+                        : `Showing ${(actPage - 1) * ACT_PAGE_SIZE + 1} to ${Math.min(actPage * ACT_PAGE_SIZE, activities.length)} of ${activities.length} entries`}
                     </p>
-                    <Pagination total={activity.length} page={actPage} pageSize={ACT_PAGE_SIZE} onPageChange={setActPage} />
+                    {activities.length > 0 ? (
+                      <Pagination
+                        total={activities.length}
+                        page={actPage}
+                        pageSize={ACT_PAGE_SIZE}
+                        onPageChange={setActPage}
+                      />
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -525,13 +928,40 @@ export default function AgentDetail({ id }: { id: string }) {
 
           {/* ── Payment Accounts tab ── */}
           {activeTab === "accounts" && (
-            <div className="p-5">
-              <div className="rounded-xl border border-gray-200 dark:border-gray-800 py-14 text-center text-gray-400 dark:text-gray-500">
-                <svg className="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
-                No payment accounts linked.
-              </div>
+            <div className="p-5 flex flex-col gap-4">
+              {accountsError && (
+                <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+                  {accountsError}
+                </div>
+              )}
+
+              {payMethods.length === 0 && !accountsError ? (
+                <div className="rounded-xl border border-gray-200 dark:border-gray-800 py-14 text-center text-gray-400 dark:text-gray-500">
+                  <svg className="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">No payment accounts yet</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-500 max-w-sm mx-auto">
+                    Agent apne panel se Payment Method add karega — yahan saari linked methods dikhengi.
+                  </p>
+                </div>
+              ) : null}
+
+              {payMethods.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">Payment accounts</h3>
+                    <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                      {payMethods.length} {payMethods.length === 1 ? "account" : "accounts"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {payMethods.map((pm) => (
+                      <AgentPayMethodCard key={pm.id} pm={pm} />
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </div>
           )}
         </div>
@@ -541,6 +971,17 @@ export default function AgentDetail({ id }: { id: string }) {
         <EditAgentModal
           agent={toListAgent(detail)}
           onClose={() => setEditOpen(false)}
+          onSaved={() => {
+            void load();
+          }}
+        />
+      )}
+
+      {passwordModalOpen && (
+        <ResetAgentPasswordModal
+          agentId={detail.id}
+          username={detail.username}
+          onClose={() => setPasswordModalOpen(false)}
           onSaved={() => {
             void load();
           }}

@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useState } from "react";
 import { ArrowUpIcon, ArrowDownIcon } from "@/icons";
 
 interface MetricCardProps {
@@ -58,13 +60,49 @@ function MetricCard({ title, value, subValue, change, color, icon }: MetricCardP
 }
 
 export default function DashboardMetrics() {
+  const [data, setData] = useState<{
+    total_payin_amount: number;
+    success_payin_amount: number;
+    failed_payin_amount: number;
+    net_settlement: number;
+    payin_txn_count: number;
+    payin_success_count: number;
+    payin_failed_count: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/agent/dashboard", { credentials: "include" });
+        const json = (await res.json()) as { ok?: boolean; metrics?: typeof data };
+        if (!mounted || !res.ok || !json.ok || !json.metrics) return;
+        setData(json.metrics);
+      } catch {
+        // keep fallback values
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const totalPayIn = data?.total_payin_amount ?? 0;
+  const successPayIn = data?.success_payin_amount ?? 0;
+  const failedPayIn = data?.failed_payin_amount ?? 0;
+  const netSettlement = data?.net_settlement ?? 0;
+  const payinTxnCount = data?.payin_txn_count ?? 0;
+  const payinSuccessCount = data?.payin_success_count ?? 0;
+  const payinFailedCount = data?.payin_failed_count ?? 0;
+  const money = (n: number) => "₹" + n.toLocaleString("en-IN");
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 md:gap-6">
       <MetricCard
         title="Total Pay In Amount"
-        value="₹4,52,36,789"
-        subValue="1,284 transactions"
-        change={12.4}
+        value={money(totalPayIn)}
+        subValue={`${payinTxnCount.toLocaleString("en-IN")} transactions`}
+        change={undefined}
         color="blue"
         icon={
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -74,9 +112,9 @@ export default function DashboardMetrics() {
       />
       <MetricCard
         title="Success Amount"
-        value="₹4,18,94,250"
-        subValue="1,196 successful"
-        change={8.7}
+        value={money(successPayIn)}
+        subValue={`${payinSuccessCount.toLocaleString("en-IN")} successful`}
+        change={undefined}
         color="green"
         icon={
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -86,9 +124,9 @@ export default function DashboardMetrics() {
       />
       <MetricCard
         title="Failed Amount"
-        value="₹33,42,539"
-        subValue="88 failed"
-        change={-3.2}
+        value={money(failedPayIn)}
+        subValue={`${payinFailedCount.toLocaleString("en-IN")} failed`}
+        change={undefined}
         color="red"
         icon={
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -98,9 +136,9 @@ export default function DashboardMetrics() {
       />
       <MetricCard
         title="Net Settlement"
-        value="₹4,09,77,422"
+        value={money(netSettlement)}
         subValue="After fees & taxes"
-        change={9.1}
+        change={undefined}
         color="purple"
         icon={
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

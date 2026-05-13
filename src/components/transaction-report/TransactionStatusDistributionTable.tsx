@@ -6,16 +6,19 @@ export interface TransactionStatusDistributionRow {
   payInAmount: string;
   payOutCount: number;
   payOutAmount: string;
-  status: "EXPIRED" | "REASSIGNED" | "APPROVED";
+  status: string;
   totalCount: number;
   totalAmount: string;
 }
 
-const statusStyle: Record<TransactionStatusDistributionRow["status"], string> = {
-  EXPIRED: "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400",
-  REASSIGNED: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300",
-  APPROVED: "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400",
-};
+function statusStyle(status: string): string {
+  const s = status.toUpperCase();
+  if (s.includes("APPROVED")) return "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400";
+  if (s.includes("EXPIRED") || s.includes("REJECTED") || s.includes("REVOKED"))
+    return "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400";
+  if (s.includes("ASSIGN")) return "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300";
+  return "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300";
+}
 
 export default function TransactionStatusDistributionTable({
   rows,
@@ -51,7 +54,7 @@ export default function TransactionStatusDistributionTable({
                 <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payOutCount}</TableCell>
                 <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payOutAmount}</TableCell>
                 <TableCell className="px-5 py-3 text-sm">
-                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyle[row.status]}`}>
+                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyle(row.status)}`}>
                     {row.status}
                   </span>
                 </TableCell>

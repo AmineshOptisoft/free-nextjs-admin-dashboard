@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
 import { IoIosWarning } from "react-icons/io";
@@ -9,7 +9,7 @@ const PAGE_SIZE = 5;
 
 type DisputeStatus  = "PENDING" | "RESOLVED" | "EXPIRED";
 type PaymentStatus  = "PAYIN_APPROVED" | "PAYIN_PENDING" | "PAYOUT_APPROVED" | "PAYOUT_PENDING" | "FAILED";
-type DisputeReason  = "Pp" | "Received" | "Wrong Amount" | "Duplicate" | "Not Credited" | "Other";
+type DisputeReason  = string;
 
 interface DisputeItem {
   id: string;
@@ -40,6 +40,8 @@ const mockData: DisputeItem[] = [
   { id: "9",  ref: "#QV89ST3DWF",  amount: 1800,  disputeStatus: "EXPIRED",  paymentStatus: "FAILED",          orderId: "QV89ST3DWFxHIJ5",   companyName: "Leo", subAdminName: "ManojHead",   clientName: "BT247_Manoj66",    clientUpi: "SKIP_UPI", utrCode: "778899001122",  assignedUpi: "9450987654@yesbank",         reason: "Wrong Amount", createdOn: "Fri 08 May 2026, 11:30" },
   { id: "10", ref: "#RW90TU4EXG",  amount: 4200,  disputeStatus: "PENDING",  paymentStatus: "PAYIN_PENDING",   orderId: "RW90TU4EXGyIJK6",   companyName: "Leo", subAdminName: "DivyaCFO",    clientName: "PLYBG_Divya11",    clientUpi: "SKIP_UPI", utrCode: "889900112233",  assignedUpi: "9561098765@axisbank",        reason: "Not Credited", createdOn: "Fri 08 May 2026, 11:00" },
 ];
+
+const USE_DEMO_DATA = false;
 
 const STATUS_TABS: { label: string; value: DisputeStatus | "ALL" }[] = [
   { label: "All",      value: "ALL" },
@@ -204,6 +206,9 @@ function DisputeCard({ item }: { item: DisputeItem }) {
 }
 
 export default function DisputeList() {
+  const [items, setItems] = useState<DisputeItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab]       = useState<DisputeStatus | "ALL">("ALL");
   const [showFilter, setShowFilter]     = useState(false);
   const [search, setSearch]             = useState("");
@@ -214,16 +219,45 @@ export default function DisputeList() {
   // Pagination
   const [page, setPage] = useState(1);
 
-  const totalOrders = 18743;
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const res = await fetch("/api/admin/disputes?limit=500", { credentials: "include" });
+        const data = (await res.json()) as { ok?: boolean; items?: DisputeItem[]; error?: string };
+        if (!mounted) return;
+        if (!res.ok || !data.ok || !data.items) {
+          setLoadError(data.error ?? "Could not load disputes.");
+          setItems(USE_DEMO_DATA ? mockData : []);
+          return;
+        }
+        setItems(data.items);
+      } catch {
+        if (!mounted) return;
+        setLoadError("Network error.");
+        setItems(USE_DEMO_DATA ? mockData : []);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const baseData = useMemo(() => (items.length ? items : USE_DEMO_DATA ? mockData : []), [items]);
+  const totalOrders = baseData.length;
 
   const counts: Partial<Record<DisputeStatus | "ALL", number>> = {
-    ALL:      mockData.length,
-    PENDING:  mockData.filter((d) => d.disputeStatus === "PENDING").length,
-    RESOLVED: mockData.filter((d) => d.disputeStatus === "RESOLVED").length,
-    EXPIRED:  mockData.filter((d) => d.disputeStatus === "EXPIRED").length,
+    ALL:      baseData.length,
+    PENDING:  baseData.filter((d) => d.disputeStatus === "PENDING").length,
+    RESOLVED: baseData.filter((d) => d.disputeStatus === "RESOLVED").length,
+    EXPIRED:  baseData.filter((d) => d.disputeStatus === "EXPIRED").length,
   };
 
-  const filtered = mockData.filter((d) => {
+  const filtered = baseData.filter((d) => {
     if (activeTab !== "ALL" && d.disputeStatus !== activeTab) return false;
     if (search &&
       !d.orderId.toLowerCase().includes(search.toLowerCase()) &&
@@ -388,7 +422,11 @@ export default function DisputeList() {
 
       {/* Cards */}
       <div className="flex flex-col gap-3">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-6 py-12 text-center text-gray-400">
+            Loading disputes...
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-6 py-12 text-center text-gray-400">
             No disputes found.
           </div>
@@ -396,6 +434,11 @@ export default function DisputeList() {
           paginated.map((item) => <DisputeCard key={item.id} item={item} />)
         )}
       </div>
+      {loadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+          {loadError}
+        </div>
+      )}
 
       {/* Pagination */}
       <Pagination

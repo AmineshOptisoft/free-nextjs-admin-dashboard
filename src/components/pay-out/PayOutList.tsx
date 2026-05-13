@@ -1,30 +1,36 @@
 "use client";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import type { AgentPayOutListItem } from "@/lib/agent-transactions-map";
+import CompanyTxnAccordionCard from "../company/CompanyTxnAccordionCard";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
 import { Modal } from "../ui/modal";
-import { PiArrowCircleDownFill, PiContactlessPaymentFill } from "react-icons/pi";
+import { PiContactlessPaymentFill } from "react-icons/pi";
 
 const PAGE_SIZE = 5;
+const USE_DEMO_DATA = false;
 
 type PayOutStatus = "CREATED" | "UNASSIGNED" | "PENDING" | "PROCESSING" | "EXPIRED" | "APPROVED" | "DECLINED";
 
-interface PayOutItem {
+type PayOutItem = AgentPayOutListItem;
+type CompanyPayoutItem = {
   id: string;
-  ref: string;
-  amount: number;
-  status: PayOutStatus;
   orderId: string;
+  amount: number;
+  status: string;
   clientName: string;
   clientUpi: string;
   bankName: string;
   accountNo: string;
   ifsc: string;
-  createdOn: string;
-  assignedTo?: string;
-  assignedOn?: string;
+  createdAtIso?: string;
   remarks?: string;
-}
+  utrCode?: string;
+  assignedUpi?: string;
+  assignedAtIso?: string;
+  assignedToLabel?: string;
+};
+type AgentOption = { id: string; label: string };
 
 const mockData: PayOutItem[] = [
   { id: "1",  ref: "#dn56McMZ",  amount: 3800,  status: "CREATED",     orderId: "dn56McMZqBODA6P",  clientName: "BT247_prudhvi814",   clientUpi: "Dasivindhya",   bankName: "TelanaganaGrameenaBank", accountNo: "79104505384",  ifsc: "TGRB0008168", createdOn: "Fri 08 May 2026, 16:00" },
@@ -72,6 +78,10 @@ const statusStyle: Record<PayOutStatus, string> = {
 };
 
 const showAssign = (s: PayOutStatus) => s === "CREATED" || s === "UNASSIGNED" || s === "PENDING";
+const showApprove = (s: PayOutStatus) => s === "PROCESSING";
+const showReject = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING";
+const showCancel = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING";
+const showActions = (s: PayOutStatus) => showApprove(s) || showReject(s) || showCancel(s);
 
 function MoneyIcon() {
   return (
@@ -107,10 +117,61 @@ function DetailField({ label, value, isLink }: { label: string; value: string; i
   );
 }
 
-function AssignButton() {
+function AssignButton({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
   return (
-    <button className="rounded-full bg-gray-900 dark:bg-white px-5 py-2 text-sm font-semibold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 transition-colors shadow-sm whitespace-nowrap">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-full bg-gray-900 dark:bg-white px-5 py-2 text-sm font-semibold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 transition-colors shadow-sm whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+    >
       Assign
+    </button>
+  );
+}
+
+function ApproveButton({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-full bg-gray-900 dark:bg-white px-5 py-2 text-sm font-semibold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 transition-colors shadow-sm whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      Approve
+    </button>
+  );
+}
+
+function RejectButton({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      Reject
+    </button>
+  );
+}
+
+function CancelButton({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      Cancel
+    </button>
+  );
+}
+
+function ViewButton({ onClick }: { onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-900/20 transition-colors"
+    >
+      View
     </button>
   );
 }
@@ -128,7 +189,19 @@ function ChevronBtn({ rotated, onClick }: { rotated: boolean; onClick: () => voi
   );
 }
 
-function PayOutCard({ item }: { item: PayOutItem }) {
+function PayOutCard({
+  item,
+  busy,
+  onOpenAction,
+  onView,
+  allowAssign,
+}: {
+  item: PayOutItem;
+  busy?: boolean;
+  onOpenAction: (item: PayOutItem, action: "approve" | "reject" | "cancel" | "assign") => void;
+  onView?: () => void;
+  allowAssign?: boolean;
+}) {
   const [extraOpen, setExtraOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -146,6 +219,9 @@ function PayOutCard({ item }: { item: PayOutItem }) {
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {allowAssign && showAssign(item.status) && <AssignButton onClick={() => onOpenAction(item, "assign")} disabled={busy} />}
+        {showApprove(item.status) && <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />}
+        {onView && <ViewButton onClick={onView} />}
         {/* Mobile chevron */}
         <span className="lg:hidden">
           <ChevronBtn rotated={mobileOpen} onClick={() => setMobileOpen((v) => !v)} />
@@ -154,12 +230,6 @@ function PayOutCard({ item }: { item: PayOutItem }) {
         <span className="hidden lg:inline-flex">
           <ChevronBtn rotated={extraOpen} onClick={() => setExtraOpen((v) => !v)} />
         </span>
-        {/* Mobile assign button */}
-        {showAssign(item.status) && (
-          <span className="lg:hidden">
-            <AssignButton />
-          </span>
-        )}
       </div>
     </div>
   );
@@ -184,11 +254,7 @@ function PayOutCard({ item }: { item: PayOutItem }) {
             <DetailField label="Account No" value={item.accountNo} />
             <DetailField label="IFSC" value={item.ifsc} />
           </div>
-          {showAssign(item.status) && (
-            <div className="shrink-0">
-              <AssignButton />
-            </div>
-          )}
+          <div className="shrink-0" />
         </div>
 
         {/* Extra rows toggled by chevron */}
@@ -222,16 +288,67 @@ function PayOutCard({ item }: { item: PayOutItem }) {
 }
 
 type CompanyPayOutTab = "ALL" | "APPROVED" | "PENDING" | "UNASSIGNED" | "REJECTED";
+type ActionType = "approve" | "reject" | "cancel" | "assign";
 
 function CompanyPayOutRequestModal({
   isOpen,
   onClose,
+  onSubmitted,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  onSubmitted: () => void;
 }) {
   const inputClass =
     "h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-2 focus:ring-brand-500/15";
+  const [form, setForm] = useState({
+    client_name: "",
+    client_upi: "",
+    amount: "",
+    bank_name: "",
+    bank_account_number: "",
+    ifsc_code: "",
+    user_note: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function patchField(k: keyof typeof form, v: string) {
+    setForm((prev) => ({ ...prev, [k]: v }));
+  }
+
+  async function submitRequest() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/company/payouts", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setError(data.error ?? "Could not submit payout request");
+        return;
+      }
+      setForm({
+        client_name: "",
+        client_upi: "",
+        amount: "",
+        bank_name: "",
+        bank_account_number: "",
+        ifsc_code: "",
+        user_note: "",
+      });
+      onClose();
+      onSubmitted();
+    } catch {
+      setError("Network error");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="max-w-2xl p-0 overflow-hidden" showCloseButton={false}>
@@ -252,45 +369,91 @@ function CompanyPayOutRequestModal({
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Client ID <span className="text-red-500">*</span></label>
-              <input className={inputClass} placeholder="Enter client ID" />
+              <input
+                className={inputClass}
+                placeholder="Enter client UPI"
+                value={form.client_upi}
+                onChange={(e) => patchField("client_upi", e.target.value)}
+              />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Client Name <span className="text-red-500">*</span></label>
-              <input className={inputClass} placeholder="Full name of the client" />
+              <input
+                className={inputClass}
+                placeholder="Full name of the client"
+                value={form.client_name}
+                onChange={(e) => patchField("client_name", e.target.value)}
+              />
             </div>
           </div>
 
           <div>
             <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Amount <span className="text-red-500">*</span></label>
-            <input className={inputClass} placeholder="Enter amount (₹)" />
+            <input
+              className={inputClass}
+              placeholder="Enter amount (₹)"
+              value={form.amount}
+              onChange={(e) => patchField("amount", e.target.value)}
+            />
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-gray-50/70 p-3.5">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Holder Name <span className="text-red-500">*</span></label>
-                <input className={inputClass} />
+                <input
+                  className={inputClass}
+                  value={form.client_name}
+                  onChange={(e) => patchField("client_name", e.target.value)}
+                />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Bank Name <span className="text-red-500">*</span></label>
-                <input className={inputClass} />
+                <input
+                  className={inputClass}
+                  value={form.bank_name}
+                  onChange={(e) => patchField("bank_name", e.target.value)}
+                />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Account Number <span className="text-red-500">*</span></label>
-                <input className={inputClass} />
+                <input
+                  className={inputClass}
+                  value={form.bank_account_number}
+                  onChange={(e) => patchField("bank_account_number", e.target.value)}
+                />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">IFSC Code <span className="text-red-500">*</span></label>
-                <input className={inputClass} />
+                <input
+                  className={inputClass}
+                  value={form.ifsc_code}
+                  onChange={(e) => patchField("ifsc_code", e.target.value)}
+                />
               </div>
             </div>
           </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Remarks</label>
+            <input
+              className={inputClass}
+              placeholder="Optional note"
+              value={form.user_note}
+              onChange={(e) => patchField("user_note", e.target.value)}
+            />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
 
           <div className="flex items-center justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
               Cancel
             </button>
-            <button type="button" className="rounded-md bg-brand-500 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600">
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => void submitRequest()}
+              className="rounded-md bg-brand-500 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
               Submit Request
             </button>
           </div>
@@ -300,9 +463,29 @@ function CompanyPayOutRequestModal({
   );
 }
 
+function maskAccountTail(accountNo: string): string {
+  const t = accountNo.replace(/\s/g, "");
+  if (!t) return "";
+  return t.length <= 4 ? t : `····${t.slice(-4)}`;
+}
+
+function companyPayoutBankSummary(it: CompanyPayoutItem): string {
+  const parts: string[] = [];
+  const bank = (it.bankName ?? "").trim();
+  if (bank) parts.push(bank);
+  const tail = maskAccountTail(it.accountNo ?? "");
+  if (tail) parts.push(tail);
+  const ifsc = (it.ifsc ?? "").trim();
+  if (ifsc) parts.push(ifsc);
+  return parts.length ? parts.join(" · ") : "—";
+}
+
 function CompanyPayOutView() {
   const [activeTab, setActiveTab] = useState<CompanyPayOutTab>("ALL");
   const [isRequestOpen, setIsRequestOpen] = useState(false);
+  const [items, setItems] = useState<CompanyPayoutItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const companyTabs: { label: string; value: CompanyPayOutTab }[] = [
     { label: "All", value: "ALL" },
@@ -311,6 +494,31 @@ function CompanyPayOutView() {
     { label: "Not_assigned", value: "UNASSIGNED" },
     { label: "Rejected", value: "REJECTED" },
   ];
+
+  const loadCompanyPayouts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const query = activeTab === "ALL" ? "" : `?status=${encodeURIComponent(activeTab)}`;
+      const res = await fetch(`/api/company/payouts${query}`, { credentials: "include" });
+      const data = (await res.json()) as { ok?: boolean; payouts?: CompanyPayoutItem[]; error?: string };
+      if (!res.ok || !data.ok || !data.payouts) {
+        setError(data.error ?? "Could not load payouts");
+        setItems([]);
+        return;
+      }
+      setItems(data.payouts);
+    } catch {
+      setError("Network error");
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    void loadCompanyPayouts();
+  }, [loadCompanyPayouts]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -355,12 +563,43 @@ function CompanyPayOutView() {
           </button>
         </div>
 
-        <div className="mt-6 flex h-[260px] items-start justify-center rounded-xl border border-gray-100 pt-10 text-sm text-gray-400 dark:border-gray-800 dark:text-gray-500">
-          No PAYOUT requests found yet.
+        <div className="mt-4 space-y-3">
+          {loading && <div className="rounded-xl border border-gray-100 px-3 py-5 text-sm text-gray-500">Loading payouts...</div>}
+          {error && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">{error}</div>}
+          {!loading && !error && items.length === 0 && (
+            <div className="flex h-[180px] items-start justify-center rounded-xl border border-gray-100 pt-10 text-sm text-gray-400 dark:border-gray-800 dark:text-gray-500">
+              No PAYOUT requests found yet.
+            </div>
+          )}
+          {!loading &&
+            !error &&
+            items.map((it) => (
+              <CompanyTxnAccordionCard
+                key={it.id}
+                variant="PAYOUT"
+                transactionId={it.id}
+                orderId={it.orderId}
+                amount={it.amount}
+                status={it.status}
+                clientName={it.clientName}
+                clientUpi={it.clientUpi}
+                bankSummary={companyPayoutBankSummary(it)}
+                utrCode={it.utrCode ?? ""}
+                assignedUpi={it.assignedUpi ?? ""}
+                createdAtIso={it.createdAtIso}
+                assignedAtIso={it.assignedAtIso}
+                assignedToLabel={it.assignedToLabel ?? "—"}
+                remarks={it.remarks ?? ""}
+              />
+            ))}
         </div>
       </div>
 
-      <CompanyPayOutRequestModal isOpen={isRequestOpen} onClose={() => setIsRequestOpen(false)} />
+      <CompanyPayOutRequestModal
+        isOpen={isRequestOpen}
+        onClose={() => setIsRequestOpen(false)}
+        onSubmitted={() => void loadCompanyPayouts()}
+      />
     </div>
   );
 }
@@ -368,37 +607,128 @@ function CompanyPayOutView() {
 export default function PayOutList() {
   const [panelRole] = useState<"admin" | "agent" | "company">(() => {
     if (typeof window === "undefined") return "admin";
-    const role = localStorage.getItem("tepay_panel");
+    const role = localStorage.getItem("tepay_role");
     return role === "agent" || role === "company" ? role : "admin";
   });
 
-  if (panelRole === "company") {
-    return <CompanyPayOutView />;
-  }
+  const [items, setItems] = useState<PayOutItem[] | null>(null);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<PayOutItem | null>(null);
+  const [modalAction, setModalAction] = useState<ActionType>("approve");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [resolvedRole, setResolvedRole] = useState<"admin" | "agent" | "company">(panelRole);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { ok?: boolean; role?: "admin" | "agent" | "company" };
+        if (!mounted || !data.ok || !data.role) return;
+        setResolvedRole(data.role);
+        localStorage.setItem("tepay_role", data.role);
+      } catch {
+        // keep fallback
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const loadPayOuts = useCallback(async () => {
+    setListLoading(true);
+    setListError(null);
+    const endpoint =
+      resolvedRole === "admin"
+        ? "/api/admin/transactions?type=PAYOUT&limit=500"
+        : "/api/agent/transactions?type=PAYOUT&limit=500";
+    try {
+      const res = await fetch(endpoint, { credentials: "include" });
+      if (res.status === 401) {
+        setItems(null);
+        return;
+      }
+      const data = (await res.json()) as { ok?: boolean; items?: PayOutItem[]; error?: string };
+      if (!res.ok || !data.ok || !data.items) {
+        setItems(null);
+        setListError(data.error ?? "Could not load transactions.");
+        return;
+      }
+      setItems(data.items);
+    } catch {
+      setItems(null);
+      setListError("Network error.");
+    } finally {
+      setListLoading(false);
+    }
+  }, [resolvedRole]);
+
+  useEffect(() => {
+    if (resolvedRole === "company") return;
+    void loadPayOuts();
+  }, [resolvedRole, loadPayOuts]);
+
+  useEffect(() => {
+    if (resolvedRole !== "admin") return;
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/agents", { credentials: "include" });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          agents?: Array<{ id: string; fullname?: string | null; username: string }>;
+        };
+        if (!mounted || !res.ok || !data.ok || !data.agents) return;
+        setAgents(
+          data.agents.map((a) => ({
+            id: a.id,
+            label: (a.fullname && a.fullname.trim()) || a.username,
+          })),
+        );
+      } catch {
+        // keep empty agent list; assignment modal shows validation
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [resolvedRole]);
 
   const [activeTab, setActiveTab] = useState<PayOutStatus | "ALL">("ALL");
   const [showFilter, setShowFilter] = useState(false);
-  const [search, setSearch]         = useState("");
-  const [amount, setAmount]         = useState("");
+  const [search, setSearch] = useState("");
+  const [amount, setAmount] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
-  const [dateRange, setDateRange]   = useState<DateRange | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
-  // Pagination
   const [page, setPage] = useState(1);
 
-  const totalOrders = 52341;
+  if (resolvedRole === "company") {
+    return <CompanyPayOutView />;
+  }
+
+  const baseData = items ?? (USE_DEMO_DATA ? mockData : []);
+  const totalOrders = baseData.length;
 
   const counts: Partial<Record<PayOutStatus | "ALL", number>> = {
-    ALL:        mockData.length,
-    UNASSIGNED: mockData.filter((d) => d.status === "UNASSIGNED").length,
-    PENDING:    mockData.filter((d) => d.status === "PENDING").length,
-    PROCESSING: mockData.filter((d) => d.status === "PROCESSING").length,
-    EXPIRED:    mockData.filter((d) => d.status === "EXPIRED").length,
-    APPROVED:   mockData.filter((d) => d.status === "APPROVED").length,
-    DECLINED:   mockData.filter((d) => d.status === "DECLINED").length,
+    ALL: baseData.length,
+    CREATED: baseData.filter((d) => d.status === "CREATED").length,
+    UNASSIGNED: baseData.filter((d) => d.status === "UNASSIGNED").length,
+    PENDING: baseData.filter((d) => d.status === "PENDING").length,
+    PROCESSING: baseData.filter((d) => d.status === "PROCESSING").length,
+    EXPIRED: baseData.filter((d) => d.status === "EXPIRED").length,
+    APPROVED: baseData.filter((d) => d.status === "APPROVED").length,
+    DECLINED: baseData.filter((d) => d.status === "DECLINED").length,
   };
 
-  const filtered = mockData.filter((d) => {
+  const filtered = baseData.filter((d) => {
     if (activeTab !== "ALL" && d.status !== activeTab) return false;
     if (search &&
       !d.orderId.toLowerCase().includes(search.toLowerCase()) &&
@@ -413,13 +743,100 @@ export default function PayOutList() {
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  function openActionModal(item: PayOutItem, action: ActionType) {
+    setSelectedItem(item);
+    setModalAction(action);
+    setModalError(null);
+    setSelectedAgentId("");
+    setModalOpen(true);
+  }
+
+  async function runAction(item: PayOutItem, action: ActionType) {
+    setActionBusyId(item.id);
+    setModalError(null);
+    try {
+      if (action === "approve" && !showApprove(item.status)) {
+        setModalError("Approve only after assignment/processing stage.");
+        return;
+      }
+      let res: Response;
+      if (action === "assign") {
+        if (resolvedRole !== "admin") {
+          setModalError("Only admin can assign payout.");
+          return;
+        }
+        if (!selectedAgentId) {
+          setModalError("Please select an agent.");
+          return;
+        }
+        res = await fetch(`/api/admin/payouts/${item.id}/assign`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agentId: Number(selectedAgentId) }),
+        });
+      } else {
+        const status =
+          action === "approve"
+            ? resolvedRole === "admin"
+              ? "APPROVED_BY_ADMIN"
+              : "APPROVED_BY_AGENT"
+            : action === "reject"
+              ? "REJECTED"
+              : resolvedRole === "admin"
+                ? "RE_ASSIGNED"
+                : "REVOKED";
+        const endpoint =
+          resolvedRole === "admin" ? `/api/admin/payouts/${item.id}/status` : `/api/agent/payouts/${item.id}/status`;
+        res = await fetch(endpoint, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+      }
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setModalError(data.error ?? "Could not update payout status");
+        return;
+      }
+      setModalOpen(false);
+      setSelectedItem(null);
+      await loadPayOuts();
+    } catch {
+      setModalError("Network error");
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Page header */}
-      <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-        <PiContactlessPaymentFill className="w-6 h-6 rotate-180" />
-        <h1 className="text-xl font-bold">Pay Out</h1>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+          <PiContactlessPaymentFill className="w-6 h-6 rotate-180" />
+          <h1 className="text-xl font-bold">Pay Out</h1>
+        </div>
+        {items !== null && (
+          <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+            {resolvedRole === "admin"
+              ? "Live: all PayOut requests for admin actions (max 500)."
+              : "Live: payout transactions assigned to your agent account (max 500)."}
+          </p>
+        )}
       </div>
+
+      {listLoading && (
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          {resolvedRole === "admin" ? "Loading admin payouts…" : "Checking agent session…"}
+        </div>
+      )}
+      {listError && items === null && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+          {listError}
+        </div>
+      )}
 
       {showFilter && (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/3 overflow-hidden">
@@ -570,7 +987,16 @@ export default function PayOutList() {
             No transactions found.
           </div>
         ) : (
-          paginated.map((item) => <PayOutCard key={item.id} item={item} />)
+          paginated.map((item) => (
+            <PayOutCard
+              key={item.id}
+              item={item}
+              busy={actionBusyId === item.id}
+              onOpenAction={openActionModal}
+              onView={() => (window.location.href = `/transactions/${item.id}`)}
+              allowAssign={resolvedRole === "admin"}
+            />
+          ))
         )}
       </div>
 
@@ -581,6 +1007,86 @@ export default function PayOutList() {
         pageSize={PAGE_SIZE}
         onPageChange={setPage}
       />
+
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setModalError(null);
+        }}
+        className="max-w-xl p-0 overflow-hidden"
+        showCloseButton={false}
+      >
+        <div className="rounded-xl bg-white dark:bg-gray-900">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-gray-800">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">PayOut Action</h3>
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              x
+            </button>
+          </div>
+          <div className="space-y-4 px-5 py-4">
+            {selectedItem && (
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {selectedItem.orderId} · {selectedItem.clientName} · ₹{selectedItem.amount.toLocaleString("en-IN")}
+              </p>
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Current action: <span className="font-semibold uppercase">{modalAction}</span>
+            </p>
+            {modalAction === "assign" && (
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Assign to agent
+                </label>
+                <select
+                  value={selectedAgentId}
+                  onChange={(e) => setSelectedAgentId(e.target.value)}
+                  className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                >
+                  <option value="">Select agent</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {modalError && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {modalError}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {modalAction === "assign" ? (
+                <AssignButton
+                  onClick={() => selectedItem && void runAction(selectedItem, "assign")}
+                  disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                />
+              ) : (
+                <>
+                  <ApproveButton
+                    onClick={() => selectedItem && void runAction(selectedItem, "approve")}
+                    disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                  />
+                  <RejectButton
+                    onClick={() => selectedItem && void runAction(selectedItem, "reject")}
+                    disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                  />
+                  <CancelButton
+                    onClick={() => selectedItem && void runAction(selectedItem, "cancel")}
+                    disabled={!selectedItem || actionBusyId === selectedItem?.id}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

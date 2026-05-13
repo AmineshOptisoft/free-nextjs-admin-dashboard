@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -23,28 +23,7 @@ interface PayinRow {
   totalCount: number;
 }
 
-const tableData: PayinRow[] = [
-  { id: 1, name: "Axis Bank UPI", totalAmount: 4523678, fee: 45236, tax: 8142, netAmount: 4470300, successAmount: 4280450, failedAmount: 243228, successCount: 312, failedCount: 18, totalCount: 330 },
-  { id: 2, name: "HDFC UPI", totalAmount: 3812450, fee: 38124, tax: 6862, netAmount: 3767464, successAmount: 3650230, failedAmount: 162220, successCount: 278, failedCount: 12, totalCount: 290 },
-  { id: 3, name: "ICICI UPI", totalAmount: 2956780, fee: 29567, tax: 5322, netAmount: 2921891, successAmount: 2810450, failedAmount: 146330, successCount: 215, failedCount: 11, totalCount: 226 },
-  { id: 4, name: "SBI UPI", totalAmount: 2345600, fee: 23456, tax: 4222, netAmount: 2317922, successAmount: 2210340, failedAmount: 135260, successCount: 180, failedCount: 10, totalCount: 190 },
-  { id: 5, name: "Kotak UPI", totalAmount: 1987650, fee: 19876, tax: 3577, netAmount: 1964197, successAmount: 1890440, failedAmount: 97210, successCount: 152, failedCount: 8, totalCount: 160 },
-  { id: 6, name: "Yes Bank UPI", totalAmount: 1654320, fee: 16543, tax: 2977, netAmount: 1634800, successAmount: 1560780, failedAmount: 93540, successCount: 128, failedCount: 7, totalCount: 135 },
-  { id: 7, name: "Punjab National Bank", totalAmount: 1423560, fee: 14235, tax: 2562, netAmount: 1406763, successAmount: 1340250, failedAmount: 83310, successCount: 110, failedCount: 6, totalCount: 116 },
-  { id: 8, name: "Bank of Baroda", totalAmount: 1234780, fee: 12347, tax: 2222, netAmount: 1220211, successAmount: 1165430, failedAmount: 69350, successCount: 96, failedCount: 5, totalCount: 101 },
-  { id: 9, name: "Canara Bank", totalAmount: 1087650, fee: 10876, tax: 1957, netAmount: 1074817, successAmount: 1020340, failedAmount: 67310, successCount: 84, failedCount: 5, totalCount: 89 },
-  { id: 10, name: "Union Bank UPI", totalAmount: 987430, fee: 9874, tax: 1777, netAmount: 975779, successAmount: 930450, failedAmount: 56980, successCount: 76, failedCount: 4, totalCount: 80 },
-  { id: 11, name: "Indian Bank", totalAmount: 876540, fee: 8765, tax: 1577, netAmount: 866198, successAmount: 820430, failedAmount: 56110, successCount: 68, failedCount: 4, totalCount: 72 },
-  { id: 12, name: "Central Bank", totalAmount: 765430, fee: 7654, tax: 1377, netAmount: 756399, successAmount: 718340, failedAmount: 47090, successCount: 59, failedCount: 3, totalCount: 62 },
-  { id: 13, name: "UCO Bank", totalAmount: 654320, fee: 6543, tax: 1177, netAmount: 646600, successAmount: 612430, failedAmount: 41890, successCount: 51, failedCount: 3, totalCount: 54 },
-  { id: 14, name: "Bank of India", totalAmount: 543210, fee: 5432, tax: 977, netAmount: 536801, successAmount: 508340, failedAmount: 34870, successCount: 42, failedCount: 2, totalCount: 44 },
-  { id: 15, name: "Indian Overseas Bank", totalAmount: 487650, fee: 4876, tax: 877, netAmount: 481897, successAmount: 456340, failedAmount: 31310, successCount: 38, failedCount: 2, totalCount: 40 },
-  { id: 16, name: "Paytm Payments Bank", totalAmount: 1876540, fee: 18765, tax: 3377, netAmount: 1854398, successAmount: 1780430, failedAmount: 96110, successCount: 145, failedCount: 8, totalCount: 153 },
-  { id: 17, name: "PhonePe UPI", totalAmount: 3245670, fee: 32456, tax: 5842, netAmount: 3207372, successAmount: 3090450, failedAmount: 155220, successCount: 250, failedCount: 13, totalCount: 263 },
-  { id: 18, name: "Google Pay", totalAmount: 2987650, fee: 29876, tax: 5377, netAmount: 2952397, successAmount: 2840430, failedAmount: 147220, successCount: 230, failedCount: 12, totalCount: 242 },
-  { id: 19, name: "Amazon Pay", totalAmount: 876540, fee: 8765, tax: 1577, netAmount: 866198, successAmount: 820340, failedAmount: 56200, successCount: 68, failedCount: 4, totalCount: 72 },
-  { id: 20, name: "BHIM UPI", totalAmount: 654320, fee: 6543, tax: 1177, netAmount: 646600, successAmount: 614320, failedAmount: 40000, successCount: 51, failedCount: 3, totalCount: 54 },
-];
+const tableData: PayinRow[] = [];
 
 const fmt = (n: number) =>
   "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -55,9 +34,70 @@ export default function PayinListTable() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [rows, setRows] = useState<PayinRow[]>(tableData);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const filtered = tableData.filter((row) =>
-    row.name.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/agent/staff", { credentials: "include" });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          ok?: boolean;
+          staff?: Array<{
+            id: string;
+            fullname: string;
+            gateway: string;
+            financial?: {
+              totalPayIn: number;
+              successPayIn: number;
+              failedPayIn: number;
+            };
+          }>;
+        };
+        if (!mounted || !data.ok || !data.staff) return;
+
+        const mapped = data.staff.map((s, i) => {
+          const total = s.financial?.totalPayIn ?? 0;
+          const success = s.financial?.successPayIn ?? 0;
+          const failed = s.financial?.failedPayIn ?? 0;
+          const fee = total * 0.01;
+          const tax = fee * 0.18;
+          return {
+            id: i + 1,
+            name: `${s.fullname || "Payment Method"} (${s.gateway})`,
+            totalAmount: total,
+            fee,
+            tax,
+            netAmount: total - fee - tax,
+            successAmount: success,
+            failedAmount: failed,
+            successCount: success > 0 ? 1 : 0,
+            failedCount: failed > 0 ? 1 : 0,
+            totalCount: total > 0 ? 1 : 0,
+          };
+        });
+        setRows(mapped);
+      } catch {
+        setLoadError("Could not load live payin listing.");
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const filtered = useMemo(
+    () =>
+      rows.filter((row) => {
+        if (!row.name.toLowerCase().includes(search.toLowerCase())) return false;
+        if (status === "Success" && row.successAmount <= 0) return false;
+        if (status === "Failed" && row.failedAmount <= 0) return false;
+        if (status === "Pending" && row.totalAmount <= 0) return false;
+        return true;
+      }),
+    [rows, search, status],
   );
 
   const totals = filtered.reduce(
@@ -84,6 +124,7 @@ export default function PayinListTable() {
             Payin Listing
           </h3>
           <p className="text-sm text-gray-400 mt-0.5">All payment gateway transactions</p>
+          {loadError && <p className="text-xs text-amber-600 mt-0.5">{loadError}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Search */}

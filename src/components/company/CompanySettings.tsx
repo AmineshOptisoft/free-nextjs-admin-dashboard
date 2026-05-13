@@ -1,12 +1,65 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+
+type CompanyMe = {
+  id: string;
+  username: string;
+  brand_name: string;
+  logo: string | null;
+  status: string;
+  company_code: string | null;
+};
+
+function encodeCompanyKey(raw: string): string {
+  try {
+    return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  } catch {
+    return raw;
+  }
+}
 
 export default function CompanySettings() {
   const [copied, setCopied] = useState(false);
-  const paymentLink = "http://localhost:1574/pay/U2FsdGVkX19xF3nN0B9VV7TSawFdXZGxKeUw";
+  const [company, setCompany] = useState<CompanyMe | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const res = await fetch("/api/company/me", { credentials: "include" });
+        const data = (await res.json()) as { ok?: boolean; company?: CompanyMe; error?: string };
+        if (!mounted) return;
+        if (!res.ok || !data.ok || !data.company) {
+          setLoadError(data.error ?? "Could not load company profile");
+          setCompany(null);
+          return;
+        }
+        setCompany(data.company);
+      } catch {
+        if (mounted) setLoadError("Network error");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const paymentLink = useMemo(() => {
+    const code = company?.company_code?.trim() ?? "";
+    if (!code || typeof window === "undefined") return "";
+    const key = encodeCompanyKey(code);
+    return `${window.location.origin}/pay/${key}`;
+  }, [company?.company_code]);
 
   const copyLink = async () => {
+    if (!paymentLink) return;
     try {
       await navigator.clipboard.writeText(paymentLink);
       setCopied(true);
@@ -28,11 +81,19 @@ export default function CompanySettings() {
         </div>
 
         <div className="space-y-4 p-5">
+          {loading && <p className="text-sm text-gray-500">Loading payment link...</p>}
+          {loadError && <p className="text-sm text-red-600">{loadError}</p>}
+          {!loading && !loadError && !company?.company_code && (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Company key generated nahi hai. Please admin se contact karein.
+            </p>
+          )}
+
           <div className="rounded-xl border border-gray-200 p-4 text-center dark:border-gray-800">
             <p className="mb-3 text-xs text-gray-400 dark:text-gray-500">Scan this QR Code to initiate a payment</p>
             <div className="mx-auto h-44 w-44 rounded-md bg-white p-2 shadow-theme-xs">
               <img
-                src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://localhost:1574/pay/U2FsdGVkX19xF3nN0B9VV7TSawFdXZGxKeUw"
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(paymentLink || "unavailable")}`}
                 alt="Payment QR"
                 className="h-full w-full object-contain"
               />
@@ -51,6 +112,7 @@ export default function CompanySettings() {
               />
               <button
                 onClick={copyLink}
+                disabled={!paymentLink}
                 className="inline-flex h-10 items-center rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-600 hover:bg-brand-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-900/20"
               >
                 {copied ? "Copied" : "Copy"}

@@ -23,11 +23,18 @@ type CompanyRow = RowDataPacket & {
   updated_at: Date | string | null;
 };
 
+type ColumnRow = RowDataPacket & { Field: string };
+
 function num(v: string | number | null | undefined): number {
   if (v == null) return 0;
   if (typeof v === "number") return v;
   const n = Number.parseFloat(String(v));
   return Number.isFinite(n) ? n : 0;
+}
+
+async function hasCommissionColumn(): Promise<boolean> {
+  const [rows] = await pool.execute<ColumnRow[]>("SHOW COLUMNS FROM `companies` LIKE 'commission'");
+  return rows.length > 0;
 }
 
 function mapPublic(r: CompanyRow) {
@@ -65,8 +72,10 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Invalid id" }, { status: 400 });
   }
 
+  const includeCommission = await hasCommissionColumn();
   const [rows] = await pool.execute<CompanyRow[]>(
-    `SELECT \`id\`, \`username\`, \`brand_name\`, \`logo\`, \`status\`, \`company_code\`, \`commission\`,
+    `SELECT \`id\`, \`username\`, \`brand_name\`, \`logo\`, \`status\`, \`company_code\`,
+            ${includeCommission ? "`commission`," : ""}
             \`net_pay_in\`, \`net_pay_out\`, \`settlement_amount\`, \`settlement_date\`,
             \`created_at\`, \`updated_at\`
      FROM \`companies\` WHERE \`id\` = ? LIMIT 1`,
@@ -113,6 +122,7 @@ export async function PATCH(
 
   const updates: string[] = [];
   const values: (string | number | null)[] = [];
+  const includeCommission = await hasCommissionColumn();
 
   if (typeof body.username === "string") {
     const u = body.username.trim();
@@ -141,7 +151,7 @@ export async function PATCH(
   }
 
   const comm = parsePctField(body.commission);
-  if (comm !== null) {
+  if (includeCommission && comm !== null) {
     updates.push("`commission` = ?");
     values.push(comm);
   }
@@ -183,7 +193,8 @@ export async function PATCH(
   }
 
   const [rows] = await pool.execute<CompanyRow[]>(
-    `SELECT \`id\`, \`username\`, \`brand_name\`, \`logo\`, \`status\`, \`company_code\`, \`commission\`,
+    `SELECT \`id\`, \`username\`, \`brand_name\`, \`logo\`, \`status\`, \`company_code\`,
+            ${includeCommission ? "`commission`," : ""}
             \`net_pay_in\`, \`net_pay_out\`, \`settlement_amount\`, \`settlement_date\`,
             \`created_at\`, \`updated_at\`
      FROM \`companies\` WHERE \`id\` = ? LIMIT 1`,

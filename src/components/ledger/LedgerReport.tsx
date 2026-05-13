@@ -1,47 +1,35 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
 import DateRangePicker, { type DateRange } from "../dashboard/DateRangePicker";
 import TableIcon from "../../icons/table.svg";
 interface LedgerEntry {
   date: string;
-  debit: string;
-  credit: string;
-  balance: string;
+  debit: number;
+  credit: number;
+  balance: number;
   narrative: string;
 }
 
 interface LedgerAccount {
+  agentId: number;
   name: string;
-  fromDate: string;
-  toDate: string;
-  openingBalance: string;
-  closingBalance: string;
+  openingBalance: number;
+  closingBalance: number;
+  security: number;
+  credit: number;
+  payIn: number;
+  payOut: number;
+  net: number;
+  final: number;
+  remaining: number;
   entries: LedgerEntry[];
 }
-
-const accounts: LedgerAccount[] = [
-  {
-    name: "Bablu0012",
-    fromDate: "05/05/2026",
-    toDate: "11/05/2026",
-    openingBalance: "-2,977.03 Dr",
-    closingBalance: "-0.00",
-    entries: [
-      { date: "07/05/2026", debit: "3,000.00", credit: "-", balance: "23.00 Cr", narrative: "Pay In" },
-      { date: "07/05/2026", debit: "-", credit: "23.00", balance: "0.00", narrative: "Pay Cut" },
-    ],
-  },
-  {
-    name: "sachin80",
-    fromDate: "05/05/2026",
-    toDate: "11/05/2026",
-    openingBalance: "0.00",
-    closingBalance: "0.00",
-    entries: [],
-  },
-];
+interface AgentOption {
+  id: number;
+  name: string;
+}
 
 export default function LedgerReport() {
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -49,12 +37,59 @@ export default function LedgerReport() {
     to: new Date("2026-05-11"),
     label: "May 5, 2026 - May 11, 2026",
   });
-  const [openAccountIndex, setOpenAccountIndex] = useState(0);
+  const [selectedAgentId, setSelectedAgentId] = useState<number | "ALL">("ALL");
+  const [openAgentId, setOpenAgentId] = useState<number | null>(null);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [accounts, setAccounts] = useState<LedgerAccount[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const parseAmount = (value: string) => {
-    if (value === "-") return 0;
-    return Number(value.replace(/,/g, ""));
-  };
+  const fmtAmount = useCallback((v: number) => {
+    return v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }, []);
+
+  const fmtDate = useCallback((iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("en-IN");
+  }, []);
+
+  const fetchLedger = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const qs = new URLSearchParams();
+      if (dateRange.from) qs.set("from", dateRange.from.toISOString());
+      if (dateRange.to) qs.set("to", dateRange.to.toISOString());
+      if (selectedAgentId !== "ALL") qs.set("agentId", String(selectedAgentId));
+      const res = await fetch(`/api/admin/ledger?${qs.toString()}`, { credentials: "include" });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        agents?: AgentOption[];
+        accounts?: LedgerAccount[];
+      };
+      if (!res.ok || !data.ok || !data.accounts || !data.agents) {
+        setLoadError(data.error ?? "Could not load ledger.");
+        setAccounts([]);
+        setAgents([]);
+        return;
+      }
+      setAccounts(data.accounts);
+      setAgents(data.agents);
+      setOpenAgentId((prev) => prev ?? data.accounts[0]?.agentId ?? null);
+    } catch {
+      setLoadError("Network error.");
+      setAccounts([]);
+      setAgents([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateRange.from, dateRange.to, selectedAgentId]);
+
+  useEffect(() => {
+    void fetchLedger();
+  }, [fetchLedger]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -65,8 +100,12 @@ export default function LedgerReport() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
-          <button className="inline-flex h-10 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white shadow-theme-xs transition-colors hover:bg-brand-600">
-            Refresh
+          <button
+            onClick={() => void fetchLedger()}
+            className="inline-flex h-10 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white shadow-theme-xs transition-colors hover:bg-brand-600 disabled:opacity-60"
+            disabled={loading}
+          >
+            {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
       </div>
@@ -77,24 +116,36 @@ export default function LedgerReport() {
             <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Filter</p>
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{accounts.length} records found</p>
           </div>
-          <select className="h-10 min-w-[180px] rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-white/3 dark:text-gray-200">
-            <option>All Subadmins</option>
-            <option>Bablu0012</option>
-            <option>sachin80</option>
+          <select
+            value={selectedAgentId === "ALL" ? "ALL" : String(selectedAgentId)}
+            onChange={(e) => setSelectedAgentId(e.target.value === "ALL" ? "ALL" : Number(e.target.value))}
+            className="h-10 min-w-[180px] rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-white/3 dark:text-gray-200"
+          >
+            <option value="ALL">All Agents</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>
+      {loadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+          {loadError}
+        </div>
+      )}
 
-      {accounts.map((account, index) => (
+      {accounts.map((account) => (
         <div
-          key={account.name}
+          key={account.agentId}
           className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/3"
         >
           <button
             type="button"
-            onClick={() => setOpenAccountIndex((prev) => (prev === index ? -1 : index))}
+            onClick={() => setOpenAgentId((prev) => (prev === account.agentId ? null : account.agentId))}
             className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-              openAccountIndex === index
+              openAgentId === account.agentId
                 ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
                 : "bg-transparent text-gray-800 hover:bg-gray-50 dark:text-white/90 dark:hover:bg-white/5"
             }`}
@@ -102,17 +153,17 @@ export default function LedgerReport() {
             <div>
               <h3 className="text-sm font-semibold">{account.name}</h3>
               <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
-                From {account.fromDate} to {account.toDate}
+                From {dateRange.from?.toLocaleDateString("en-IN") ?? "—"} to {dateRange.to?.toLocaleDateString("en-IN") ?? "—"}
               </p>
             </div>
             <div className="flex items-center gap-4">
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Opening Bal.{" "}
-                <span className="font-semibold text-gray-700 dark:text-gray-200">{account.openingBalance}</span>
+                Prev{" "}
+                <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtAmount(account.openingBalance)}</span>
               </p>
               <svg
                 className={`h-4 w-4 shrink-0 transition-transform duration-300 ${
-                  openAccountIndex === index ? "rotate-180" : ""
+                  openAgentId === account.agentId ? "rotate-180" : ""
                 }`}
                 fill="none"
                 viewBox="0 0 24 24"
@@ -126,10 +177,20 @@ export default function LedgerReport() {
 
           <div
             className={`grid transition-all duration-300 ease-in-out ${
-              openAccountIndex === index ? "grid-rows-[1fr] opacity-100 mt-3" : "grid-rows-[0fr] opacity-0"
+              openAgentId === account.agentId ? "grid-rows-[1fr] opacity-100 mt-3" : "grid-rows-[0fr] opacity-0"
             }`}
           >
             <div className="min-h-0 overflow-hidden">
+              <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Security</span><div className="font-semibold">{fmtAmount(account.security)}</div></div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">PayIn</span><div className="font-semibold">{fmtAmount(account.payIn)}</div></div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">PayOut</span><div className="font-semibold">{fmtAmount(account.payOut)}</div></div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Net</span><div className="font-semibold">{fmtAmount(account.net)}</div></div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Prev</span><div className="font-semibold">{fmtAmount(account.openingBalance)}</div></div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Running</span><div className="font-semibold">{fmtAmount(account.closingBalance)}</div></div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Final</span><div className="font-semibold">{fmtAmount(account.final)}</div></div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Remaining</span><div className="font-semibold">{fmtAmount(account.remaining)}</div></div>
+              </div>
               <div className="overflow-x-auto rounded-xl border border-gray-100 dark:border-gray-800">
                 <Table>
                   <TableHeader className="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-white/2">
@@ -145,10 +206,10 @@ export default function LedgerReport() {
                     {account.entries.length ? (
                       account.entries.map((entry, entryIndex) => (
                         <TableRow key={`${entry.date}-${entryIndex}`} className="hover:bg-gray-50/60 dark:hover:bg-white/2">
-                          <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{entry.date}</TableCell>
-                          <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{entry.debit}</TableCell>
-                          <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{entry.credit}</TableCell>
-                          <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{entry.balance}</TableCell>
+                          <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{fmtDate(entry.date)}</TableCell>
+                          <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{entry.debit ? fmtAmount(entry.debit) : "-"}</TableCell>
+                          <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{entry.credit ? fmtAmount(entry.credit) : "-"}</TableCell>
+                          <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{fmtAmount(entry.balance)}</TableCell>
                           <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{entry.narrative}</TableCell>
                         </TableRow>
                       ))
@@ -164,14 +225,10 @@ export default function LedgerReport() {
                     <TableRow className="bg-gray-50/80 dark:bg-white/2">
                       <TableCell className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200">Total</TableCell>
                       <TableCell className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
-                        {account.entries
-                          .reduce((sum, row) => sum + parseAmount(row.debit), 0)
-                          .toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {fmtAmount(account.entries.reduce((sum, row) => sum + row.debit, 0))}
                       </TableCell>
                       <TableCell className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
-                        {account.entries
-                          .reduce((sum, row) => sum + parseAmount(row.credit), 0)
-                          .toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {fmtAmount(account.entries.reduce((sum, row) => sum + row.credit, 0))}
                       </TableCell>
                       <TableCell className="px-4 py-3 text-sm text-gray-500 dark:text-gray-300">-</TableCell>
                       <TableCell className="px-4 py-3 text-sm text-gray-500 dark:text-gray-300">-</TableCell>
@@ -181,12 +238,17 @@ export default function LedgerReport() {
               </div>
 
               <p className="mt-3 text-right text-xs text-gray-500 dark:text-gray-400">
-                Closing Bal. <span className="font-semibold text-gray-700 dark:text-gray-200">{account.closingBalance}</span>
+                Running <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtAmount(account.closingBalance)}</span>
               </p>
             </div>
           </div>
         </div>
       ))}
+      {!loading && accounts.length === 0 && !loadError && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400 dark:border-gray-800 dark:bg-white/3">
+          No ledger records found for selected filters.
+        </div>
+      )}
     </div>
   );
 }

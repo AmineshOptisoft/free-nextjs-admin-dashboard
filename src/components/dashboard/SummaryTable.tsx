@@ -1,4 +1,5 @@
-import React from "react";
+"use client";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -16,16 +17,7 @@ interface SummaryRow {
   isAmount?: boolean;
 }
 
-const summaryData: SummaryRow[] = [
-  { label: "Total Transactions", today: 84, yesterday: 76, week: 498, month: 1284, isAmount: false },
-  { label: "Total Amount (₹)", today: 3245670, yesterday: 2987450, week: 18765430, month: 45236789, isAmount: true },
-  { label: "Success Count", today: 78, yesterday: 71, week: 462, month: 1196, isAmount: false },
-  { label: "Failed Count", today: 6, yesterday: 5, week: 36, month: 88, isAmount: false },
-  { label: "Success Amount (₹)", today: 3012340, yesterday: 2756890, week: 17456780, month: 41894250, isAmount: true },
-  { label: "Failed Amount (₹)", today: 233330, yesterday: 230560, week: 1308650, month: 3342539, isAmount: true },
-  { label: "Net Settlement (₹)", today: 2948694, yesterday: 2701752, week: 17107244, month: 40977422, isAmount: true },
-  { label: "Total Fee Collected (₹)", today: 30123, yesterday: 27568, week: 174567, month: 452367, isAmount: true },
-];
+type Tx = { amount: number; status: string; createdAtIso?: string };
 
 const fmt = (n: number, isAmount: boolean) =>
   isAmount
@@ -39,6 +31,85 @@ const pct = (current: number, prev: number) => {
 };
 
 export default function SummaryTable() {
+  const [payins, setPayins] = useState<Tx[]>([]);
+  const [payouts, setPayouts] = useState<Tx[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [inRes, outRes] = await Promise.all([
+          fetch("/api/agent/transactions?type=PAYIN&limit=500", { credentials: "include" }),
+          fetch("/api/agent/transactions?type=PAYOUT&limit=500", { credentials: "include" }),
+        ]);
+        const inJson = (await inRes.json()) as { ok?: boolean; items?: Array<{ amount: number; status: string; createdAtIso?: string }> };
+        const outJson = (await outRes.json()) as { ok?: boolean; items?: Array<{ amount: number; status: string; createdAtIso?: string }> };
+        if (!mounted) return;
+        if (inRes.ok && inJson.ok && inJson.items) setPayins(inJson.items);
+        if (outRes.ok && outJson.ok && outJson.items) setPayouts(outJson.items);
+      } catch {
+        // keep empty/fallback
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const summaryData: SummaryRow[] = useMemo(() => {
+    const now = new Date();
+    const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const today = dayStart(now).getTime();
+    const yday = dayStart(new Date(now.getTime() - 86400000)).getTime();
+    const weekStart = dayStart(new Date(now.getTime() - 6 * 86400000)).getTime();
+    const monthStart = dayStart(new Date(now.getFullYear(), now.getMonth(), 1)).getTime();
+
+    const toMs = (iso?: string) => {
+      if (!iso) return 0;
+      const t = new Date(iso).getTime();
+      return Number.isFinite(t) ? t : 0;
+    };
+    const success = (s: string) => s === "APPROVED";
+    const failed = (s: string) => s === "EXPIRED" || s === "DECLINED";
+
+    const all = [...payins, ...payouts];
+    const sum = (arr: Tx[]) => arr.reduce((a, b) => a + b.amount, 0);
+    const countInRange = (arr: Tx[], from: number, to?: number) =>
+      arr.filter((x) => {
+        const t = toMs(x.createdAtIso);
+        if (!t) return false;
+        if (to !== undefined) return t >= from && t < to;
+        return t >= from;
+      });
+
+    const todayAll = countInRange(all, today);
+    const yAll = countInRange(all, yday, today);
+    const wAll = countInRange(all, weekStart);
+    const mAll = countInRange(all, monthStart);
+
+    const sToday = todayAll.filter((x) => success(x.status));
+    const sY = yAll.filter((x) => success(x.status));
+    const sW = wAll.filter((x) => success(x.status));
+    const sM = mAll.filter((x) => success(x.status));
+
+    const fToday = todayAll.filter((x) => failed(x.status));
+    const fY = yAll.filter((x) => failed(x.status));
+    const fW = wAll.filter((x) => failed(x.status));
+    const fM = mAll.filter((x) => failed(x.status));
+
+    const feePct = 0.01;
+    return [
+      { label: "Total Transactions", today: todayAll.length, yesterday: yAll.length, week: wAll.length, month: mAll.length, isAmount: false },
+      { label: "Total Amount (₹)", today: sum(todayAll), yesterday: sum(yAll), week: sum(wAll), month: sum(mAll), isAmount: true },
+      { label: "Success Count", today: sToday.length, yesterday: sY.length, week: sW.length, month: sM.length, isAmount: false },
+      { label: "Failed Count", today: fToday.length, yesterday: fY.length, week: fW.length, month: fM.length, isAmount: false },
+      { label: "Success Amount (₹)", today: sum(sToday), yesterday: sum(sY), week: sum(sW), month: sum(sM), isAmount: true },
+      { label: "Failed Amount (₹)", today: sum(fToday), yesterday: sum(fY), week: sum(fW), month: sum(fM), isAmount: true },
+      { label: "Net Settlement (₹)", today: sum(sToday), yesterday: sum(sY), week: sum(sW), month: sum(sM), isAmount: true },
+      { label: "Total Fee Collected (₹)", today: sum(todayAll) * feePct, yesterday: sum(yAll) * feePct, week: sum(wAll) * feePct, month: sum(mAll) * feePct, isAmount: true },
+    ];
+  }, [payins, payouts]);
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
       <div className="flex items-center justify-between px-5 py-4 sm:px-6">

@@ -8,6 +8,10 @@ interface ModalProps {
   children: React.ReactNode;
   showCloseButton?: boolean; // New prop to control close button visibility
   isFullscreen?: boolean; // Default to false for backwards compatibility
+  /** When false, clicking the dimmed backdrop does not call onClose. Default true. */
+  closeOnBackdropClick?: boolean;
+  /** When false, Escape does not call onClose. Default true. */
+  closeOnEscape?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -17,10 +21,13 @@ export const Modal: React.FC<ModalProps> = ({
   className,
   showCloseButton = true, // Default to true for backwards compatibility
   isFullscreen = false,
+  closeOnBackdropClick = true,
+  closeOnEscape = true,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!closeOnEscape) return;
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
@@ -34,7 +41,7 @@ export const Modal: React.FC<ModalProps> = ({
     return () => {
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, closeOnEscape]);
 
   useEffect(() => {
     if (isOpen) {
@@ -59,7 +66,8 @@ export const Modal: React.FC<ModalProps> = ({
       {!isFullscreen && (
         <div
           className="fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
-          onClick={onClose}
+          onClick={closeOnBackdropClick ? onClose : undefined}
+          aria-hidden="true"
         ></div>
       )}
       <div

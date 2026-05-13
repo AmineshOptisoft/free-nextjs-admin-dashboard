@@ -33,11 +33,18 @@ function mapAgent(r: AgentRow) {
   const netPayIn = num(r.net_pay_in);
   const payout = num(r.net_pay_out);
   const prevBalance = num(r.previous_balance);
-  const running = num(r.running_balance);
+  const runningDb = num(r.running_balance);
   const settlement = num(r.settlement_amount);
   const commission = num(r.referral_commission);
+
+  // Business formula (as shared): Net = PayIn - PayOut
   const net = netPayIn - payout;
+  // Running = previous + current net movement
+  const running = prevBalance + net;
+  // Final = running - security deposit
   const finalBalance = running - security;
+  // Remaining = credit limit - final
+  const remainingBalance = credit - finalBalance;
 
   return {
     id: String(r.id),
@@ -53,11 +60,11 @@ function mapAgent(r: AgentRow) {
     net,
     prevBalance,
     commission,
-    running,
+    running: runningDb || running,
     runningUnsettled: 0,
     credit,
     finalBalance,
-    remainingBalance: Math.abs(finalBalance),
+    remainingBalance,
   };
 }
 
