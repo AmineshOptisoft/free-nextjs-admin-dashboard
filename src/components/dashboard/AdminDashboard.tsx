@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -137,15 +137,73 @@ const colorVal = (n: number, zeroDash = false) => {
 };
 
 const badge = (n: number) => (
-  <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${
-    n > 0 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-    : n < 0 ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
-    : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-  }`}>{fmt(n)}</span>
+  <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${n > 0 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+      : n < 0 ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+        : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+    }`}>{fmt(n)}</span>
 );
 
 const colHdr = "px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 whitespace-nowrap border-r border-gray-100 dark:border-gray-800 last:border-0";
 const colCell = "px-3 py-2.5 text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap border-r border-gray-100 dark:border-gray-800 last:border-0";
+/** Wide enough for two icon buttons + slide offset + label pills (getActionLabelSpace ≤ 220px) */
+const colActions = "min-w-[240px] w-[240px] max-w-[240px] text-center align-middle";
+
+const TABLE_TOOLBAR_ICONS: { id: "menu" | "totals" | "highlight" | "inactive" | "headerFilters" | "customize"; icon: React.ReactNode }[] = [
+  {
+    id: "menu",
+    icon: (
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l2 2m0 0l2-2m-2 2v-6" />
+      </svg>
+    ),
+  },
+  {
+    id: "totals",
+    icon: (
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4l16 16" />
+      </svg>
+    ),
+  },
+  {
+    id: "highlight",
+    icon: (
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2M12 19v2M3 12h2m14 0h2" />
+      </svg>
+    ),
+  },
+  {
+    id: "inactive",
+    icon: (
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4l16 16" />
+      </svg>
+    ),
+  },
+  {
+    id: "headerFilters",
+    icon: (
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4l16 16" />
+      </svg>
+    ),
+  },
+  {
+    id: "customize",
+    icon: (
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17H5a2 2 0 01-2-2V5a2 2 0 012-2h4m6 14h4a2 2 0 002-2V5a2 2 0 00-2-2h-4M9 17v-4m6 4v-4M9 7h6" />
+      </svg>
+    ),
+  },
+];
 
 /* ── Tooltip wrapper ── */
 function Tip({ label, children }: { label: string; children: React.ReactNode }) {
@@ -173,6 +231,19 @@ export default function AdminDashboard() {
   const [search, setSearch] = useState("");
   const [hoveredToolbarIndex, setHoveredToolbarIndex] = useState<number | null>(null);
   const [hoveredTableActionIndex, setHoveredTableActionIndex] = useState<number | null>(null);
+  /** Per vendor row: which action slot (0 View, 1 Remove) is hovered — same slide + label animation as table toolbar */
+  const [vendorRowHoveredAction, setVendorRowHoveredAction] = useState<{ rowId: string; slot: 0 | 1 } | null>(null);
+  const [removeConfirmVendorId, setRemoveConfirmVendorId] = useState<string | null>(null);
+
+  const tableToolbarRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [highlightMenuOpen, setHighlightMenuOpen] = useState(false);
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+  const [showTotalsRow, setShowTotalsRow] = useState(true);
+  const [hideHeaderFilters, setHideHeaderFilters] = useState(false);
+  const [rowActivityFilter, setRowActivityFilter] = useState<"all" | "active" | "inactive">("all");
+  const [colVisible, setColVisible] = useState<Record<StatsColKey, boolean>>(() => defaultColBoolMap(true));
+  const [colHighlight, setColHighlight] = useState<Record<StatsColKey, boolean>>(() => defaultColBoolMap(false));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -251,6 +322,53 @@ export default function AdminDashboard() {
   const getActionLabelSpace = (label: string) =>
     Math.max(72, Math.min(220, label.length * 7 + 24));
 
+  const tableToolbarHoverLabel = (idx: number): string => {
+    switch (idx) {
+      case 0:
+        return "Menu / Options List";
+      case 1:
+        return showTotalsRow ? "Hide Totals" : "Show Totals";
+      case 2:
+        return "Highlight";
+      case 3:
+        return "Show Inactive (active or inactive)";
+      case 4:
+        return hideHeaderFilters ? "Show Header Filters" : "Hide Header Filters";
+      case 5:
+        return "Customize Columns (18)";
+      default:
+        return "";
+    }
+  };
+
+  useEffect(() => {
+    if (!removeConfirmVendorId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRemoveConfirmVendorId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [removeConfirmVendorId]);
+
+  useEffect(() => {
+    if (!menuOpen && !highlightMenuOpen && !columnsMenuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (tableToolbarRef.current && !tableToolbarRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setHighlightMenuOpen(false);
+        setColumnsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen, highlightMenuOpen, columnsMenuOpen]);
+
+  const confirmRemoveVendor = () => {
+    if (!removeConfirmVendorId) return;
+    setRows((prev) => prev.filter((r) => r.id !== removeConfirmVendorId));
+    setRemoveConfirmVendorId(null);
+  };
+
   const topActions = [
     {
       label: "Add Interledger Entry",
@@ -316,46 +434,25 @@ export default function AdminDashboard() {
     },
   ] as const;
 
-  const tableActions = [
-    {
-      label: "Sort",
-      icon: (
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" /></svg>
-      )
-    },
-    {
-      label: "Filter",
-      icon: (
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
-      )
-    },
-    {
-      label: "View",
-      icon: (
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-      )
-    },
-    {
-      label: "Columns",
-      icon: (
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 17H5a2 2 0 01-2-2V5a2 2 0 012-2h4m6 14h4a2 2 0 002-2V5a2 2 0 00-2-2h-4M9 17v-4m6 4v-4M9 7h6" /></svg>
-      )
-    },
-    {
-      label: "Search",
-      icon: (
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-      )
-    }
-  ] as const;
+  const filtered = useMemo(() => {
+    let list = rows.filter(
+      (r) => !search || r.name.toLowerCase().includes(search.toLowerCase())
+    );
+    if (rowActivityFilter === "active") list = list.filter((r) => !isInactiveVendorRow(r));
+    if (rowActivityFilter === "inactive") list = list.filter((r) => isInactiveVendorRow(r));
+    return list;
+  }, [rows, search, rowActivityFilter]);
 
-  const filtered = rows.filter((r) =>
-    !search || r.name.toLowerCase().includes(search.toLowerCase())
-  );
   const hoveredLabelSpacePx =
     hoveredToolbarIndex === null ? 0 : getActionLabelSpace(topActions[hoveredToolbarIndex].label);
   const hoveredTableActionSpacePx =
-    hoveredTableActionIndex === null ? 0 : getActionLabelSpace(tableActions[hoveredTableActionIndex].label);
+    hoveredTableActionIndex === null
+      ? 0
+      : getActionLabelSpace(tableToolbarHoverLabel(hoveredTableActionIndex));
+
+  const xh = (k: StatsColKey) => (colHighlight[k] ? " bg-amber-50/90 dark:bg-amber-950/35" : "");
+  const xv = (k: StatsColKey) => (colVisible[k] ? "" : " hidden");
+  const visibleColCount = FIN_STATS_COLUMNS.filter((c) => colVisible[c.key]).length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -397,9 +494,8 @@ export default function AdminDashboard() {
                   {action.icon}
                 </button>
                 <span
-                  className={`pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                    isHovered ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
-                  }`}
+                  className={`pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isHovered ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
+                    }`}
                 >
                   {action.label}
                 </span>
@@ -428,13 +524,14 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 flex-wrap">
           <h2 className="text-sm font-semibold text-gray-800 dark:text-white">Financial Statistics</h2>
           <div className="flex items-center gap-1">
-            <div className="relative flex items-center gap-0.5">
-              {tableActions.map((action, idx) => {
+            <div className="relative flex flex-wrap items-center gap-0.5" ref={tableToolbarRef}>
+              {TABLE_TOOLBAR_ICONS.map((item, idx) => {
                 const isHovered = hoveredTableActionIndex === idx;
                 const isLeftOfHovered = hoveredTableActionIndex !== null && idx < hoveredTableActionIndex;
+                const label = tableToolbarHoverLabel(idx);
                 return (
                   <div
-                    key={action.label}
+                    key={item.id}
                     className="relative transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
                     style={{
                       transform: isLeftOfHovered ? `translateX(-${hoveredTableActionSpacePx}px)` : "translateX(0px)",
@@ -444,176 +541,322 @@ export default function AdminDashboard() {
                   >
                     <button
                       type="button"
-                      aria-label={action.label}
-                      title={action.label === "View" ? "Open agents list" : undefined}
-                      onClick={() => {
-                        if (action.label === "View") router.push("/agent");
+                      aria-label={label}
+                      className="relative z-10 flex h-7 w-7 items-center justify-center rounded text-gray-400 transition-colors duration-300 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (item.id === "menu") {
+                          setHighlightMenuOpen(false);
+                          setColumnsMenuOpen(false);
+                          setMenuOpen((o) => !o);
+                        } else if (item.id === "totals") {
+                          setShowTotalsRow((s) => !s);
+                        } else if (item.id === "highlight") {
+                          setMenuOpen(false);
+                          setColumnsMenuOpen(false);
+                          setHighlightMenuOpen((o) => !o);
+                        } else if (item.id === "inactive") {
+                          setRowActivityFilter((m) => (m === "all" ? "active" : m === "active" ? "inactive" : "all"));
+                        } else if (item.id === "headerFilters") {
+                          setHideHeaderFilters((h) => !h);
+                        } else if (item.id === "customize") {
+                          setMenuOpen(false);
+                          setHighlightMenuOpen(false);
+                          setColumnsMenuOpen((o) => !o);
+                        }
                       }}
-                      className="relative z-10 flex items-center justify-center w-7 h-7 rounded text-gray-400 transition-colors duration-300 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                     >
-                      {action.icon}
+                      {item.icon}
                     </button>
                     <span
-                      className={`pointer-events-none absolute right-6 top-1/2 -translate-y-1/2 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                        isHovered ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
-                      }`}
+                      className={`pointer-events-none absolute right-6 top-1/2 z-30 w-fit max-w-[220px] -translate-y-1/2 whitespace-nowrap rounded-md border border-gray-200 bg-white/95 px-2 py-1 text-right text-[11px] font-medium text-gray-600 shadow-sm transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-gray-700 dark:bg-gray-900/95 dark:text-gray-200 ${isHovered ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
+                        }`}
                     >
-                      {action.label}
+                      {label}
                     </span>
                   </div>
                 );
               })}
+
+              {menuOpen && (
+                <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-lg border border-gray-200 bg-white py-1 text-left text-xs shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                  <div className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200">Options</div>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                  >
+                    Refresh summary
+                  </button>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                  >
+                    Export view…
+                  </button>
+                </div>
+              )}
+
+              {highlightMenuOpen && (
+                <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 text-left shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                  <p className="mb-1.5 px-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Highlight columns
+                  </p>
+                  <div className="flex flex-col gap-0.5">
+                    {FIN_STATS_COLUMNS.map((c) => (
+                      <label
+                        key={c.key}
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                      >
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500/30 dark:border-gray-600 dark:bg-gray-800"
+                          checked={colHighlight[c.key]}
+                          onChange={() =>
+                            setColHighlight((prev) => ({ ...prev, [c.key]: !prev[c.key] }))
+                          }
+                        />
+                        <span className="truncate">{c.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {columnsMenuOpen && (
+                <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 text-left shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                  <p className="mb-1.5 px-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Customize columns (18)
+                  </p>
+                  <div className="flex flex-col gap-0.5">
+                    {FIN_STATS_COLUMNS.map((c) => (
+                      <label
+                        key={`vis-${c.key}`}
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                      >
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500/30 dark:border-gray-600 dark:bg-gray-800"
+                          checked={colVisible[c.key]}
+                          onChange={() =>
+                            setColVisible((prev) => {
+                              const next = { ...prev, [c.key]: !prev[c.key] };
+                              if (!FIN_STATS_COLUMNS.some((col) => next[col.key])) return prev;
+                              return next;
+                            })
+                          }
+                        />
+                        <span className="truncate">{c.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
-
-            <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap pr-1">
-              Showing <span className="font-semibold text-gray-600 dark:text-gray-300">{filtered.length}</span> results
-            </span>
+            {!hideHeaderFilters && (
+              <>
+                <div className="mx-1 h-4 w-px bg-gray-200 dark:bg-gray-700" />
+                <span className="pr-1 text-xs whitespace-nowrap text-gray-400 dark:text-gray-500">
+                  Showing <span className="font-semibold text-gray-600 dark:text-gray-300">{filtered.length}</span>{" "}
+                  results
+                  {rowActivityFilter !== "all" && (
+                    <span className="ml-1 text-[10px] font-semibold text-blue-500 dark:text-blue-400">
+                      ({rowActivityFilter})
+                    </span>
+                  )}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
         {/* Table (horizontal scroll) */}
         <div className="overflow-x-auto">
-          <table className="w-full text-xs" style={{ minWidth: "1600px" }}>
+          <table className="w-full text-xs" style={{ minWidth: "1760px" }}>
             <thead>
               <tr className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-gray-800">
-                <th className={`${colHdr} sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 min-w-[140px]`}>Vendor</th>
-                <th className={colHdr}>Security</th>
-                <th className={colHdr}>
+                <th className={`${colHdr} sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 min-w-[140px]${xh("vendor")}${xv("vendor")}`}>Vendor</th>
+                <th className={`${colHdr}${xh("security")}${xv("security")}`}>Security</th>
+                <th className={`${colHdr}${xh("manualPayIn")}${xv("manualPayIn")}`}>
                   Manual PayIn&nbsp;
                   <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
                 </th>
-                <th className={colHdr}>
+                <th className={`${colHdr}${xh("approvedPayIn")}${xv("approvedPayIn")}`}>
                   Approved PayIn&nbsp;
                   <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
                 </th>
-                <th className={colHdr}>Discounted</th>
-                <th className={colHdr}>Net PayIn</th>
-                <th className={colHdr}>Payout</th>
-                <th className={colHdr}>Unsettle Payout</th>
-                <th className={colHdr}>Settlement</th>
-                <th className={colHdr}>
+                <th className={`${colHdr}${xh("discounted")}${xv("discounted")}`}>Discounted</th>
+                <th className={`${colHdr}${xh("netPayIn")}${xv("netPayIn")}`}>Net PayIn</th>
+                <th className={`${colHdr}${xh("payout")}${xv("payout")}`}>Payout</th>
+                <th className={`${colHdr}${xh("unsettlePayout")}${xv("unsettlePayout")}`}>Unsettle Payout</th>
+                <th className={`${colHdr}${xh("settlement")}${xv("settlement")}`}>Settlement</th>
+                <th className={`${colHdr}${xh("net")}${xv("net")}`}>
                   Net&nbsp;
                   <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
                 </th>
-                <th className={colHdr}>Prev</th>
-                <th className={colHdr}>Commission</th>
-                <th className={colHdr}>Running</th>
-                <th className={colHdr}>Running Unsettled</th>
-                <th className={colHdr}>Credit</th>
-                <th className={colHdr}>Final</th>
-                <th className={colHdr}>Remaining</th>
-                <th className={`${colHdr} text-center`}>Actions</th>
+                <th className={`${colHdr}${xh("prevBalance")}${xv("prevBalance")}`}>Previous Balance</th>
+                <th className={`${colHdr}${xh("commission")}${xv("commission")}`}>Commission</th>
+                <th className={`${colHdr}${xh("running")}${xv("running")}`}>Running</th>
+                <th className={`${colHdr}${xh("runningUnsettled")}${xv("runningUnsettled")}`}>Running Unsettled</th>
+                <th className={`${colHdr}${xh("credit")}${xv("credit")}`}>Credit</th>
+                <th className={`${colHdr}${xh("finalBalance")}${xv("finalBalance")}`}>Final Balance</th>
+                <th className={`${colHdr}${xh("remainingBalance")}${xv("remainingBalance")}`}>Remaining Balance</th>
+                <th className={`${colHdr} ${colActions}${xh("actions")}${xv("actions")}`}>Actions</th>
               </tr>
 
-              {/* Totals row */}
-              <tr className="border-b-2 border-gray-200 dark:border-gray-700 bg-gray-100/60 dark:bg-white/[0.04]">
-                <td className={`${colCell} sticky left-0 z-10 bg-gray-100 dark:bg-gray-900 font-bold text-gray-600 dark:text-gray-300`}>Vendor</td>
-                <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400`}>{totals.security.toLocaleString("en-IN")}</td>
-                <td className={colCell}>{totals.manualPayIn}</td>
-                <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400`}>{totals.approvedPayIn.toLocaleString("en-IN")}</td>
-                <td className={colCell}>{totals.discounted}</td>
-                <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400`}>{totals.netPayIn.toLocaleString("en-IN")}</td>
-                <td className={`${colCell} font-bold text-orange-500`}>{totals.payout.toLocaleString("en-IN")}</td>
-                <td className={`${colCell} font-bold text-red-500`}>{fmt(totals.unsettlePayout)}</td>
-                <td className={colCell}>{totals.settlement.toLocaleString("en-IN")}</td>
-                <td className={`${colCell} font-bold text-red-500`}>{fmt(totals.net)}</td>
-                <td className={colCell}>{totals.prevBalance}</td>
-                <td className={`${colCell}`}>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-green-600 dark:text-green-400 font-semibold">{totals.commission.toLocaleString("en-IN")}</span>
-                  </div>
-                </td>
-                <td className={colCell}>
-                  <span className="text-green-600 dark:text-green-400 font-semibold">{totals.running.toLocaleString("en-IN")}</span>
-                </td>
-                <td className={colCell}>
-                  <span className="text-green-600 dark:text-green-400 font-semibold">{totals.runningUnsettled.toLocaleString("en-IN")}</span>
-                </td>
-                <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400`}>{totals.credit.toLocaleString("en-IN")}</td>
-                <td className={`${colCell} font-bold text-green-600 dark:text-green-400`}>{totals.finalBalance.toLocaleString("en-IN")}</td>
-                <td className={`${colCell} font-bold text-green-600 dark:text-green-400`}>{totals.remainingBalance.toLocaleString("en-IN")}</td>
-                <td className={colCell}></td>
-              </tr>
+              {showTotalsRow && (
+                <tr className="border-b-2 border-gray-200 dark:border-gray-700 bg-gray-100/60 dark:bg-white/[0.04]">
+                  <td className={`${colCell} sticky left-0 z-10 bg-gray-100 dark:bg-gray-900 font-bold text-gray-600 dark:text-gray-300${xh("vendor")}${xv("vendor")}`}>Vendor</td>
+                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("security")}${xv("security")}`}>{totals.security.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell}${xh("manualPayIn")}${xv("manualPayIn")}`}>{totals.manualPayIn}</td>
+                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("approvedPayIn")}${xv("approvedPayIn")}`}>{totals.approvedPayIn.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell}${xh("discounted")}${xv("discounted")}`}>{totals.discounted}</td>
+                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("netPayIn")}${xv("netPayIn")}`}>{totals.netPayIn.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} font-bold text-orange-500${xh("payout")}${xv("payout")}`}>{totals.payout.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} font-bold text-red-500${xh("unsettlePayout")}${xv("unsettlePayout")}`}>{fmt(totals.unsettlePayout)}</td>
+                  <td className={`${colCell}${xh("settlement")}${xv("settlement")}`}>{totals.settlement.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} font-bold text-red-500${xh("net")}${xv("net")}`}>{fmt(totals.net)}</td>
+                  <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{totals.prevBalance}</td>
+                  <td className={`${colCell}${xh("commission")}${xv("commission")}`}>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-green-600 dark:text-green-400 font-semibold">{totals.commission.toLocaleString("en-IN")}</span>
+                    </div>
+                  </td>
+                  <td className={`${colCell}${xh("running")}${xv("running")}`}>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-green-600 dark:text-green-400 font-semibold">{(totals.running / 1000).toFixed(0)}K</span>
+                      <span className="text-blue-500 font-semibold text-[10px]">{totals.runningUnsettled.toLocaleString("en-IN")}</span>
+                    </div>
+                  </td>
+                  <td className={`${colCell}${xh("runningUnsettled")}${xv("runningUnsettled")}`}>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-green-600 dark:text-green-400 font-semibold">{totals.runningUnsettled.toLocaleString("en-IN")}</span>
+                      <span className="text-orange-500 font-semibold text-[10px]">{(totals.runningUnsettled * 0.87).toFixed(0)}</span>
+                    </div>
+                  </td>
+                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("credit")}${xv("credit")}`}>{(totals.credit / 1000000).toFixed(0)}M</td>
+                  <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("finalBalance")}${xv("finalBalance")}`}>{totals.finalBalance.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("remainingBalance")}${xv("remainingBalance")}`}>{totals.remainingBalance.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} ${colActions}${xh("actions")}${xv("actions")}`}></td>
+                </tr>
+              )}
             </thead>
 
             <tbody>
-              {filtered.map((row) => (
-                <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-blue-50/30 dark:hover:bg-white/[0.015] transition-colors">
-                  {/* Vendor name — sticky, links to agent detail */}
-                  <td className={`${colCell} sticky left-0 z-10 bg-white dark:bg-gray-900 font-semibold text-gray-800 dark:text-gray-200`}>
-                    <Link
-                      href={`/agent/${row.id}`}
-                      className="text-brand-600 hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300"
-                    >
+              {filtered.map((row) => {
+                const rowHover = vendorRowHoveredAction?.rowId === row.id ? vendorRowHoveredAction : null;
+                const vendorRowHoveredSpacePx =
+                  rowHover == null ? 0 : getActionLabelSpace(rowHover.slot === 0 ? "View" : "Remove");
+
+                return (
+                  <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-blue-50/30 dark:hover:bg-white/[0.015] transition-colors">
+                    {/* Vendor name — sticky */}
+                    <td className={`${colCell} sticky left-0 z-10 bg-white dark:bg-gray-900 font-semibold text-gray-800 dark:text-gray-200${xh("vendor")}${xv("vendor")}`}>
                       {row.name}
-                    </Link>
-                  </td>
+                    </td>
 
-                  <td className={colCell}>{row.security.toLocaleString("en-IN")}</td>
-                  <td className={colCell}>{row.manualPayIn.toLocaleString("en-IN")}</td>
-                  <td className={colCell}>{row.approvedPayIn.toLocaleString("en-IN")}</td>
-                  <td className={colCell}>{row.discounted.toLocaleString("en-IN")}</td>
-                  <td className={colCell}>{row.netPayIn.toLocaleString("en-IN")}</td>
-                  <td className={colCell}>{row.payout.toLocaleString("en-IN")}</td>
-                  <td className={colCell}>{colorVal(row.unsettlePayout, true)}</td>
-                  <td className={colCell}>{colorVal(row.settlement, true)}</td>
-                  <td className={colCell}>{colorVal(row.net, true)}</td>
-                  <td className={colCell}>{row.prevBalance.toLocaleString("en-IN")}</td>
-                  <td className={colCell}>{row.commission.toLocaleString("en-IN")}</td>
+                    <td className={`${colCell}${xh("security")}${xv("security")}`}>{row.security > 0 ? row.security.toLocaleString("en-IN") : "0"}</td>
+                    <td className={`${colCell}${xh("manualPayIn")}${xv("manualPayIn")}`}>{row.manualPayIn}</td>
+                    <td className={`${colCell}${xh("approvedPayIn")}${xv("approvedPayIn")}`}>{row.approvedPayIn > 0 ? row.approvedPayIn.toLocaleString("en-IN") : "0"}</td>
+                    <td className={`${colCell}${xh("discounted")}${xv("discounted")}`}>{row.discounted}</td>
+                    <td className={`${colCell}${xh("netPayIn")}${xv("netPayIn")}`}>{row.netPayIn > 0 ? row.netPayIn.toLocaleString("en-IN") : "0"}</td>
+                    <td className={`${colCell}${xh("payout")}${xv("payout")}`}>{row.payout > 0 ? row.payout.toLocaleString("en-IN") : "0"}</td>
+                    <td className={`${colCell}${xh("unsettlePayout")}${xv("unsettlePayout")}`}>{colorVal(row.unsettlePayout, true)}</td>
+                    <td className={`${colCell}${xh("settlement")}${xv("settlement")}`}>{colorVal(row.settlement, true)}</td>
+                    <td className={`${colCell}${xh("net")}${xv("net")}`}>{colorVal(row.net, true)}</td>
+                    <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{row.prevBalance}</td>
+                    <td className={`${colCell}${xh("commission")}${xv("commission")}`}>{row.commission > 0 ? row.commission.toLocaleString("en-IN") : "0"}</td>
 
-                  {/* Running — badge */}
-                  <td className={colCell}>
-                    {badge(row.running)}
-                  </td>
+                    {/* Running — badge */}
+                    <td className={`${colCell}${xh("running")}${xv("running")}`}>
+                      {badge(row.running)}
+                    </td>
 
-                  {/* Running Unsettled — badge */}
-                  <td className={colCell}>
-                    {badge(row.runningUnsettled)}
-                  </td>
+                    {/* Running Unsettled — badge */}
+                    <td className={`${colCell}${xh("runningUnsettled")}${xv("runningUnsettled")}`}>
+                      {badge(row.runningUnsettled)}
+                    </td>
 
-                  <td className={colCell}>
-                    <EditableCreditCell rowId={row.id} value={row.credit} onSave={saveRowCredit} />
-                  </td>
+                    <td className={`${colCell}${xh("credit")}${xv("credit")}`}>
+                      <EditableCreditCell rowId={row.id} value={row.credit} onSave={saveRowCredit} />
+                    </td>
 
-                  {/* Final Balance */}
-                  <td className={colCell}>{colorVal(row.finalBalance, true)}</td>
+                    {/* Final Balance */}
+                    <td className={`${colCell}${xh("finalBalance")}${xv("finalBalance")}`}>{colorVal(row.finalBalance, true)}</td>
 
-                  {/* Remaining Balance */}
-                  <td className={colCell}>{colorVal(row.remainingBalance, true)}</td>
+                    {/* Remaining Balance */}
+                    <td className={`${colCell}${xh("remainingBalance")}${xv("remainingBalance")}`}>{colorVal(row.remainingBalance, true)}</td>
 
-                  {/* Actions — View agent; remove not wired */}
-                  <td className={`${colCell} text-center`}>
-                    <div className="flex items-center justify-center gap-1">
-                      <Link
-                        href={`/agent/${row.id}`}
-                        title="View agent"
-                        className="flex items-center justify-center w-6 h-6 rounded text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-900/20"
+                    {/* Actions — same label-from-behind + sibling shift as Financial Statistics toolbar */}
+                    <td className={`${colCell} ${colActions}${xh("actions")}${xv("actions")}`}>
+                      <div
+                        className="relative flex items-center justify-center gap-0.5 mx-auto max-w-full"
+                        onMouseLeave={() => {
+                          setVendorRowHoveredAction((h) => (h?.rowId === row.id ? null : h));
+                        }}
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                      </Link>
-                      <button
-                        type="button"
-                        disabled
-                        title="Remove (coming soon)"
-                        className="flex cursor-not-allowed items-center justify-center w-6 h-6 rounded text-gray-300 opacity-50 dark:text-gray-600"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        <div
+                          className="relative transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                          style={{
+                            transform:
+                              rowHover !== null && rowHover.slot === 1
+                                ? `translateX(-${vendorRowHoveredSpacePx}px)`
+                                : "translateX(0px)",
+                          }}
+                          onMouseEnter={() => setVendorRowHoveredAction({ rowId: row.id, slot: 0 })}
+                        >
+                          <button
+                            type="button"
+                            aria-label="View"
+                            className="relative z-10 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-300"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
+                          <span
+                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${rowHover?.slot === 0 ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
+                              }`}
+                          >
+                            View
+                          </span>
+                        </div>
+                        <div
+                          className="relative transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                          style={{ transform: "translateX(0px)" }}
+                          onMouseEnter={() => setVendorRowHoveredAction({ rowId: row.id, slot: 1 })}
+                        >
+                          <button
+                            type="button"
+                            aria-label="Remove"
+                            className="relative z-10 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-300"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setRemoveConfirmVendorId(row.id);
+                            }}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                          <span
+                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${rowHover?.slot === 1 ? "-translate-x-2 opacity-100" : "translate-x-2 opacity-0"
+                              }`}
+                          >
+                            Remove
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={18} className="py-12 text-center text-sm text-gray-400">No vendors found.</td>
+                  <td colSpan={Math.max(1, visibleColCount)} className="py-12 text-center text-sm text-gray-400">No vendors found.</td>
                 </tr>
               )}
             </tbody>
@@ -628,6 +871,50 @@ export default function AdminDashboard() {
           </p>
         </div>
       </div>
+
+      {removeConfirmVendorId !== null && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-vendor-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[1px] dark:bg-black/60"
+            aria-label="Dismiss"
+            onClick={() => setRemoveConfirmVendorId(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+            <h3 id="remove-vendor-title" className="text-lg font-semibold text-gray-900 dark:text-white">
+              Remove vendor?
+            </h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              This will remove{" "}
+              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                {rows.find((r) => r.id === removeConfirmVendorId)?.name ?? "this vendor"}
+              </span>{" "}
+              from the financial statistics table. You can refresh the page to restore mock data.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRemoveConfirmVendorId(null)}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveVendor}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

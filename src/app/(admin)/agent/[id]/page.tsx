@@ -1,6 +1,6 @@
 import AgentDetail from "@/components/agent/AgentDetail";
 
-export const metadata = { title: "Agent Details" };
+export const metadata = { title: "Vendor Details" };
 
 type PageProps = { params: Promise<{ id: string }> };
 

@@ -126,15 +126,15 @@ function mapApiRowToActivity(t: {
 }
 
 const activityStatusStyle: Record<ActivityStatus, string> = {
-  EXPIRED:    "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
-  APPROVED:   "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
-  PENDING:    "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  EXPIRED: "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
+  APPROVED: "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
+  PENDING: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
   PROCESSING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  FAILED:     "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
+  FAILED: "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
 };
 
 const activityTypeStyle: Record<ActivityType, string> = {
-  PAYIN:  "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
+  PAYIN: "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
   PAYOUT: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
 };
 
@@ -216,14 +216,12 @@ function PayMethodToggle({
   return (
     <span
       role="presentation"
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-        enabled ? trackOn : "bg-gray-200 dark:bg-gray-700"
-      }`}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enabled ? trackOn : "bg-gray-200 dark:bg-gray-700"
+        }`}
     >
       <span
-        className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-          enabled ? "translate-x-6" : "translate-x-1"
-        }`}
+        className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${enabled ? "translate-x-6" : "translate-x-1"
+          }`}
       />
     </span>
   );
@@ -334,9 +332,8 @@ function AgentPayMethodCard({ pm }: { pm: PayMethodStaffApi }) {
 
         <div className="grid grid-cols-2 gap-2">
           <div
-            className={`flex items-center justify-between rounded-xl px-3 py-2 ${
-              pm.pay_in_enabled ? "bg-green-50 dark:bg-green-900/10" : "bg-gray-50 dark:bg-gray-800"
-            }`}
+            className={`flex items-center justify-between rounded-xl px-3 py-2 ${pm.pay_in_enabled ? "bg-green-50 dark:bg-green-900/10" : "bg-gray-50 dark:bg-gray-800"
+              }`}
           >
             <div className="flex items-center gap-1.5 min-w-0">
               <svg className="w-3.5 h-3.5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -347,9 +344,8 @@ function AgentPayMethodCard({ pm }: { pm: PayMethodStaffApi }) {
             <PayMethodToggle enabled={pm.pay_in_enabled} color="green" />
           </div>
           <div
-            className={`flex items-center justify-between rounded-xl px-3 py-2 ${
-              pm.pay_out_enabled ? "bg-purple-50 dark:bg-purple-900/10" : "bg-red-50 dark:bg-red-900/10"
-            }`}
+            className={`flex items-center justify-between rounded-xl px-3 py-2 ${pm.pay_out_enabled ? "bg-purple-50 dark:bg-purple-900/10" : "bg-red-50 dark:bg-red-900/10"
+              }`}
           >
             <div className="flex items-center gap-1.5 min-w-0">
               <svg className="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -620,16 +616,12 @@ export default function AgentDetail({ id }: { id: string }) {
             </svg>
           </Link>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-            Agent Details — <span className="text-blue-500">{agent.username}</span>
+            Vendor Details — <span className="text-blue-500">{agent.username}</span>
           </h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setEditOpen(true)}
-            className="rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm"
-          >
-            Edit Agent
+          <button className="rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm">
+            Edit Vendor
           </button>
           <button
             type="button"
@@ -679,21 +671,21 @@ export default function AgentDetail({ id }: { id: string }) {
           {/* Info rows */}
           <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800">
             <InfoRow label="Email / contact" value={agent.whatsapp} />
-            <InfoRow label="Current Usage"     value={fmt(agent.currentUsage)} />
-            <InfoRow label="Security Deposit"  value={fmt(agent.securityDeposit)} />
-            <InfoRow label="Credit Limit"      value={fmt(agent.creditLimit)} />
+            <InfoRow label="Current Usage" value={fmt(agent.currentUsage)} />
+            <InfoRow label="Security Deposit" value={fmt(agent.securityDeposit)} />
+            <InfoRow label="Credit Limit" value={fmt(agent.creditLimit)} />
             <InfoRow label="Net (PayIn - PayOut)" value={agent.net >= 0 ? fmt(agent.net) : `₹-${Math.abs(agent.net).toLocaleString("en-IN")}`} />
             <InfoRow label="Prev (Last Running)" value={fmt(agent.prevLastRunning)} />
-            <InfoRow label="Running (Today)"   value={fmt(agent.runningToday)} />
-            <InfoRow label="Final"             value={`₹${agent.final < 0 ? "-" : ""}${Math.abs(agent.final).toLocaleString("en-IN")}`}
+            <InfoRow label="Running (Today)" value={fmt(agent.runningToday)} />
+            <InfoRow label="Final" value={`₹${agent.final < 0 ? "-" : ""}${Math.abs(agent.final).toLocaleString("en-IN")}`}
               valueClass={agent.final < 0 ? "text-red-500 dark:text-red-400" : ""} />
             <InfoRow label="Remaining Balance" value={fmt(agent.remainingBalance)} />
             <InfoRow label="Settlement" value={fmt(agent.settlementAmount)} />
-            <InfoRow label="PayIn Commission"  value={agent.payinCommission} />
+            <InfoRow label="PayIn Commission" value={agent.payinCommission} />
             <InfoRow label="PayOut Commission" value={agent.payoutCommission} />
             <InfoRow label="Referral Commission" value={agent.referralCommission} />
-            <InfoRow label="Referral Code"     value={agent.referralCode} />
-            <InfoRow label="Account Created"   value={agent.accountCreated} />
+            <InfoRow label="Referral Code" value={agent.referralCode} />
+            <InfoRow label="Account Created" value={agent.accountCreated} />
           </div>
 
           {/* Performance Summary */}
@@ -701,10 +693,10 @@ export default function AgentDetail({ id }: { id: string }) {
             <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Performance Summary</p>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "Success Rate",  value: agent.perf.successRate.toString() },
-                { label: "Total Volume",  value: fmt(agent.perf.totalVolume) },
-                { label: "Today",         value: fmt(agent.perf.today) },
-                { label: "This Week",     value: fmt(agent.perf.thisWeek) },
+                { label: "Success Rate", value: agent.perf.successRate.toString() },
+                { label: "Total Volume", value: fmt(agent.perf.totalVolume) },
+                { label: "Today", value: fmt(agent.perf.today) },
+                { label: "This Week", value: fmt(agent.perf.thisWeek) },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl bg-gray-50 dark:bg-gray-800/60 px-3 py-2">
                   <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">{item.label}</p>
@@ -738,11 +730,10 @@ export default function AgentDetail({ id }: { id: string }) {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-6 py-3.5 text-sm font-semibold transition-colors ${
-                  activeTab === tab
+                className={`px-6 py-3.5 text-sm font-semibold transition-colors ${activeTab === tab
                     ? "border-b-2 border-blue-500 text-blue-500"
                     : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                }`}
+                  }`}
               >
                 {tab === "accounts" ? "Payment Accounts" : "Transaction Stats"}
               </button>

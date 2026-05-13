@@ -134,22 +134,18 @@ export default function AgentList() {
         <svg className="h-6 w-6 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Agents</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Vendors</h1>
       </div>
 
-      {loadError && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
-          {loadError}{" "}
-          <Link href="/signin/admin" className="font-semibold underline">
-            Sign in as admin
-          </Link>
-        </div>
-      )}
-
-      <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-white/[0.03]">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">All Agents</span>
-          <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+      {/* ── Toolbar ── */}
+      <div className="flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-4 py-3">
+        {/* Left: All Agents + count */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">All Vendors</span>
+          <span className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-bold text-gray-600 dark:text-gray-300">
             {filtered.length}
           </span>
         </div>
@@ -169,15 +165,10 @@ export default function AgentList() {
                 autoFocus
                 type="text"
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                onBlur={() => {
-                  if (!search) setSearchOpen(false);
-                }}
-                placeholder="Search…"
-                className="w-44 rounded-full border border-gray-200 bg-gray-50 py-2 pl-3 pr-4 text-sm dark:border-gray-700 dark:bg-gray-800"
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                onBlur={() => { if (!search) setSearchOpen(false); }}
+                placeholder="Search Vendors..."
+                className="w-44 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-9 pr-4 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
               />
             </div>
           ) : (
@@ -186,7 +177,10 @@ export default function AgentList() {
               onClick={() => setSearchOpen(true)}
               className="rounded-full border border-gray-200 px-3 py-2 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800"
             >
-              Search…
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <span className="text-sm">Search Vendors...</span>
             </button>
           )}
           <div className="flex overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">

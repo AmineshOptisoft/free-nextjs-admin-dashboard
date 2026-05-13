@@ -39,7 +39,7 @@ export default function TransactionReportFilters() {
     <div className="rounded-2xl border border-gray-200 bg-white p-3.5 dark:border-gray-800 dark:bg-white/[0.03]">
       <div className="flex flex-wrap items-end gap-3">
         <SelectField label="Date Range" options={["All Time", "Today", "Last 7 Days", "Last 30 Days"]} />
-        <SelectField label="Agent" options={["All Agents", "Bablu0012", "sachin80"]} />
+        <SelectField label="Vendor" options={["All Vendors", "Bablu0012", "sachin80"]} />
         <SelectField label="Transaction Type" options={["All Types", "Pay In", "Pay Out"]} />
         <SelectField label="Status" options={["All Statuses", "Approved", "Expired", "Reassigned"]} />
         <button className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white shadow-theme-xs transition-colors hover:bg-brand-600">

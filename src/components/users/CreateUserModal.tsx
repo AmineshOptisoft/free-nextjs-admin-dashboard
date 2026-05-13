@@ -23,7 +23,7 @@ type Props = {
 
 const STEPS = ["Personal Info", "Account Setup", "Permissions"];
 
-const ROLES = ["Peer User", "Agent", "Merchant", "Sub Admin", "Admin"];
+const ROLES = ["Peer User", "Vendor", "Merchant", "Sub Admin", "Admin"];
 const OP_TYPES = ["PayIn & PayOut", "PayIn Only", "PayOut Only"];
 const GATEWAYS = ["UPI & Bank Transfer", "UPI Only", "Bank Transfer Only"];
 

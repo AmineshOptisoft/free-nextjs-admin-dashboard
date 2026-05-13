@@ -6,7 +6,7 @@ import SummaryTable from "@/components/dashboard/SummaryTable";
 import TransactionVolumeChart from "@/components/dashboard/TransactionVolumeChart";
 
 export const metadata: Metadata = {
-  title: "Dashboard | Agent Panel",
+  title: "Dashboard | Vendor Panel",
 };
 
 export default function AgentDashboard() {

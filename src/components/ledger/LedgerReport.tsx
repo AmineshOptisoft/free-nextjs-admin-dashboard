@@ -144,11 +144,10 @@ export default function LedgerReport() {
           <button
             type="button"
             onClick={() => setOpenAgentId((prev) => (prev === account.agentId ? null : account.agentId))}
-            className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-              openAgentId === account.agentId
-                ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
-                : "bg-transparent text-gray-800 hover:bg-gray-50 dark:text-white/90 dark:hover:bg-white/5"
-            }`}
+            className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${openAccountIndex === index
+                ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-700"
+                : "bg-transparent text-brand-700 hover:bg-brand-50 dark:text-brand-700 dark:hover:bg-brand-50/15"
+              }`}
           >
             <div>
               <h3 className="text-sm font-semibold">{account.name}</h3>
@@ -162,9 +161,8 @@ export default function LedgerReport() {
                 <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtAmount(account.openingBalance)}</span>
               </p>
               <svg
-                className={`h-4 w-4 shrink-0 transition-transform duration-300 ${
-                  openAgentId === account.agentId ? "rotate-180" : ""
-                }`}
+                className={`h-4 w-4 shrink-0 transition-transform duration-300 ${openAgentId === account.agentId ? "rotate-180" : ""
+                  }`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -176,9 +174,8 @@ export default function LedgerReport() {
           </button>
 
           <div
-            className={`grid transition-all duration-300 ease-in-out ${
-              openAgentId === account.agentId ? "grid-rows-[1fr] opacity-100 mt-3" : "grid-rows-[0fr] opacity-0"
-            }`}
+            className={`grid transition-all duration-300 ease-in-out ${openAgentId === account.agentId ? "grid-rows-[1fr] opacity-100 mt-3" : "grid-rows-[0fr] opacity-0"
+              }`}
           >
             <div className="min-h-0 overflow-hidden">
               <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">
