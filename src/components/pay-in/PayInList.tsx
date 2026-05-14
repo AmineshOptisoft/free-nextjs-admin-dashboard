@@ -6,6 +6,7 @@ import Pagination from "../ui/Pagination";
 import { Modal } from "../ui/modal";
 import PendingExpireCountdown from "../ui/PendingExpireCountdown";
 import { compressImageDataUrlIfLarge } from "@/lib/compress-image-data-url";
+import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 import { PiContactlessPaymentFill } from "react-icons/pi";
 import CompanyPayInView from "./CompanyPayInView";
 
@@ -560,6 +561,52 @@ export default function PayInList() {
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const exportPayInsCsv = useCallback(() => {
+    const headers = [
+      "id",
+      "ref",
+      "order_id",
+      "status",
+      "amount",
+      "total_amount",
+      "discount_amount",
+      "client_name",
+      "client_upi",
+      "assigned_upi",
+      "utr",
+      "created_on",
+      "created_at_iso",
+      "expires_at_iso",
+      "assigned_to",
+      "assigned_on",
+      "remarks",
+      "dispute_raised",
+      "has_receipt",
+    ];
+    const rows = filtered.map((d) => [
+      d.id,
+      d.ref,
+      d.orderId,
+      d.status,
+      d.amount,
+      d.totalAmount,
+      d.discountAmount,
+      d.clientName,
+      d.clientUpi,
+      d.assignedUpi,
+      d.utrCode ?? "",
+      d.createdOn,
+      d.createdAtIso ?? "",
+      d.expiresAtIso ?? "",
+      d.assignedTo,
+      d.assignedOn,
+      d.remarks,
+      d.disputeRaised ? "yes" : "no",
+      d.hasReceipt ? "yes" : "no",
+    ]);
+    downloadCsv(`payins-${csvExportTimestamp()}.csv`, [headers, ...rows]);
+  }, [filtered]);
+
   function openActionModal(item: PayInItem, action: ActionType) {
     setSelectedItem(item);
     setModalAction(action);
@@ -681,7 +728,11 @@ export default function PayInList() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              <button
+                type="button"
+                onClick={exportPayInsCsv}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>

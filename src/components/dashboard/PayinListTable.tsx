@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -8,6 +8,7 @@ import {
   TableRow,
 } from "../ui/table";
 import DateRangePicker, { DateRange } from "./DateRangePicker";
+import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 
 interface PayinRow {
   id: number;
@@ -100,6 +101,36 @@ export default function PayinListTable() {
     [rows, search, status],
   );
 
+  const exportPayinListingCsv = useCallback(() => {
+    const headers = [
+      "#",
+      "Gateway / Bank",
+      "Total Amount",
+      "Fee",
+      "Tax",
+      "Net Amount",
+      "Success Amt",
+      "Failed Amt",
+      "Success",
+      "Failed",
+      "Total",
+    ];
+    const rows = filtered.map((r) => [
+      r.id,
+      r.name,
+      r.totalAmount,
+      r.fee,
+      r.tax,
+      r.netAmount,
+      r.successAmount,
+      r.failedAmount,
+      r.successCount,
+      r.failedCount,
+      r.totalCount,
+    ]);
+    downloadCsv(`payin-listing-${csvExportTimestamp()}.csv`, [headers, ...rows]);
+  }, [filtered]);
+
   const totals = filtered.reduce(
     (acc, r) => ({
       totalAmount: acc.totalAmount + r.totalAmount,
@@ -163,7 +194,11 @@ export default function PayinListTable() {
           <DateRangePicker value={dateRange} onChange={setDateRange} />
 
           {/* Export button */}
-          <button className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+          <button
+            type="button"
+            onClick={exportPayinListingCsv}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+          >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>

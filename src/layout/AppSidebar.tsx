@@ -391,7 +391,9 @@ const AppSidebar: React.FC = () => {
               <div className="flex-1 text-left min-w-0">
                 <p className="text-xs font-bold leading-tight truncate">{PANEL_LABELS[effectivePanel]}</p>
                 <p className="text-[10px] opacity-60 leading-tight">
-                  {lockedRole ? "Role locked by login" : "Switch panel"}
+                  {lockedRole
+                    ? `Signed in as ${lockedRole.charAt(0).toUpperCase()}${lockedRole.slice(1)}`
+                    : "Switch panel"}
                 </p>
               </div>
               {!lockedRole && (
