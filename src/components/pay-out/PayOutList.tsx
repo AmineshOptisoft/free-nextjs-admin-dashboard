@@ -3,15 +3,26 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentPayOutListItem } from "@/lib/agent-transactions-map";
 import CompanyTxnAccordionCard from "../company/CompanyTxnAccordionCard";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
+import { isAgentPayoutApproveUnlocked } from "@/lib/payout-agent-approve-delay-ui";
 import Pagination from "../ui/Pagination";
+import PendingExpireCountdown from "../ui/PendingExpireCountdown";
 import { Modal } from "../ui/modal";
+import { compressImageDataUrlIfLarge } from "@/lib/compress-image-data-url";
 import { PiContactlessPaymentFill } from "react-icons/pi";
 
 const PAGE_SIZE = 5;
 
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 
-type PayOutStatus = "CREATED" | "UNASSIGNED" | "PENDING" | "PROCESSING" | "EXPIRED" | "APPROVED" | "DECLINED";
+type PayOutStatus =
+  | "CREATED"
+  | "UNASSIGNED"
+  | "PENDING"
+  | "ASSIGNED"
+  | "PROCESSING"
+  | "EXPIRED"
+  | "APPROVED"
+  | "DECLINED";
 
 type PayOutItem = AgentPayOutListItem;
 type CompanyPayoutItem = {
@@ -30,36 +41,77 @@ type CompanyPayoutItem = {
   assignedUpi?: string;
   assignedAtIso?: string;
   assignedToLabel?: string;
+  expiresAtIso?: string;
 };
 type AgentOption = { id: string; label: string };
 
 const STATUS_TABS: { label: string; value: PayOutStatus | "ALL" }[] = [
-  { label: "All",        value: "ALL" },
+  { label: "All", value: "ALL" },
   { label: "Unassigned", value: "UNASSIGNED" },
-  { label: "Pending",    value: "PENDING" },
+  { label: "Pending", value: "PENDING" },
+  { label: "Assigned", value: "ASSIGNED" },
   { label: "Processing", value: "PROCESSING" },
-  { label: "Expired",    value: "EXPIRED" },
-  { label: "Approved",   value: "APPROVED" },
-  { label: "Declined",   value: "DECLINED" },
+  { label: "Expired", value: "EXPIRED" },
+  { label: "Approved", value: "APPROVED" },
+  { label: "Declined", value: "DECLINED" },
 ];
 
-const STATUS_FILTER_OPTIONS = ["All", "CREATED", "UNASSIGNED", "PENDING", "PROCESSING", "EXPIRED", "APPROVED", "DECLINED"];
+const STATUS_FILTER_OPTIONS = [
+  "All",
+  "CREATED",
+  "UNASSIGNED",
+  "PENDING",
+  "ASSIGNED",
+  "PROCESSING",
+  "EXPIRED",
+  "APPROVED",
+  "DECLINED",
+];
 
 const statusStyle: Record<PayOutStatus, string> = {
-  CREATED:    "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+  CREATED: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
   UNASSIGNED: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
-  PENDING:    "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  PENDING: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  ASSIGNED: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300",
   PROCESSING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  EXPIRED:    "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
-  APPROVED:   "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  DECLINED:   "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
+  EXPIRED: "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
+  APPROVED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  DECLINED: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
 };
 
-const showAssign = (s: PayOutStatus) => s === "CREATED" || s === "UNASSIGNED" || s === "PENDING";
+const showAssign = (item: PayOutItem) =>
+  item.status === "CREATED" ||
+  item.status === "UNASSIGNED" ||
+  (item.status === "PENDING" && !item.assignedAgentId);
 const showApprove = (s: PayOutStatus) => s === "PROCESSING";
+/** Agent: DB stays PENDING after admin assign; approve after proof or from processing. */
+const showApproveAgent = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING";
 const showReject = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING";
 const showCancel = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING";
 const showActions = (s: PayOutStatus) => showApprove(s) || showReject(s) || showCancel(s);
+
+function showPayOutExpireCountdown(item: PayOutItem): boolean {
+  if (!item.expiresAtIso) return false;
+  return (
+    item.status === "PENDING" ||
+    item.status === "UNASSIGNED" ||
+    item.status === "ASSIGNED" ||
+    item.status === "PROCESSING" ||
+    item.status === "CREATED"
+  );
+}
+
+function canOpenApproveModal(role: "admin" | "agent", status: PayOutStatus): boolean {
+  return role === "agent" ? showApproveAgent(status) : showApprove(status);
+}
+
+function formatApproveDelayRemain(assignedAtIso: string, delayMinutes: number): string {
+  const end = new Date(assignedAtIso.trim()).getTime() + delayMinutes * 60_000;
+  const sec = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
 function MoneyIcon() {
   return (
@@ -241,7 +293,9 @@ function PayOutCard({
   onOpenProof,
   allowAssign,
   isAdmin,
+  isAgent,
   onDispute,
+  agentApproveDelayMinutes,
 }: {
   item: PayOutItem;
   busy?: boolean;
@@ -250,10 +304,30 @@ function PayOutCard({
   onOpenProof?: (proofUrl: string) => void;
   allowAssign?: boolean;
   isAdmin?: boolean;
+  isAgent?: boolean;
   onDispute?: (item: PayOutItem) => void;
+  /** From server when agent loads payouts; controls post-assignment approve delay. */
+  agentApproveDelayMinutes?: number;
 }) {
   const [extraOpen, setExtraOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [delayTick, setDelayTick] = useState(0);
+
+  useEffect(() => {
+    if (!isAgent || agentApproveDelayMinutes == null || agentApproveDelayMinutes <= 0) return;
+    if (item.status !== "PENDING" || !item.assignedAtIso) return;
+    if (isAgentPayoutApproveUnlocked(item, agentApproveDelayMinutes)) return;
+    const id = window.setInterval(() => setDelayTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [isAgent, agentApproveDelayMinutes, item.id, item.status, item.assignedAtIso]);
+
+  void delayTick;
+  const baseApprove = isAgent ? showApproveAgent(item.status) : showApprove(item.status);
+  const approveUnlocked =
+    !isAgent || agentApproveDelayMinutes == null
+      ? true
+      : isAgentPayoutApproveUnlocked(item, agentApproveDelayMinutes);
+  const showApproveBtn = baseApprove && approveUnlocked;
 
   const headerRow = (
     <div className="flex items-center gap-3 px-5 py-3.5">
@@ -266,11 +340,26 @@ function PayOutCard({
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${statusStyle[item.status]}`}>
           {item.status}
         </span>
+        {showPayOutExpireCountdown(item) ? <PendingExpireCountdown expiresAtIso={item.expiresAtIso!} /> : null}
+        {isAgent &&
+        item.status === "PENDING" &&
+        baseApprove &&
+        !approveUnlocked &&
+        item.assignedAtIso &&
+        agentApproveDelayMinutes != null &&
+        agentApproveDelayMinutes > 0 ? (
+          <span
+            className="text-[10px] font-semibold tabular-nums text-amber-700 dark:text-amber-300"
+            title="Approve is available after the assignment cooling period (set by server)."
+          >
+            Approve in {formatApproveDelayRemain(item.assignedAtIso, agentApproveDelayMinutes)}
+          </span>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
-        {allowAssign && showAssign(item.status) && <AssignButton onClick={() => onOpenAction(item, "assign")} disabled={busy} />}
-        {showApprove(item.status) && <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />}
+        {allowAssign && showAssign(item) && <AssignButton onClick={() => onOpenAction(item, "assign")} disabled={busy} />}
+        {showApproveBtn && <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />}
         {showReject(item.status) && showCancel(item.status) ? (
           <DeclineMenu
             disabled={busy}
@@ -289,7 +378,10 @@ function PayOutCard({
             Revoke
           </button>
         ) : null}
-        {isAdmin && onDispute && !item.disputeRaised && (showApprove(item.status) || showReject(item.status) || showCancel(item.status)) && (
+        {isAdmin &&
+          onDispute &&
+          !item.disputeRaised &&
+          (showApproveBtn || showReject(item.status) || showCancel(item.status) || item.status === "ASSIGNED") && (
           <button
             type="button"
             disabled={busy}
@@ -395,8 +487,9 @@ function CompanyPayOutRequestModal({
   const inputClass =
     "h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-2 focus:ring-brand-500/15";
   const [form, setForm] = useState({
+    client_id: "",
     client_name: "",
-    client_upi: "",
+    account_holder_name: "",
     amount: "",
     bank_name: "",
     bank_account_number: "",
@@ -405,9 +498,46 @@ function CompanyPayOutRequestModal({
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   function patchField(k: keyof typeof form, v: string) {
     setForm((prev) => ({ ...prev, [k]: v }));
+  }
+
+  async function fetchClientProfile(externalId: string) {
+    const cid = externalId.trim();
+    if (!cid) return;
+    setProfileLoading(true);
+    try {
+      const res = await fetch(`/api/company/payout-client?client_id=${encodeURIComponent(cid)}`, {
+        credentials: "include",
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        profile?: {
+          client_name: string;
+          account_holder_name: string;
+          bank_name: string;
+          bank_account_number: string;
+          ifsc_code: string;
+        } | null;
+      };
+      if (!res.ok || !data.ok || !data.profile) return;
+      const p = data.profile;
+      setForm((prev) => ({
+        ...prev,
+        client_id: cid,
+        client_name: p.client_name || prev.client_name,
+        account_holder_name: p.account_holder_name || p.client_name || prev.account_holder_name,
+        bank_name: p.bank_name || prev.bank_name,
+        bank_account_number: p.bank_account_number || prev.bank_account_number,
+        ifsc_code: p.ifsc_code || prev.ifsc_code,
+      }));
+    } catch {
+      /* ignore */
+    } finally {
+      setProfileLoading(false);
+    }
   }
 
   async function submitRequest() {
@@ -418,7 +548,16 @@ function CompanyPayOutRequestModal({
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          client_id: form.client_id.trim(),
+          client_name: form.client_name.trim(),
+          account_holder_name: form.account_holder_name.trim() || form.client_name.trim(),
+          amount: form.amount,
+          bank_name: form.bank_name.trim(),
+          bank_account_number: form.bank_account_number.trim(),
+          ifsc_code: form.ifsc_code.trim(),
+          user_note: form.user_note.trim(),
+        }),
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
@@ -426,8 +565,9 @@ function CompanyPayOutRequestModal({
         return;
       }
       setForm({
+        client_id: "",
         client_name: "",
-        client_upi: "",
+        account_holder_name: "",
         amount: "",
         bank_name: "",
         bank_account_number: "",
@@ -461,13 +601,17 @@ function CompanyPayOutRequestModal({
         <form className="space-y-4 px-5 py-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Client ID <span className="text-red-500">*</span></label>
+              <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">
+                Client ID <span className="text-red-500">*</span>
+              </label>
               <input
                 className={inputClass}
-                placeholder="Enter client UPI"
-                value={form.client_upi}
-                onChange={(e) => patchField("client_upi", e.target.value)}
+                placeholder="e.g. customer or wallet ID"
+                value={form.client_id}
+                onChange={(e) => patchField("client_id", e.target.value)}
+                onBlur={() => void fetchClientProfile(form.client_id)}
               />
+              {profileLoading && <p className="mt-1 text-[10px] text-gray-400">Loading saved details…</p>}
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Client Name <span className="text-red-500">*</span></label>
@@ -496,8 +640,9 @@ function CompanyPayOutRequestModal({
                 <label className="mb-1.5 block text-xs font-semibold tracking-wide text-gray-600">Holder Name <span className="text-red-500">*</span></label>
                 <input
                   className={inputClass}
-                  value={form.client_name}
-                  onChange={(e) => patchField("client_name", e.target.value)}
+                  placeholder="Account holder name"
+                  value={form.account_holder_name}
+                  onChange={(e) => patchField("account_holder_name", e.target.value)}
                 />
               </div>
               <div>
@@ -588,26 +733,30 @@ function CompanyPayOutView() {
     { label: "Rejected", value: "REJECTED" },
   ];
 
-  const loadCompanyPayouts = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const query = activeTab === "ALL" ? "" : `?status=${encodeURIComponent(activeTab)}`;
-      const res = await fetch(`/api/company/payouts${query}`, { credentials: "include" });
-      const data = (await res.json()) as { ok?: boolean; payouts?: CompanyPayoutItem[]; error?: string };
-      if (!res.ok || !data.ok || !data.payouts) {
-        setError(data.error ?? "Could not load payouts");
+  const loadCompanyPayouts = useCallback(
+    async (tabOverride?: CompanyPayOutTab) => {
+      const tab = tabOverride ?? activeTab;
+      setLoading(true);
+      setError(null);
+      try {
+        const query = tab === "ALL" ? "" : `?status=${encodeURIComponent(tab)}`;
+        const res = await fetch(`/api/company/payouts${query}`, { credentials: "include" });
+        const data = (await res.json()) as { ok?: boolean; payouts?: CompanyPayoutItem[]; error?: string };
+        if (!res.ok || !data.ok || !data.payouts) {
+          setError(data.error ?? "Could not load payouts");
+          setItems([]);
+          return;
+        }
+        setItems(data.payouts);
+      } catch {
+        setError("Network error");
         setItems([]);
-        return;
+      } finally {
+        setLoading(false);
       }
-      setItems(data.payouts);
-    } catch {
-      setError("Network error");
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeTab]);
+    },
+    [activeTab],
+  );
 
   useEffect(() => {
     void loadCompanyPayouts();
@@ -683,6 +832,7 @@ function CompanyPayOutView() {
                 assignedAtIso={it.assignedAtIso}
                 assignedToLabel={it.assignedToLabel ?? "—"}
                 remarks={it.remarks ?? ""}
+                expiresAtIso={it.expiresAtIso}
               />
             ))}
         </div>
@@ -691,7 +841,13 @@ function CompanyPayOutView() {
       <CompanyPayOutRequestModal
         isOpen={isRequestOpen}
         onClose={() => setIsRequestOpen(false)}
-        onSubmitted={() => void loadCompanyPayouts()}
+        onSubmitted={() => {
+          setActiveTab("ALL");
+          void loadCompanyPayouts("ALL");
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("tepay:company-dashboard-refresh"));
+          }
+        }}
       />
     </div>
   );
@@ -725,6 +881,7 @@ export default function PayOutList() {
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [page, setPage] = useState(1);
   const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
+  const [payoutAgentApproveDelayMins, setPayoutAgentApproveDelayMins] = useState(10);
 
   useEffect(() => {
     let mounted = true;
@@ -759,7 +916,12 @@ export default function PayOutList() {
         setListError("Please sign in to view PayOuts.");
         return;
       }
-      const data = (await res.json()) as { ok?: boolean; items?: PayOutItem[]; error?: string };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        items?: PayOutItem[];
+        error?: string;
+        payoutAgentApproveDelayMinutes?: number;
+      };
       if (!res.ok || !data.ok || !data.items) {
         setItems([]);
         setListError(data.error ?? "Could not load transactions.");
@@ -767,6 +929,9 @@ export default function PayOutList() {
       }
       setListError(null);
       setItems(data.items);
+      if (resolvedRole === "agent" && typeof data.payoutAgentApproveDelayMinutes === "number") {
+        setPayoutAgentApproveDelayMins(data.payoutAgentApproveDelayMinutes);
+      }
     } catch {
       setItems([]);
       setListError("Network error.");
@@ -788,14 +953,37 @@ export default function PayOutList() {
         const res = await fetch("/api/agents", { credentials: "include" });
         const data = (await res.json()) as {
           ok?: boolean;
-          agents?: Array<{ id: string; fullname?: string | null; username: string }>;
+          agents?: Array<{
+            id: string;
+            fullname?: string | null;
+            username: string;
+            previous_balance?: number;
+            net_pay_in?: number;
+            net_pay_out?: number;
+            running_balance?: number;
+          }>;
         };
         if (!mounted || !res.ok || !data.ok || !data.agents) return;
         setAgents(
-          data.agents.map((a) => ({
-            id: a.id,
-            label: (a.fullname && a.fullname.trim()) || a.username,
-          })),
+          data.agents.map((a) => {
+            const name = (a.fullname && a.fullname.trim()) || a.username;
+            const prev = typeof a.previous_balance === "number" ? a.previous_balance : Number(a.previous_balance ?? 0);
+            const nIn = typeof a.net_pay_in === "number" ? a.net_pay_in : Number(a.net_pay_in ?? 0);
+            const nOut = typeof a.net_pay_out === "number" ? a.net_pay_out : Number(a.net_pay_out ?? 0);
+            const dbRun = typeof a.running_balance === "number" ? a.running_balance : Number(a.running_balance ?? 0);
+            const computed =
+              (Number.isFinite(prev) ? prev : 0) +
+              (Number.isFinite(nIn) ? nIn : 0) -
+              (Number.isFinite(nOut) ? nOut : 0);
+            const run = Number.isFinite(computed) ? computed : dbRun;
+            const runLabel = Number.isFinite(run)
+              ? ` · Running ₹${run.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
+              : "";
+            return {
+              id: a.id,
+              label: `${name}${runLabel}`,
+            };
+          }),
         );
       } catch {
         // keep empty agent list; assignment modal shows validation
@@ -853,11 +1041,14 @@ export default function PayOutList() {
     setModalError(null);
     const reader = new FileReader();
     reader.onload = () => {
-      const r = reader.result;
-      if (typeof r === "string") {
-        setModalProofDataUrl(r);
-        setModalProofName(f.name);
-      }
+      void (async () => {
+        const r = reader.result;
+        if (typeof r === "string") {
+          const out = await compressImageDataUrlIfLarge(r);
+          setModalProofDataUrl(out);
+          setModalProofName(f.name);
+        }
+      })();
     };
     reader.readAsDataURL(f);
   }
@@ -874,11 +1065,15 @@ export default function PayOutList() {
     CREATED: baseData.filter((d) => d.status === "CREATED").length,
     UNASSIGNED: baseData.filter((d) => d.status === "UNASSIGNED").length,
     PENDING: baseData.filter((d) => d.status === "PENDING").length,
+    ASSIGNED: baseData.filter((d) => d.status === "ASSIGNED").length,
     PROCESSING: baseData.filter((d) => d.status === "PROCESSING").length,
     EXPIRED: baseData.filter((d) => d.status === "EXPIRED").length,
     APPROVED: baseData.filter((d) => d.status === "APPROVED").length,
     DECLINED: baseData.filter((d) => d.status === "DECLINED").length,
   };
+
+  const statusTabsVisible =
+    resolvedRole === "admin" ? STATUS_TABS : STATUS_TABS.filter((t) => t.value !== "ASSIGNED");
 
   const filtered = baseData.filter((d) => {
     if (activeTab !== "ALL" && d.status !== activeTab) return false;
@@ -909,16 +1104,18 @@ export default function PayOutList() {
     setActionBusyId(item.id);
     setModalError(null);
     try {
-      if (action === "approve" && !showApprove(item.status)) {
+      if (action === "approve" && !canOpenApproveModal(resolvedRole === "agent" ? "agent" : "admin", item.status)) {
         setModalError("Approve only after assignment/processing stage.");
         return;
       }
-      if (action === "approve") {
-        const proof = (opts?.paymentImage ?? "").trim();
-        if (!item.hasReceipt && !proof) {
-          setModalError("Upload payment proof (screenshot) before approving.");
-          return;
-        }
+      if (
+        action === "approve" &&
+        resolvedRole === "agent" &&
+        item.status === "PENDING" &&
+        !isAgentPayoutApproveUnlocked(item, payoutAgentApproveDelayMins)
+      ) {
+        setModalError("Assignment cooling period: approve is not available yet.");
+        return;
       }
       let res: Response;
       if (action === "assign") {
@@ -937,6 +1134,14 @@ export default function PayOutList() {
           body: JSON.stringify({ agentId: Number(selectedAgentId) }),
         });
       } else {
+        let normalizedProof = (opts?.paymentImage ?? "").trim();
+        if (normalizedProof.startsWith("data:image/")) {
+          normalizedProof = (await compressImageDataUrlIfLarge(normalizedProof)).trim();
+        }
+        if (action === "approve" && !item.hasReceipt && !normalizedProof) {
+          setModalError("Upload payment proof (screenshot) before approving.");
+          return;
+        }
         const status =
           action === "approve"
             ? resolvedRole === "admin"
@@ -950,8 +1155,7 @@ export default function PayOutList() {
         const endpoint =
           resolvedRole === "admin" ? `/api/admin/payouts/${item.id}/status` : `/api/agent/payouts/${item.id}/status`;
         const body: Record<string, string> = { status };
-        const proof = (opts?.paymentImage ?? "").trim();
-        if (proof) body.payment_image = proof;
+        if (normalizedProof) body.payment_image = normalizedProof;
         res = await fetch(endpoint, {
           method: "PATCH",
           credentials: "include",
@@ -1064,7 +1268,7 @@ export default function PayOutList() {
                 <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1.5">Status</label>
                 <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
                   className="w-full rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors appearance-none cursor-pointer">
-                  {STATUS_FILTER_OPTIONS.map((s) => (
+                  {STATUS_FILTER_OPTIONS.filter((s) => resolvedRole === "admin" || s !== "ASSIGNED").map((s) => (
                     <option key={s} value={s}>
                       {s === "All" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}
                     </option>
@@ -1108,7 +1312,7 @@ export default function PayOutList() {
       {/* Tab bar + filter toggle */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1.5 flex-wrap">
-          {STATUS_TABS.map((tab) => {
+          {statusTabsVisible.map((tab) => {
             const count = counts[tab.value as PayOutStatus];
             const isActive = activeTab === tab.value;
             return (
@@ -1158,10 +1362,12 @@ export default function PayOutList() {
               busy={actionBusyId === item.id}
               onOpenAction={openActionModal}
               onOpenProof={(url) => setProofPreviewUrl(url)}
-              onView={() => (window.location.href = `/transactions/${item.id}`)}
+              onView={resolvedRole === "admin" ? () => (window.location.href = `/transactions/${item.id}`) : undefined}
               allowAssign={resolvedRole === "admin"}
               isAdmin={resolvedRole === "admin"}
+              isAgent={resolvedRole === "agent"}
               onDispute={raiseDispute}
+              agentApproveDelayMinutes={resolvedRole === "agent" ? payoutAgentApproveDelayMins : undefined}
             />
           ))
         )}
@@ -1290,6 +1496,35 @@ export default function PayOutList() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={proofPreviewUrl != null}
+        onClose={() => setProofPreviewUrl(null)}
+        className="max-w-3xl p-0 overflow-hidden"
+        showCloseButton={false}
+      >
+        <div className="rounded-xl bg-white dark:bg-gray-900">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-gray-800">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Payment proof</h3>
+            <button
+              type="button"
+              onClick={() => setProofPreviewUrl(null)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              ×
+            </button>
+          </div>
+          <div className="max-h-[80vh] overflow-auto p-4">
+            {proofPreviewUrl &&
+              (proofIsPdf(proofPreviewUrl) ? (
+                <iframe title="Payment proof PDF" src={proofPreviewUrl} className="h-[70vh] w-full rounded-md border border-gray-200 dark:border-gray-700" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={proofPreviewUrl} alt="Payment proof" className="mx-auto max-h-[75vh] w-auto max-w-full object-contain" />
+              ))}
           </div>
         </div>
       </Modal>

@@ -16,6 +16,7 @@ import {
   HorizontaLDots,
   ListIcon,
   LockIcon,
+  PageIcon,
   PieChartIcon,
   TableIcon,
   UserCircleIcon,
@@ -108,6 +109,7 @@ const companySections: NavSection[] = [
       { icon: <ArrowUpIcon />,   name: "PayOut",        path: "/pay-out" },
       { icon: <PieChartIcon />,  name: "Reports",       path: "/reports" },
       { icon: <BellIcon />,      name: "Notifications", path: "/notifications" },
+      { icon: <PageIcon />,      name: "Settings",      path: "/company-settings" },
     ],
   },
 ];

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
+import { isMysqlPacketTooLarge, validatePaymentProofPayload } from "@/lib/payment-proof-limits";
 import { requireCompanySession } from "@/lib/require-company-api";
 
 type TxRow = RowDataPacket & {
@@ -34,6 +35,15 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     return NextResponse.json({ ok: false, error: "Provide utr_code or payment_image" }, { status: 400 });
   }
 
+  const proofCheck = validatePaymentProofPayload({
+    utr_code: utrCode,
+    payment_image: paymentImage,
+    user_upi: userUpi,
+  });
+  if (!proofCheck.ok) {
+    return NextResponse.json({ ok: false, error: proofCheck.error }, { status: proofCheck.status });
+  }
+
   const [rows] = await pool.execute<TxRow[]>(
     `SELECT \`id\`, \`status\`, \`assigned_agent_id\`, \`pay_method_id\`
      FROM \`transactions\`
@@ -56,15 +66,31 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     );
   }
 
-  const [res] = await pool.execute<ResultSetHeader>(
-    `UPDATE \`transactions\`
-     SET \`utr_code\` = COALESCE(NULLIF(?, ''), \`utr_code\`),
-         \`payment_image\` = COALESCE(NULLIF(?, ''), \`payment_image\`),
-         \`user_upi\` = COALESCE(NULLIF(?, ''), \`user_upi\`)
-     WHERE \`id\` = ? AND \`company_id\` = ? AND \`type\` = 'PAYIN' AND \`status\` = 'PENDING'
-       AND \`pay_method_id\` IS NOT NULL AND \`assigned_agent_id\` IS NOT NULL`,
-    [utrCode, paymentImage, userUpi, txId, auth.companyId],
-  );
+  let res: ResultSetHeader;
+  try {
+    const [r] = await pool.execute<ResultSetHeader>(
+      `UPDATE \`transactions\`
+       SET \`utr_code\` = COALESCE(NULLIF(?, ''), \`utr_code\`),
+           \`payment_image\` = COALESCE(NULLIF(?, ''), \`payment_image\`),
+           \`user_upi\` = COALESCE(NULLIF(?, ''), \`user_upi\`)
+       WHERE \`id\` = ? AND \`company_id\` = ? AND \`type\` = 'PAYIN' AND \`status\` = 'PENDING'
+         AND \`pay_method_id\` IS NOT NULL AND \`assigned_agent_id\` IS NOT NULL`,
+      [utrCode, paymentImage, userUpi, txId, auth.companyId],
+    );
+    res = r;
+  } catch (e: unknown) {
+    if (isMysqlPacketTooLarge(e)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Proof data is too large for the database server. Use a smaller screenshot (under ~500 KB) or enter UTR only.",
+        },
+        { status: 413 },
+      );
+    }
+    throw e;
+  }
   if (res.affectedRows === 0) {
     return NextResponse.json({ ok: false, error: "Could not submit proof (wrong status or not assigned)" }, { status: 409 });
   }

@@ -38,6 +38,7 @@ function toListAgent(d: AgentDetailApi): Agent {
     pay_in_commission: d.pay_in_commission,
     pay_out_commission: d.pay_out_commission,
     referral_commission: d.referral_commission,
+    referral_code: d.referral_code,
     status: d.status,
   };
 }
@@ -45,6 +46,7 @@ function toListAgent(d: AgentDetailApi): Agent {
 /** Maps DB agent row to the legacy detail layout fields. */
 function mapApiToView(a: AgentDetailApi) {
   const net = a.net_pay_in - a.net_pay_out;
+  const finalBal = a.running_balance - a.security_deposit;
   const statusOnline = a.status === "active";
   return {
     id: a.id,
@@ -60,12 +62,12 @@ function mapApiToView(a: AgentDetailApi) {
     net,
     prevLastRunning: a.previous_balance,
     runningToday: a.running_balance,
-    final: a.running_balance - a.security_deposit,
-    remainingBalance: Math.max(0, Math.abs(a.running_balance)),
+    final: finalBal,
+    remainingBalance: a.credit_limit - finalBal,
     payinCommission: `${a.pay_in_commission}%`,
     payoutCommission: `${a.pay_out_commission}%`,
     referralCommission: `${a.referral_commission}%`,
-    referralCode: "—",
+    referralCode: a.referral_code?.trim() ? a.referral_code.trim() : "—",
     accountCreated: formatAgentDate(a.created_at),
     settlementAmount: a.settlement_amount,
     perf: {
@@ -183,11 +185,61 @@ function StatCard({ label, value, icon, iconBg }: { label: string; value: number
   );
 }
 
-/* ── Profile row ── */
-function InfoRow({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
+function ReferralCodeRow({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const canCopy = code !== "—" && code.trim().length > 0;
+  const copy = async () => {
+    if (!canCopy) return;
+    try {
+      await navigator.clipboard.writeText(code.trim());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  };
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
-      <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="text-xs text-gray-500 dark:text-gray-400">Referral code</span>
+      <div className="flex max-w-[65%] items-center gap-2">
+        <span className="truncate text-right text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">{code}</span>
+        {canCopy ? (
+          <button
+            type="button"
+            onClick={() => void copy()}
+            className="shrink-0 text-[10px] font-semibold text-brand-600 hover:underline dark:text-brand-400"
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ── Profile row ── */
+function InfoRow({
+  label,
+  value,
+  valueClass = "",
+  hint,
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+  /** Short tooltip on the label (e.g. credit limit meaning). */
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
+      <span className="text-xs text-gray-500 dark:text-gray-400 cursor-default" title={hint}>
+        {label}
+        {hint ? (
+          <span className="ml-0.5 text-gray-400 dark:text-gray-500" aria-hidden>
+            ⓘ
+          </span>
+        ) : null}
+      </span>
       <span className={`text-xs font-semibold text-gray-800 dark:text-gray-200 ${valueClass}`}>{value}</span>
     </div>
   );
@@ -677,18 +729,26 @@ export default function AgentDetail({ id }: { id: string }) {
             <InfoRow label="Email / contact" value={agent.whatsapp} />
             <InfoRow label="Current Usage" value={fmt(agent.currentUsage)} />
             <InfoRow label="Security Deposit" value={fmt(agent.securityDeposit)} />
-            <InfoRow label="Credit Limit" value={fmt(agent.creditLimit)} />
-            <InfoRow label="Net (PayIn - PayOut)" value={agent.net >= 0 ? fmt(agent.net) : `₹-${Math.abs(agent.net).toLocaleString("en-IN")}`} />
+            <InfoRow
+              label="Credit Limit"
+              value={fmt(agent.creditLimit)}
+              hint="Extra PayIn headroom on top of the security pool: even if deposit-backed room is tight, this much additional PayIn exposure is still allowed."
+            />
+            <InfoRow label="Net (PayIn − PayOut)" value={agent.net >= 0 ? fmt(agent.net) : `₹-${Math.abs(agent.net).toLocaleString("en-IN")}`} />
             <InfoRow label="Prev (Last Running)" value={fmt(agent.prevLastRunning)} />
             <InfoRow label="Running (Today)" value={fmt(agent.runningToday)} />
             <InfoRow label="Final" value={`₹${agent.final < 0 ? "-" : ""}${Math.abs(agent.final).toLocaleString("en-IN")}`}
               valueClass={agent.final < 0 ? "text-red-500 dark:text-red-400" : ""} />
-            <InfoRow label="Remaining Balance" value={fmt(agent.remainingBalance)} />
+            <InfoRow
+              label="Remaining Balance"
+              value={`${agent.remainingBalance < 0 ? "-" : ""}₹${Math.abs(agent.remainingBalance).toLocaleString("en-IN")}`}
+              hint="Credit limit minus final balance (credit − (running − security))."
+            />
             <InfoRow label="Settlement" value={fmt(agent.settlementAmount)} />
             <InfoRow label="PayIn Commission" value={agent.payinCommission} />
             <InfoRow label="PayOut Commission" value={agent.payoutCommission} />
             <InfoRow label="Referral Commission" value={agent.referralCommission} />
-            <InfoRow label="Referral Code" value={agent.referralCode} />
+            <ReferralCodeRow code={agent.referralCode} />
             <InfoRow label="Account Created" value={agent.accountCreated} />
           </div>
 
@@ -937,7 +997,7 @@ export default function AgentDetail({ id }: { id: string }) {
                   </svg>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">No payment accounts yet</p>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-500 max-w-sm mx-auto">
-                    Agent apne panel se Payment Method add karega — yahan saari linked methods dikhengi.
+                  The agent will add the payment method from their panel — all linked methods will be displayed here.
                   </p>
                 </div>
               ) : null}

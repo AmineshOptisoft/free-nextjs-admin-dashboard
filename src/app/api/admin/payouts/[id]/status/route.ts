@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { applyAgentLedgerForTransactionStatusChange } from "@/lib/agent-ledger";
 import { pool } from "@/lib/db";
+import { paymentImageDbLimitMessage, paymentImageExceedsDbLimit } from "@/lib/payment-image-db-limit";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
 type TxRow = RowDataPacket & {
   id: number;
   status: string;
   payment_image: string | null;
+  amount: string | number;
+  assigned_agent_id: number | null;
 };
 
 const ADMIN_ALLOWED_FROM: Record<string, Set<string>> = {
@@ -20,6 +24,12 @@ function canAdminTransitionPayout(from: string, to: string): boolean {
   const set = ADMIN_ALLOWED_FROM[to];
   if (!set) return false;
   return set.has(String(from ?? "").trim().toUpperCase());
+}
+
+function num(v: string | number): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const n = Number.parseFloat(String(v));
+  return Number.isFinite(n) ? n : 0;
 }
 
 export async function PATCH(req: Request, context: { params: { id: string } | Promise<{ id: string }> }) {
@@ -44,43 +54,78 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     return NextResponse.json({ ok: false, error: "status is required" }, { status: 400 });
   }
 
-  const [rows] = await pool.execute<TxRow[]>(
-    "SELECT `id`, `status`, `payment_image` FROM `transactions` WHERE `id` = ? AND `type` = 'PAYOUT' LIMIT 1",
-    [txId],
-  );
-  const tx = rows[0];
-  if (!tx) return NextResponse.json({ ok: false, error: "PayOut not found" }, { status: 404 });
+  if (paymentImage && paymentImageExceedsDbLimit(paymentImage)) {
+    return NextResponse.json({ ok: false, error: paymentImageDbLimitMessage() }, { status: 400 });
+  }
 
-  if (!canAdminTransitionPayout(tx.status, toStatus)) {
-    return NextResponse.json(
-      { ok: false, error: `Invalid status change from ${tx.status} to ${toStatus}` },
-      { status: 409 },
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [rows] = await conn.execute<TxRow[]>(
+      `SELECT \`id\`, \`status\`, \`payment_image\`, \`amount\`, \`assigned_agent_id\`
+       FROM \`transactions\`
+       WHERE \`id\` = ? AND \`type\` = 'PAYOUT'
+       LIMIT 1 FOR UPDATE`,
+      [txId],
     );
-  }
+    const tx = rows[0];
+    if (!tx) {
+      await conn.rollback();
+      return NextResponse.json({ ok: false, error: "PayOut not found" }, { status: 404 });
+    }
 
-  const existingProof = String(tx.payment_image ?? "").trim().length > 0;
-  const proofToStore = paymentImage || (existingProof ? String(tx.payment_image ?? "").trim() : "");
-  if (toStatus === "APPROVED_BY_ADMIN" && !proofToStore) {
-    return NextResponse.json(
-      { ok: false, error: "Upload proof (screenshot) before approving this payout." },
-      { status: 400 },
+    if (!canAdminTransitionPayout(tx.status, toStatus)) {
+      await conn.rollback();
+      return NextResponse.json(
+        { ok: false, error: `Invalid status change from ${tx.status} to ${toStatus}` },
+        { status: 409 },
+      );
+    }
+
+    const existingProof = String(tx.payment_image ?? "").trim().length > 0;
+    const proofToStore = paymentImage || (existingProof ? String(tx.payment_image ?? "").trim() : "");
+    if (toStatus === "APPROVED_BY_ADMIN" && !proofToStore) {
+      await conn.rollback();
+      return NextResponse.json(
+        { ok: false, error: "Upload proof (screenshot) before approving this payout." },
+        { status: 400 },
+      );
+    }
+
+    await applyAgentLedgerForTransactionStatusChange(conn, {
+      assignedAgentId: tx.assigned_agent_id,
+      txType: "PAYOUT",
+      fromStatus: tx.status,
+      toStatus,
+      amount: num(tx.amount),
+    });
+
+    const setParts: string[] = ["`status` = ?"];
+    const params: unknown[] = [toStatus];
+    if (paymentImage) {
+      setParts.push("`payment_image` = ?");
+      params.push(paymentImage);
+    }
+    params.push(txId, tx.status);
+
+    const [res] = await conn.execute<ResultSetHeader>(
+      `UPDATE \`transactions\` SET ${setParts.join(", ")} WHERE \`id\` = ? AND \`type\` = 'PAYOUT' AND \`status\` = ?`,
+      params as (string | number)[],
     );
+    if (res.affectedRows === 0) {
+      await conn.rollback();
+      return NextResponse.json({ ok: false, error: "Could not update payout status" }, { status: 500 });
+    }
+
+    await conn.commit();
+  } catch (e) {
+    await conn.rollback();
+    console.error(e);
+    return NextResponse.json({ ok: false, error: "Could not update payout (ledger or status conflict)" }, { status: 500 });
+  } finally {
+    conn.release();
   }
 
-  const setParts: string[] = ["`status` = ?"];
-  const params: unknown[] = [toStatus];
-  if (paymentImage) {
-    setParts.push("`payment_image` = ?");
-    params.push(paymentImage);
-  }
-  params.push(txId);
-
-  const [res] = await pool.execute<ResultSetHeader>(
-    `UPDATE \`transactions\` SET ${setParts.join(", ")} WHERE \`id\` = ? AND \`type\` = 'PAYOUT'`,
-    params as (string | number)[],
-  );
-  if (res.affectedRows === 0) {
-    return NextResponse.json({ ok: false, error: "Could not update payout status" }, { status: 500 });
-  }
   return NextResponse.json({ ok: true as const, status: toStatus });
 }

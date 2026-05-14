@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import type { Agent } from "./types";
 
-type Props = { agent: Agent; onClose: () => void; onSaved: () => void };
+type Props = { agent: Agent; onClose: () => void; onSaved: () => void | Promise<void> };
 
 export default function EditAgentModal({ agent, onClose, onSaved }: Props) {
   const [form, setForm] = useState({
@@ -51,7 +51,7 @@ export default function EditAgentModal({ agent, onClose, onSaved }: Props) {
         setError(data.error ?? "Save failed.");
         return;
       }
-      onSaved();
+      await Promise.resolve(onSaved());
       onClose();
     } catch {
       setError("Network error.");
@@ -95,6 +95,9 @@ export default function EditAgentModal({ agent, onClose, onSaved }: Props) {
           <div>
             <label className={labelCls}>Credit limit</label>
             <input value={form.credit_limit} onChange={(e) => setForm((p) => ({ ...p, credit_limit: e.target.value }))} className={inputCls} disabled={saving} />
+            <p className="mt-1 text-[10px] leading-snug text-gray-500 dark:text-gray-400">
+              Extra PayIn capacity on top of the security deposit: even if deposit-backed headroom is tight, this much additional PayIn exposure is still allowed.
+            </p>
           </div>
           <div>
             <label className={labelCls}>Pay-in commission (%)</label>
@@ -107,6 +110,13 @@ export default function EditAgentModal({ agent, onClose, onSaved }: Props) {
           <div>
             <label className={labelCls}>Referral commission (%)</label>
             <input value={form.referral_commission} onChange={(e) => setForm((p) => ({ ...p, referral_commission: e.target.value }))} className={inputCls} disabled={saving} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Referral code</label>
+            <p className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200">
+              {(agent.referral_code ?? "").trim() || "—"}
+            </p>
+            <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">Auto-generated; used for tracking referrals.</p>
           </div>
           <div>
             <label className={labelCls}>Status</label>

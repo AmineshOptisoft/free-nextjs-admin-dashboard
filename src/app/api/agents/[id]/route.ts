@@ -23,6 +23,7 @@ type AgentRow = RowDataPacket & {
   pay_in_commission: string | number;
   pay_out_commission: string | number;
   referral_commission: string | number;
+  referral_code: string | null;
   status: string;
   created_at: Date | string | null;
   updated_at: Date | string | null;
@@ -51,6 +52,7 @@ function mapPublic(r: AgentRow) {
     pay_in_commission: num(r.pay_in_commission),
     pay_out_commission: num(r.pay_out_commission),
     referral_commission: num(r.referral_commission),
+    referral_code: (r.referral_code ?? "").trim(),
     status: r.status,
     created_at: r.created_at,
     updated_at: r.updated_at,
@@ -73,7 +75,7 @@ export async function GET(
   const [rows] = await pool.execute<AgentRow[]>(
     `SELECT \`id\`, \`fullname\`, \`username\`, \`email\`, \`security_deposit\`, \`credit_limit\`,
             \`net_pay_in\`, \`net_pay_out\`, \`previous_balance\`, \`running_balance\`, \`settlement_amount\`, \`settlement_date\`,
-            \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`status\`, \`created_at\`, \`updated_at\`
+            \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`referral_code\`, \`status\`, \`created_at\`, \`updated_at\`
      FROM \`agents\` WHERE \`id\` = ? LIMIT 1`,
     [id],
   );
@@ -195,7 +197,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   const [rows] = await pool.execute<AgentRow[]>(
     `SELECT \`id\`, \`fullname\`, \`username\`, \`email\`, \`security_deposit\`, \`credit_limit\`,
             \`net_pay_in\`, \`net_pay_out\`, \`previous_balance\`, \`running_balance\`, \`settlement_amount\`, \`settlement_date\`,
-            \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`status\`, \`created_at\`, \`updated_at\`
+            \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`referral_code\`, \`status\`, \`created_at\`, \`updated_at\`
      FROM \`agents\` WHERE \`id\` = ? LIMIT 1`,
     [id],
   );

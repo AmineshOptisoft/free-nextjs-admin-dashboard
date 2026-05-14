@@ -140,8 +140,13 @@ export default function TransactionReport() {
       }
     >();
     for (const t of all) {
-      const key = (t.assignedAgentName ?? t.assignedToLabel ?? "").trim();
-      if (!key || key === "—" || key.toLowerCase() === "unassigned" || key.toLowerCase() === "overall") continue;
+      let key = (t.assignedAgentName ?? t.assignedToLabel ?? "").trim();
+      if (!key || key === "—") {
+        if (t.assignedAgentId) key = `Agent #${t.assignedAgentId}`;
+        else continue;
+      }
+      const lower = key.toLowerCase();
+      if (lower === "unassigned" || lower === "overall") continue;
       const aid = t.assignedAgentId ? String(t.assignedAgentId) : null;
       const row = grouped.get(key) ?? {
         agentId: aid,
@@ -232,7 +237,7 @@ export default function TransactionReport() {
       {error && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{error}</div>}
       <TransactionSummaryCards cards={summaryCards} />
       <TransactionStatisticsPanels blocks={statBlocks} />
-      <AgentPerformanceTable rows={agentPerformanceRows} />
+      {role === "admin" && <AgentPerformanceTable rows={agentPerformanceRows} />}
       <TransactionStatusDistributionTable rows={statusDistributionRows} />
     </div>
   );

@@ -7,10 +7,18 @@ import {
   payMethodToStaffApi,
   type PayMethodRow,
 } from "@/lib/agent-payment-method-map";
+import { validateAgentPayMethodPayload } from "@/lib/agent-pay-method-limits";
 import { pool } from "@/lib/db";
 import { isMysqlErNoSuchTable, PAY_METHODS_TABLE_HINT } from "@/lib/mysql-table-error";
 import { requireAgentSession } from "@/lib/require-agent-api";
 import { loadPayMethodFinancials } from "@/lib/transactions-pay-method-financials";
+
+function parseMoneyLimit(v: unknown): number {
+  if (v == null || v === "") return 0;
+  const n = typeof v === "number" ? v : Number.parseFloat(String(v).trim());
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(n, 1e16);
+}
 
 export async function GET() {
   const auth = await requireAgentSession();
@@ -61,6 +69,8 @@ export async function POST(req: Request) {
   const ifscCode = typeof body.ifsc_code === "string" ? body.ifsc_code.trim() : "";
   const branchName = typeof body.branch_name === "string" ? body.branch_name.trim() : "";
   const accountHolder = typeof body.account_holder_name === "string" ? body.account_holder_name.trim() : "";
+  const payInLimit = parseMoneyLimit(body.pay_in_limit);
+  const payOutLimit = parseMoneyLimit(body.pay_out_limit);
 
   if (!username) {
     return NextResponse.json({ ok: false, error: "Username is required" }, { status: 400 });
@@ -77,6 +87,19 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+  }
+
+  const mergedPm = paymentMethod === "BANK" ? "BANK" : "UPI";
+  const limErr = validateAgentPayMethodPayload({
+    paymentMethod: mergedPm,
+    payInEnabled: payIn,
+    payOutEnabled: payOut,
+    payInLimit,
+    payOutLimit,
+    upiId,
+  });
+  if (limErr) {
+    return NextResponse.json({ ok: false, error: limErr }, { status: 400 });
   }
 
   const fullNameDb = fullname || username;
@@ -98,7 +121,7 @@ export async function POST(req: Request) {
       ) VALUES (
         ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?,
         NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
-        0, 0, ?, ?, 'ACTIVE',
+        ?, ?, ?, ?, 'ACTIVE',
         0, 0, NOW()
       )`,
       [
@@ -113,6 +136,8 @@ export async function POST(req: Request) {
         branchDb,
         bankNameDb,
         holderDb,
+        payInLimit,
+        payOutLimit,
         payIn ? 1 : 0,
         payOut ? 1 : 0,
       ],

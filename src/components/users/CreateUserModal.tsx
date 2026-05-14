@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { isValidUpiId } from "@/lib/upi-validation";
 
 /** Edit payload for a row from `GET /api/agent/staff` (`payment_methods` items). */
 export type PaymentMethodEditPayload = {
@@ -20,6 +21,9 @@ export type PaymentMethodEditPayload = {
   accountNo: string;
   ifscCode: string;
   branchName: string;
+  /** Max same-day PayIn / PayOut total (INR); must be greater than 0 in this flow. */
+  payInLimit: number;
+  payOutLimit: number;
 };
 
 /** @deprecated Use `PaymentMethodEditPayload` */
@@ -85,6 +89,8 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
   const [accountNo, setAccountNo] = useState("");
   const [ifscCode, setIfscCode] = useState("");
   const [branchName, setBranchName] = useState("");
+  const [payInLimitInput, setPayInLimitInput] = useState("");
+  const [payOutLimitInput, setPayOutLimitInput] = useState("");
 
   useEffect(() => {
     setErr(null);
@@ -109,6 +115,12 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
       setAccountNo(editPaymentMethod.accountNo ?? "");
       setIfscCode(editPaymentMethod.ifscCode ?? "");
       setBranchName(editPaymentMethod.branchName ?? "");
+      setPayInLimitInput(
+        editPaymentMethod.payInLimit > 0 ? String(editPaymentMethod.payInLimit) : "",
+      );
+      setPayOutLimitInput(
+        editPaymentMethod.payOutLimit > 0 ? String(editPaymentMethod.payOutLimit) : "",
+      );
     } else {
       setFullName("");
       setEmail("");
@@ -127,6 +139,8 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
       setAccountNo("");
       setIfscCode("");
       setBranchName("");
+      setPayInLimitInput("");
+      setPayOutLimitInput("");
     }
     setStep(0);
   }, [editPaymentMethod]);
@@ -144,10 +158,23 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
   function validateStep1(): string | null {
     if (methodChannel === "UPI") {
       if (!upiId.trim()) return "Enter the UPI ID (e.g. name@paytm).";
+      if (!isValidUpiId(upiId)) return "Enter a valid UPI ID (e.g. name@paytm or 9876543210@ybl).";
       return null;
     }
     if (!bankName.trim() || !accountNo.trim() || !ifscCode.trim() || !bankAccountHolder.trim()) {
       return "For bank, fill bank name, account number, IFSC, and account holder name.";
+    }
+    return null;
+  }
+
+  function validateLimits(): string | null {
+    const pinRaw = payInLimitInput.trim().replace(/,/g, "");
+    const poutRaw = payOutLimitInput.trim().replace(/,/g, "");
+    if (!pinRaw || !Number.isFinite(Number.parseFloat(pinRaw)) || Number.parseFloat(pinRaw) <= 0) {
+      return "Pay In daily limit is required and must be greater than 0.";
+    }
+    if (!poutRaw || !Number.isFinite(Number.parseFloat(poutRaw)) || Number.parseFloat(poutRaw) <= 0) {
+      return "Pay Out daily limit is required and must be greater than 0.";
     }
     return null;
   }
@@ -162,7 +189,7 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
       }
     }
     if (step === 1) {
-      const e = validateStep1();
+      const e = validateStep1() ?? validateLimits();
       if (e) {
         setErr(e);
         return;
@@ -178,7 +205,7 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
       setErr("Username is required.");
       return;
     }
-    const v1 = validateStep1();
+    const v1 = validateStep1() ?? validateLimits();
     if (v1) {
       setErr(v1);
       return;
@@ -186,6 +213,11 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
 
     const accountHolderForApi =
       methodChannel === "UPI" ? upiAccountName.trim() || null : bankAccountHolder.trim();
+
+    const pinRaw = payInLimitInput.trim().replace(/,/g, "");
+    const poutRaw = payOutLimitInput.trim().replace(/,/g, "");
+    const pay_in_limit = Number.parseFloat(pinRaw);
+    const pay_out_limit = Number.parseFloat(poutRaw);
 
     setSaving(true);
     try {
@@ -205,6 +237,8 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
         ifsc_code: methodChannel === "BANK" ? ifscCode.trim() : "",
         branch_name: methodChannel === "BANK" ? branchName.trim() : "",
         account_holder_name: accountHolderForApi ?? "",
+        pay_in_limit,
+        pay_out_limit,
       };
 
       if (editPaymentMethod) {
@@ -447,6 +481,50 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
                 </div>
               </div>
 
+              <div>
+                <SectionHeading
+                  icon={
+                    <svg className="w-5 h-5 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  }
+                  title="Same-day limits (INR)"
+                />
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                  Both limits are <span className="font-semibold">required</span>. Enter the maximum same-day Pay In and Pay Out totals (INR) for this method — the system enforces these caps.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                      Pay In limit (INR) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={payInLimitInput}
+                      onChange={(e) => setPayInLimitInput(e.target.value)}
+                      placeholder="e.g. 100000"
+                      className={inputCls(!!payInLimitInput.trim())}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                      Pay Out limit (INR) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={payOutLimitInput}
+                      onChange={(e) => setPayOutLimitInput(e.target.value)}
+                      placeholder="e.g. 50000"
+                      className={inputCls(!!payOutLimitInput.trim())}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
               {methodChannel === "UPI" ? (
                 <div className="space-y-4">
                   <SectionHeading
@@ -532,6 +610,8 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
                   { label: "Enable Pay In", value: enablePayIn ? "Yes" : "No" },
                   { label: "Enable Pay Out", value: enablePayOut ? "Yes" : "No" },
                   { label: "Operation type", value: opType },
+                  { label: "Pay In limit (INR)", value: payInLimitInput.trim() || "—" },
+                  { label: "Pay Out limit (INR)", value: payOutLimitInput.trim() || "—" },
                   { label: "Method", value: methodChannel === "UPI" ? "UPI" : "Bank transfer" },
                   ...(methodChannel === "UPI"
                     ? [

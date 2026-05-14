@@ -13,7 +13,8 @@ export function canAdminAssign(status: string): boolean {
 
 const AGENT_ALLOWED_FROM: Record<string, Set<string>> = {
   PAID: new Set(["PENDING", "RE_ASSIGNED"]),
-  APPROVED_BY_AGENT: new Set(["PAID", "EXPIRED"]),
+  /** Agent may approve from PENDING right after admin assignment, or after PAID (proof path). */
+  APPROVED_BY_AGENT: new Set(["PENDING", "PAID", "EXPIRED"]),
   REJECTED: new Set(["PENDING", "PAID", "RE_ASSIGNED"]),
   REVOKED: new Set(["PENDING", "PAID", "RE_ASSIGNED"]),
   RE_ASSIGNED: new Set(["PENDING", "PAID"]),

@@ -31,12 +31,19 @@ interface AgentOption {
   name: string;
 }
 
+function startOfLocalDay(d = new Date()) {
+  const c = new Date(d);
+  c.setHours(0, 0, 0, 0);
+  return c;
+}
+
+function defaultLedgerDateRange(): DateRange {
+  const day = startOfLocalDay();
+  return { from: day, to: day, label: "Today" };
+}
+
 export default function LedgerReport() {
-  const [dateRange, setDateRange] = useState<DateRange>({
-    from: new Date("2026-05-05"),
-    to: new Date("2026-05-11"),
-    label: "May 5, 2026 - May 11, 2026",
-  });
+  const [dateRange, setDateRange] = useState<DateRange>(() => defaultLedgerDateRange());
   const [selectedAgentId, setSelectedAgentId] = useState<number | "ALL">("ALL");
   const [openAgentId, setOpenAgentId] = useState<number | null>(null);
   const [agents, setAgents] = useState<AgentOption[]>([]);
@@ -75,9 +82,11 @@ export default function LedgerReport() {
         setAgents([]);
         return;
       }
-      setAccounts(data.accounts);
-      setAgents(data.agents);
-      setOpenAgentId((prev) => prev ?? data.accounts[0]?.agentId ?? null);
+      const accounts = data.accounts;
+      const agentsList = data.agents;
+      setAccounts(accounts);
+      setAgents(agentsList);
+      setOpenAgentId((prev) => prev ?? accounts[0]?.agentId ?? null);
     } catch {
       setLoadError("Network error.");
       setAccounts([]);
@@ -158,7 +167,7 @@ export default function LedgerReport() {
             </div>
             <div className="flex items-center gap-4">
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Prev{" "}
+                Opening{" "}
                 <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtAmount(account.openingBalance)}</span>
               </p>
               <svg
@@ -184,7 +193,7 @@ export default function LedgerReport() {
                 <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">PayIn</span><div className="font-semibold">{fmtAmount(account.payIn)}</div></div>
                 <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">PayOut</span><div className="font-semibold">{fmtAmount(account.payOut)}</div></div>
                 <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Net</span><div className="font-semibold">{fmtAmount(account.net)}</div></div>
-                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Prev</span><div className="font-semibold">{fmtAmount(account.openingBalance)}</div></div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Opening</span><div className="font-semibold">{fmtAmount(account.openingBalance)}</div></div>
                 <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Running</span><div className="font-semibold">{fmtAmount(account.closingBalance)}</div></div>
                 <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Final</span><div className="font-semibold">{fmtAmount(account.final)}</div></div>
                 <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs dark:bg-gray-800/60"><span className="text-gray-500">Remaining</span><div className="font-semibold">{fmtAmount(account.remaining)}</div></div>

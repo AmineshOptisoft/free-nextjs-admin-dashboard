@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 
 /* ── Types ── */
 interface VendorRow {
@@ -17,7 +18,9 @@ interface VendorRow {
   settlement: number;
   net: number;
   prevBalance: number;
-  commission: number;
+  payInCommission: number;
+  payOutCommission: number;
+  referralCommission: number;
   running: number;
   runningUnsettled: number;
   credit: number;
@@ -105,7 +108,7 @@ function EditableCreditCell({
       {display}
       <button
         type="button"
-        title="Edit credit"
+        title="Extra PayIn headroom beyond the security pool (credit limit). Click to edit."
         onClick={(e) => {
           e.stopPropagation();
           startEdit();
@@ -129,6 +132,13 @@ const fmt = (n: number) => {
   if (n === 0) return "0";
   const abs = Math.abs(n).toLocaleString("en-IN");
   return n < 0 ? `-${abs}` : abs;
+};
+
+/** Percent fields from `agents` (e.g. 2.5 → 2.5%). */
+const fmtPct = (n: number) => {
+  if (!Number.isFinite(n) || n === 0) return "0%";
+  const t = (Math.round(n * 100) / 100).toString().replace(/\.0+$/, "");
+  return `${t}%`;
 };
 
 const colorVal = (n: number, zeroDash = false) => {
@@ -216,13 +226,15 @@ type StatsColKey =
   | "unsettlePayout"
   | "settlement"
   | "net"
-  | "prevBalance"
-  | "commission"
   | "running"
   | "runningUnsettled"
   | "credit"
   | "finalBalance"
   | "remainingBalance"
+  | "prevBalance"
+  | "payInCommission"
+  | "payOutCommission"
+  | "referralCommission"
   | "actions";
 
 const FIN_STATS_COLUMNS: { key: StatsColKey; label: string }[] = [
@@ -236,13 +248,15 @@ const FIN_STATS_COLUMNS: { key: StatsColKey; label: string }[] = [
   { key: "unsettlePayout", label: "Unsettle Payout" },
   { key: "settlement", label: "Settlement" },
   { key: "net", label: "Net" },
-  { key: "prevBalance", label: "Previous Balance" },
-  { key: "commission", label: "Commission" },
   { key: "running", label: "Running" },
   { key: "runningUnsettled", label: "Running Unsettled" },
   { key: "credit", label: "Credit" },
   { key: "finalBalance", label: "Final Balance" },
   { key: "remainingBalance", label: "Remaining Balance" },
+  { key: "prevBalance", label: "Previous Balance" },
+  { key: "payInCommission", label: "PayIn %" },
+  { key: "payOutCommission", label: "PayOut %" },
+  { key: "referralCommission", label: "Referral %" },
   { key: "actions", label: "Actions" },
 ];
 
@@ -254,11 +268,21 @@ function defaultColBoolMap(value: boolean): Record<StatsColKey, boolean> {
 function isInactiveVendorRow(r: VendorRow): boolean {
   return (
     r.approvedPayIn === 0 &&
+    r.manualPayIn === 0 &&
     r.payout === 0 &&
+    r.unsettlePayout === 0 &&
     r.running === 0 &&
     r.netPayIn === 0 &&
     r.security === 0
   );
+}
+
+function vendorRowCsvCell(row: VendorRow, key: StatsColKey): string {
+  if (key === "vendor") return row.name;
+  if (key === "actions") return "";
+  const v = row[key as keyof VendorRow];
+  if (typeof v === "number") return String(v);
+  return String(v ?? "");
 }
 
 /* ── Tooltip wrapper ── */
@@ -342,7 +366,9 @@ export default function AdminDashboard() {
       settlement: 0,
       net: 0,
       prevBalance: 0,
-      commission: 0,
+      payInCommission: 0,
+      payOutCommission: 0,
+      referralCommission: 0,
       running: 0,
       runningUnsettled: 0,
       credit: 0,
@@ -361,7 +387,9 @@ export default function AdminDashboard() {
         settlement: acc.settlement + r.settlement,
         net: acc.net + r.net,
         prevBalance: acc.prevBalance + r.prevBalance,
-        commission: acc.commission + r.commission,
+        payInCommission: acc.payInCommission,
+        payOutCommission: acc.payOutCommission,
+        referralCommission: acc.referralCommission,
         running: acc.running + r.running,
         runningUnsettled: acc.runningUnsettled + r.runningUnsettled,
         credit: acc.credit + r.credit,
@@ -391,7 +419,7 @@ export default function AdminDashboard() {
       case 4:
         return hideHeaderFilters ? "Show Header Filters" : "Hide Header Filters";
       case 5:
-        return "Customize Columns (18)";
+        return `Customize Columns (${FIN_STATS_COLUMNS.length})`;
       default:
         return "";
     }
@@ -499,6 +527,25 @@ export default function AdminDashboard() {
     return list;
   }, [rows, search, rowActivityFilter]);
 
+  const exportFinancialCsv = useCallback(
+    (opts: { visibleColumnsOnly: boolean }) => {
+      const cols = FIN_STATS_COLUMNS.filter(
+        (c) => c.key !== "actions" && (!opts.visibleColumnsOnly || colVisible[c.key]),
+      );
+      if (cols.length === 0) {
+        window.alert("Select at least one data column to export.");
+        return;
+      }
+      const header = cols.map((c) => c.label);
+      const dataRows = filtered.map((row) => cols.map((c) => vendorRowCsvCell(row, c.key)));
+      downloadCsv(
+        `admin-financial${opts.visibleColumnsOnly ? "-view" : ""}-${csvExportTimestamp()}.csv`,
+        [header, ...dataRows],
+      );
+    },
+    [filtered, colVisible],
+  );
+
   const hoveredLabelSpacePx =
     hoveredToolbarIndex === null ? 0 : getActionLabelSpace(topActions[hoveredToolbarIndex].label);
   const hoveredTableActionSpacePx =
@@ -536,7 +583,7 @@ export default function AdminDashboard() {
             return (
               <div
                 key={action.label}
-                className="relative transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                className="group relative transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
                 style={{
                   transform: isLeftOfHovered ? `translateX(-${hoveredLabelSpacePx}px)` : "translateX(0px)",
                 }}
@@ -544,13 +591,36 @@ export default function AdminDashboard() {
                 onMouseLeave={() => setHoveredToolbarIndex(null)}
               >
                 <button
+                  type="button"
                   aria-label={action.label}
                   className="relative z-10 flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-300"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (idx === 3) exportFinancialCsv({ visibleColumnsOnly: false });
+                    else if (idx === 4) {
+                      downloadCsv(`manual-payin-template-${csvExportTimestamp()}.csv`, [
+                        ["order_id", "amount", "client_name", "client_upi", "utr", "remarks"],
+                      ]);
+                    } else if (idx === 5) {
+                      downloadCsv(`commission-settlement-template-${csvExportTimestamp()}.csv`, [
+                        [
+                          "vendor_id",
+                          "vendor_name",
+                          "settlement_amount",
+                          "period_from_YYYY-MM-DD",
+                          "period_to_YYYY-MM-DD",
+                          "remarks",
+                        ],
+                      ]);
+                    }
+                  }}
                 >
                   {action.icon}
                 </button>
                 <span
-                  className={`pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] opacity-100 translate-x-0`}
+                  className={`pointer-events-none absolute right-7 top-1/2 z-20 w-fit -translate-y-1/2 whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-200 ease-out
+                    opacity-0 translate-x-1 scale-95
+                    group-hover:opacity-100 group-hover:translate-x-0 group-hover:scale-100`}
                 >
                   {action.label}
                 </span>
@@ -587,7 +657,7 @@ export default function AdminDashboard() {
                 return (
                   <div
                     key={item.id}
-                    className="relative transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                    className="group relative transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
                     style={{
                       transform: isLeftOfHovered ? `translateX(-${hoveredTableActionSpacePx}px)` : "translateX(0px)",
                     }}
@@ -624,7 +694,9 @@ export default function AdminDashboard() {
                       {item.icon}
                     </button>
                     <span
-                      className={`pointer-events-none absolute right-6 top-1/2 z-30 w-fit max-w-[220px] -translate-y-1/2 whitespace-nowrap rounded-md border border-gray-200 bg-white/95 px-2 py-1 text-right text-[11px] font-medium text-gray-600 shadow-sm transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-gray-700 dark:bg-gray-900/95 dark:text-gray-200 opacity-100 translate-x-0`}
+                      className={`pointer-events-none absolute right-6 top-1/2 z-30 w-fit max-w-[220px] -translate-y-1/2 whitespace-nowrap rounded-md border border-gray-200 bg-white/95 px-2 py-1 text-right text-[11px] font-medium text-gray-600 shadow-sm transition-all duration-200 ease-out dark:border-gray-700 dark:bg-gray-900/95 dark:text-gray-200
+                        opacity-0 translate-x-1 scale-95
+                        group-hover:opacity-100 group-hover:translate-x-0 group-hover:scale-100`}
                     >
                       {label}
                     </span>
@@ -638,12 +710,20 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     className="block w-full px-3 py-2 text-left text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      void load();
+                    }}
                   >
                     Refresh summary
                   </button>
                   <button
                     type="button"
                     className="block w-full px-3 py-2 text-left text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                    onClick={() => {
+                      exportFinancialCsv({ visibleColumnsOnly: true });
+                      setMenuOpen(false);
+                    }}
                   >
                     Export view…
                   </button>
@@ -679,7 +759,7 @@ export default function AdminDashboard() {
               {columnsMenuOpen && (
                 <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 text-left shadow-lg dark:border-gray-700 dark:bg-gray-900">
                   <p className="mb-1.5 px-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    Customize columns (18)
+                    Customize columns ({FIN_STATS_COLUMNS.length})
                   </p>
                   <div className="flex flex-col gap-0.5">
                     {FIN_STATS_COLUMNS.map((c) => (
@@ -726,7 +806,7 @@ export default function AdminDashboard() {
 
         {/* Table (horizontal scroll) */}
         <div className="overflow-x-auto">
-          <table className="w-full text-xs" style={{ minWidth: "1760px" }}>
+          <table className="w-full text-xs" style={{ minWidth: "2000px" }}>
             <thead>
               <tr className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-gray-800">
                 <th className={`${colHdr} sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 min-w-[140px]${xh("vendor")}${xv("vendor")}`}>Vendor</th>
@@ -748,13 +828,29 @@ export default function AdminDashboard() {
                   Net&nbsp;
                   <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
                 </th>
-                <th className={`${colHdr}${xh("prevBalance")}${xv("prevBalance")}`}>Previous Balance</th>
-                <th className={`${colHdr}${xh("commission")}${xv("commission")}`}>Commission</th>
                 <th className={`${colHdr}${xh("running")}${xv("running")}`}>Running</th>
                 <th className={`${colHdr}${xh("runningUnsettled")}${xv("runningUnsettled")}`}>Running Unsettled</th>
-                <th className={`${colHdr}${xh("credit")}${xv("credit")}`}>Credit</th>
+                <th
+                  className={`${colHdr}${xh("credit")}${xv("credit")}`}
+                  title="Extra PayIn headroom beyond the security pool: allowed exposure even when deposit-backed room is used up."
+                >
+                  Credit
+                </th>
                 <th className={`${colHdr}${xh("finalBalance")}${xv("finalBalance")}`}>Final Balance</th>
                 <th className={`${colHdr}${xh("remainingBalance")}${xv("remainingBalance")}`}>Remaining Balance</th>
+                <th className={`${colHdr}${xh("prevBalance")}${xv("prevBalance")}`}>Previous Balance</th>
+                <th className={`${colHdr}${xh("payInCommission")}${xv("payInCommission")}`} title="Pay-in commission % (agent)">
+                  PayIn %&nbsp;
+                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
+                </th>
+                <th className={`${colHdr}${xh("payOutCommission")}${xv("payOutCommission")}`} title="Pay-out commission % (agent)">
+                  PayOut %&nbsp;
+                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
+                </th>
+                <th className={`${colHdr}${xh("referralCommission")}${xv("referralCommission")}`} title="Referral commission % (agent)">
+                  Referral %&nbsp;
+                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
+                </th>
                 <th className={`${colHdr} ${colActions}${xh("actions")}${xv("actions")}`}>Actions</th>
               </tr>
 
@@ -770,12 +866,6 @@ export default function AdminDashboard() {
                   <td className={`${colCell} font-bold text-red-500${xh("unsettlePayout")}${xv("unsettlePayout")}`}>{fmt(totals.unsettlePayout)}</td>
                   <td className={`${colCell}${xh("settlement")}${xv("settlement")}`}>{totals.settlement.toLocaleString("en-IN")}</td>
                   <td className={`${colCell} font-bold text-red-500${xh("net")}${xv("net")}`}>{fmt(totals.net)}</td>
-                  <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{totals.prevBalance}</td>
-                  <td className={`${colCell}${xh("commission")}${xv("commission")}`}>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-green-600 dark:text-green-400 font-semibold">{totals.commission.toLocaleString("en-IN")}</span>
-                    </div>
-                  </td>
                   <td className={`${colCell}${xh("running")}${xv("running")}`}>
                     <div className="flex flex-col gap-0.5">
                       <span className="text-green-600 dark:text-green-400 font-semibold">{(totals.running / 1000).toFixed(0)}K</span>
@@ -791,6 +881,10 @@ export default function AdminDashboard() {
                   <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("credit")}${xv("credit")}`}>{(totals.credit / 1000000).toFixed(0)}M</td>
                   <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("finalBalance")}${xv("finalBalance")}`}>{totals.finalBalance.toLocaleString("en-IN")}</td>
                   <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("remainingBalance")}${xv("remainingBalance")}`}>{totals.remainingBalance.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{totals.prevBalance}</td>
+                  <td className={`${colCell} text-gray-400${xh("payInCommission")}${xv("payInCommission")}`}>—</td>
+                  <td className={`${colCell} text-gray-400${xh("payOutCommission")}${xv("payOutCommission")}`}>—</td>
+                  <td className={`${colCell} text-gray-400${xh("referralCommission")}${xv("referralCommission")}`}>—</td>
                   <td className={`${colCell} ${colActions}${xh("actions")}${xv("actions")}`}></td>
                 </tr>
               )}
@@ -806,7 +900,7 @@ export default function AdminDashboard() {
                   <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-blue-50/30 dark:hover:bg-white/[0.015] transition-colors">
                     {/* Vendor name — sticky */}
                     <td className={`${colCell} sticky left-0 z-10 bg-white dark:bg-gray-900 font-semibold text-gray-800 dark:text-gray-200${xh("vendor")}${xv("vendor")}`}>
-                      <Link href={`/agents/${row.id}`} className="text-blue-600 hover:underline dark:text-blue-400">
+                      <Link href={`/agent/${row.id}`} className="text-blue-600 hover:underline dark:text-blue-400">
                         {row.name}
                       </Link>
                     </td>
@@ -820,8 +914,6 @@ export default function AdminDashboard() {
                     <td className={`${colCell}${xh("unsettlePayout")}${xv("unsettlePayout")}`}>{colorVal(row.unsettlePayout, true)}</td>
                     <td className={`${colCell}${xh("settlement")}${xv("settlement")}`}>{colorVal(row.settlement, true)}</td>
                     <td className={`${colCell}${xh("net")}${xv("net")}`}>{colorVal(row.net, true)}</td>
-                    <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{row.prevBalance}</td>
-                    <td className={`${colCell}${xh("commission")}${xv("commission")}`}>{row.commission > 0 ? row.commission.toLocaleString("en-IN") : "0"}</td>
 
                     {/* Running — badge */}
                     <td className={`${colCell}${xh("running")}${xv("running")}`}>
@@ -842,6 +934,11 @@ export default function AdminDashboard() {
 
                     {/* Remaining Balance */}
                     <td className={`${colCell}${xh("remainingBalance")}${xv("remainingBalance")}`}>{colorVal(row.remainingBalance, true)}</td>
+
+                    <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{row.prevBalance}</td>
+                    <td className={`${colCell}${xh("payInCommission")}${xv("payInCommission")}`}>{fmtPct(row.payInCommission)}</td>
+                    <td className={`${colCell}${xh("payOutCommission")}${xv("payOutCommission")}`}>{fmtPct(row.payOutCommission)}</td>
+                    <td className={`${colCell}${xh("referralCommission")}${xv("referralCommission")}`}>{fmtPct(row.referralCommission)}</td>
 
                     {/* Actions — same label-from-behind + sibling shift as Financial Statistics toolbar */}
                     <td className={`${colCell} ${colActions}${xh("actions")}${xv("actions")}`}>
@@ -864,7 +961,7 @@ export default function AdminDashboard() {
                           <button
                             type="button"
                             aria-label="View"
-                            onClick={() => router.push(`/agents/${row.id}`)}
+                            onClick={() => router.push(`/agent/${row.id}`)}
                             className="relative z-10 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-300"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

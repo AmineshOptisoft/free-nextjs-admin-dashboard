@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { publicPayInDisplayMethod } from "@/lib/payin-lifecycle";
+import { copyTextToClipboard } from "@/lib/copy-clipboard";
 
 type CompanyInfo = {
   id: string;
@@ -35,13 +36,85 @@ type PayRequest = {
   accountHolderName?: string;
   /** Server-built UPI intent string (preferred for QR when present). */
   qrCodeUrl?: string;
+  /** When set, request auto-expires at this instant (see `request-expiry`). */
+  expiresAtIso?: string;
 };
 
 type Step = "FORM" | "WAIT_ASSIGN" | "PAYMENT" | "VERIFY_QUEUE" | "FINAL";
 
 const FINAL_STATES = new Set(["APPROVED", "APPROVED_BY_ADMIN", "REJECTED", "EXPIRED", "REVOKED"]);
-const PAYMENT_TIMER_SEC = 600;
-const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+/** Fallback payment-step countdown when server does not send `expiresAtIso` (seconds). */
+const PAYMENT_TIMER_SEC = 300;
+/** After JPEG compress we keep data URL under this length (UTF-8) to fit DB `max_allowed_packet`. */
+const TARGET_MAX_PROOF_DATA_URL_CHARS = 480_000;
+/** Max raw file before client-side image compress (bytes). */
+const MAX_PROOF_IMAGE_RAW_BYTES = 20 * 1024 * 1024;
+/** PDF proof is sent as data URL (~4/3 size); keep small. */
+const MAX_PROOF_PDF_RAW_BYTES = 380 * 1024;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("read"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("read"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Resize + JPEG re-encode so base64 proof stays under server limits. */
+async function compressProofImageToDataUrl(file: File): Promise<string | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    let w = bitmap.width;
+    let h = bitmap.height;
+    const cap = 1920;
+    const m = Math.max(w, h);
+    if (m > cap) {
+      w = Math.round((w * cap) / m);
+      h = Math.round((h * cap) / m);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, w);
+    canvas.height = Math.max(1, h);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return null;
+    }
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    let q = 0.9;
+    let dataUrl = canvas.toDataURL("image/jpeg", q);
+    while (dataUrl.length > TARGET_MAX_PROOF_DATA_URL_CHARS && q > 0.5) {
+      q -= 0.06;
+      dataUrl = canvas.toDataURL("image/jpeg", q);
+    }
+    while (dataUrl.length > TARGET_MAX_PROOF_DATA_URL_CHARS && canvas.width > 360) {
+      const nw = Math.max(360, Math.round(canvas.width * 0.86));
+      const nh = Math.max(1, Math.round((canvas.height * nw) / canvas.width));
+      const tmp = document.createElement("canvas");
+      tmp.width = nw;
+      tmp.height = nh;
+      const tctx = tmp.getContext("2d");
+      if (!tctx) break;
+      tctx.drawImage(canvas, 0, 0, nw, nh);
+      canvas.width = nw;
+      canvas.height = nh;
+      const ctx2 = canvas.getContext("2d");
+      if (!ctx2) break;
+      ctx2.drawImage(tmp, 0, 0);
+      q = 0.82;
+      dataUrl = canvas.toDataURL("image/jpeg", q);
+    }
+    return dataUrl.length <= TARGET_MAX_PROOF_DATA_URL_CHARS ? dataUrl : null;
+  } catch {
+    return null;
+  }
+}
 
 function formatMmSs(totalSec: number): string {
   const s = Math.max(0, totalSec);
@@ -78,6 +151,8 @@ function parsePayeeUpiFromIntent(uri: string): string {
 }
 
 export default function PublicPayPage({ companyKey }: { companyKey: string }) {
+  const paySessionKey = useMemo(() => `tepay-public-pay-active:${companyKey}`, [companyKey]);
+
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [loadingCompany, setLoadingCompany] = useState(true);
@@ -107,6 +182,11 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
     (async () => {
       setLoadingCompany(true);
       setCompanyError(null);
+      setRequest(null);
+      setUtrInput("");
+      setProofDataUrl(null);
+      setProofName("");
+      setFormError(null);
       try {
         const res = await fetch(`/api/public/pay/${encodeURIComponent(companyKey)}`);
         const data = (await res.json()) as { ok?: boolean; company?: CompanyInfo; error?: string };
@@ -129,6 +209,38 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
   }, [companyKey]);
 
   useEffect(() => {
+    if (!company) return;
+    const raw = typeof window !== "undefined" ? sessionStorage.getItem(paySessionKey)?.trim() : "";
+    if (!raw) return;
+
+    let cancelled = false;
+    const storedId = raw;
+    (async () => {
+      try {
+        const res = await fetch(`/api/public/pay/request/${encodeURIComponent(storedId)}`);
+        const data = (await res.json()) as { ok?: boolean; request?: PayRequest };
+        if (cancelled) return;
+        if (typeof window !== "undefined" && sessionStorage.getItem(paySessionKey) !== storedId) return;
+        if (!res.ok || !data.ok || !data.request) {
+          sessionStorage.removeItem(paySessionKey);
+          return;
+        }
+        setRequest({
+          ...data.request,
+          waitForAgent: Boolean(data.request.waitForAgent),
+          proofSubmitted: Boolean(data.request.proofSubmitted),
+        });
+        setUtrInput(data.request.utrCode?.trim() ?? "");
+      } catch {
+        if (!cancelled && typeof window !== "undefined") sessionStorage.removeItem(paySessionKey);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [company, paySessionKey]);
+
+  useEffect(() => {
     if (!request?.id) return;
 
     const id = request.id;
@@ -137,7 +249,11 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
         const res = await fetch(`/api/public/pay/request/${id}`);
         const data = (await res.json()) as { ok?: boolean; request?: PayRequest };
         if (!res.ok || !data.ok || !data.request) return;
-        setRequest(data.request);
+        setRequest({
+          ...data.request,
+          waitForAgent: Boolean(data.request.waitForAgent),
+          proofSubmitted: Boolean(data.request.proofSubmitted),
+        });
       } catch {
         // ignore transient polling failures
       }
@@ -182,13 +298,26 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
   }, [request]);
 
   useEffect(() => {
+    if (!request) return;
+    const st = String(request.status).toUpperCase();
+    if (FINAL_STATES.has(st)) return;
     if (currentStep !== "PAYMENT") return;
+
+    const iso = request.expiresAtIso?.trim();
+    if (iso) {
+      const end = new Date(iso).getTime();
+      if (Number.isFinite(end)) {
+        const tick = () => setSecondsLeft(Math.max(0, Math.ceil((end - Date.now()) / 1000)));
+        tick();
+        const id = window.setInterval(tick, 1000);
+        return () => window.clearInterval(id);
+      }
+    }
+
     setSecondsLeft(PAYMENT_TIMER_SEC);
-    const id = window.setInterval(() => {
-      setSecondsLeft((s) => (s <= 0 ? 0 : s - 1));
-    }, 1000);
+    const id = window.setInterval(() => setSecondsLeft((s) => (s <= 0 ? 0 : s - 1)), 1000);
     return () => window.clearInterval(id);
-  }, [currentStep, request?.id]);
+  }, [currentStep, request?.id, request?.status, request?.expiresAtIso]);
 
   async function createRequest() {
     setSaving(true);
@@ -209,6 +338,11 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
         setFormError(data.error ?? "Could not create payment request");
         return;
       }
+      try {
+        sessionStorage.setItem(paySessionKey, data.request.id);
+      } catch {
+        // ignore quota / private mode
+      }
       setRequest({
         ...data.request,
         waitForAgent: Boolean(data.request?.waitForAgent ?? data.waitForAgent),
@@ -227,22 +361,44 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
 
   const ingestProofFile = useCallback((file: File | null) => {
     if (!file) return;
-    if (file.size > MAX_PROOF_BYTES) {
-      setProofError("File must be 5MB or smaller.");
-      return;
-    }
     const okType = file.type === "image/png" || file.type === "image/jpeg" || file.type === "application/pdf";
     if (!okType) {
       setProofError("Use PNG, JPG, or PDF.");
       return;
     }
+
+    if (file.type === "application/pdf") {
+      if (file.size > MAX_PROOF_PDF_RAW_BYTES) {
+        setProofError(`PDF must be about ${Math.round(MAX_PROOF_PDF_RAW_BYTES / 1024)} KB or smaller (server limit). Use a JPG screenshot instead.`);
+        return;
+      }
+      setProofError(null);
+      void readFileAsDataUrl(file)
+        .then((dataUrl) => {
+          if (dataUrl.length > TARGET_MAX_PROOF_DATA_URL_CHARS) {
+            setProofError("That PDF is still too large when encoded. Use a smaller PDF or a JPG/PNG screenshot.");
+            return;
+          }
+          setProofDataUrl(dataUrl);
+          setProofName(file.name);
+        })
+        .catch(() => setProofError("Could not read file."));
+      return;
+    }
+
+    if (file.size > MAX_PROOF_IMAGE_RAW_BYTES) {
+      setProofError("Image file is too large to process in the browser. Try a smaller photo.");
+      return;
+    }
     setProofError(null);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProofDataUrl(typeof reader.result === "string" ? reader.result : null);
+    void compressProofImageToDataUrl(file).then((dataUrl) => {
+      if (!dataUrl) {
+        setProofError("Could not compress image. Try another photo or a PDF under the size limit.");
+        return;
+      }
+      setProofDataUrl(dataUrl);
       setProofName(file.name);
-    };
-    reader.readAsDataURL(file);
+    });
   }, []);
 
   async function submitProof() {
@@ -251,6 +407,10 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
     const image = proofDataUrl?.trim() ?? "";
     if (!image) {
       setProofError("Upload a screenshot or proof of payment (required).");
+      return;
+    }
+    if (image.length > TARGET_MAX_PROOF_DATA_URL_CHARS) {
+      setProofError("Proof file is too large. Choose a smaller image or re-upload.");
       return;
     }
     setProofBusy(true);
@@ -266,7 +426,11 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
         setProofError(data.error ?? "Could not submit payment");
         return;
       }
-      setRequest(data.request);
+      setRequest({
+        ...data.request,
+        waitForAgent: Boolean(data.request.waitForAgent),
+        proofSubmitted: Boolean(data.request.proofSubmitted),
+      });
       setSuccessOrderId(data.request.orderId);
       setShowSuccessModal(true);
     } catch {
@@ -279,14 +443,14 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
   async function copyField(key: string, text: string) {
     const t = text.trim();
     if (!t) return;
-    try {
-      await navigator.clipboard.writeText(t);
+    const ok = await copyTextToClipboard(t);
+    if (ok) {
       setProofError(null);
       setCopiedKey(key);
       window.setTimeout(() => {
         setCopiedKey((k) => (k === key ? null : k));
       }, 1600);
-    } catch {
+    } else {
       setProofError("Copy failed — select the text and copy manually.");
     }
   }

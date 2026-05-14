@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
+import PendingExpireCountdown from "../ui/PendingExpireCountdown";
 
 function MoneyBillIcon() {
   return (
@@ -71,6 +72,17 @@ function statusBadgeClass(status: string): string {
   return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
 }
 
+function companyTxnNeedsExpireCountdown(status: string): boolean {
+  const s = status.toUpperCase();
+  return (
+    s === "PENDING" ||
+    s === "NOT_ASSIGNED" ||
+    s === "PAID" ||
+    s === "RE_ASSIGNED" ||
+    s === "CREATED"
+  );
+}
+
 function GridField({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
@@ -97,6 +109,8 @@ export type CompanyTxnAccordionCardProps = {
   assignedToLabel: string;
   remarks: string;
   discountAmount?: number;
+  /** Server deadline for open requests (ISO). */
+  expiresAtIso?: string;
   footer?: ReactNode;
   defaultOpen?: boolean;
 };
@@ -117,6 +131,7 @@ export default function CompanyTxnAccordionCard({
   assignedToLabel,
   remarks,
   discountAmount = 0,
+  expiresAtIso,
   footer,
   defaultOpen = true,
 }: CompanyTxnAccordionCardProps) {
@@ -138,6 +153,9 @@ export default function CompanyTxnAccordionCard({
           >
             {status.replace(/_/g, " ")}
           </span>
+          {expiresAtIso && companyTxnNeedsExpireCountdown(status) ? (
+            <PendingExpireCountdown expiresAtIso={expiresAtIso} />
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Link

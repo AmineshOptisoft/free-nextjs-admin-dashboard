@@ -89,11 +89,17 @@ export default function AgentList() {
   const [loading, setLoading] = useState(true);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) {
+      setLoading(true);
+      setLoadError(null);
+    }
     try {
-      const res = await fetch("/api/agents", { credentials: "include" });
+      const res = await fetch("/api/agents", {
+        credentials: "include",
+        cache: "no-store",
+      });
       const data = (await res.json()) as { ok?: boolean; agents?: Agent[]; error?: string };
       if (res.status === 401) {
         setLoadError("Admin sign-in required.");
@@ -110,7 +116,7 @@ export default function AgentList() {
       setLoadError("Network error.");
       setAgents([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -123,7 +129,8 @@ export default function AgentList() {
       !search ||
       a.username.toLowerCase().includes(search.toLowerCase()) ||
       (a.fullname && a.fullname.toLowerCase().includes(search.toLowerCase())) ||
-      (a.email && a.email.toLowerCase().includes(search.toLowerCase())),
+      (a.email && a.email.toLowerCase().includes(search.toLowerCase())) ||
+      (a.referral_code && a.referral_code.toLowerCase().includes(search.toLowerCase())),
   );
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -234,9 +241,9 @@ export default function AgentList() {
       {showCreate && (
         <CreateAgentModal
           onClose={() => setShowCreate(false)}
-          onCreated={() => {
-            void load();
+          onCreated={async () => {
             setPage(1);
+            await load({ silent: true });
           }}
         />
       )}
@@ -244,8 +251,8 @@ export default function AgentList() {
         <EditAgentModal
           agent={editAgent}
           onClose={() => setEditAgent(null)}
-          onSaved={() => {
-            void load();
+          onSaved={async () => {
+            await load({ silent: true });
           }}
         />
       )}

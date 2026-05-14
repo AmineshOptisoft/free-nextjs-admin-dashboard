@@ -18,6 +18,10 @@ export type PayMethodRow = RowDataPacket & {
   account_holder_name: string | null;
   enable_pay_in: number | boolean;
   enable_pay_out: number | boolean;
+  /** Max same-day PayIn volume (INR); `<= 0` means no cap. */
+  pay_in_limit: string | number | null;
+  /** Max same-day PayOut volume (INR); `<= 0` means no cap. */
+  pay_out_limit: string | number | null;
   status: string;
   last_activity: Date | string | null;
   created_at: Date | string | null;
@@ -26,6 +30,13 @@ export type PayMethodRow = RowDataPacket & {
 
 export function boolPay(v: number | boolean): boolean {
   return v === true || v === 1;
+}
+
+function numLimit(v: string | number | null | undefined): number {
+  if (v == null) return 0;
+  if (typeof v === "number") return Number.isFinite(v) && v > 0 ? v : 0;
+  const n = Number.parseFloat(String(v).trim());
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 export function gatewayToPaymentMethod(gateway: string): "UPI" | "BANK" {
@@ -61,6 +72,8 @@ export function payMethodToStaffApi(r: PayMethodRow, assignedTo: string, financi
   if (payOut) tags.push("PAYOUT");
 
   const statusLower = r.status === "ACTIVE" ? "active" : "inactive";
+  const pin = numLimit(r.pay_in_limit);
+  const pout = numLimit(r.pay_out_limit);
 
   return {
     id: String(r.id),
@@ -71,6 +84,8 @@ export function payMethodToStaffApi(r: PayMethodRow, assignedTo: string, financi
     role_label: "Payment method",
     pay_in_enabled: payIn,
     pay_out_enabled: payOut,
+    pay_in_limit: pin,
+    pay_out_limit: pout,
     operation_type: operationTypeFromFlags(payIn, payOut),
     gateway: paymentMethodToGateway(pm),
     tags,
@@ -91,5 +106,6 @@ export function payMethodToStaffApi(r: PayMethodRow, assignedTo: string, financi
 export const PAY_METHOD_SELECT = `
   \`id\`, \`agent_id\`, \`full_name\`, \`username\`, \`email\`, \`upi_id\`, \`payment_method\`,
   \`account_no\`, \`ifsc_code\`, \`branch_name\`, \`bank_name\`, \`account_holder_name\`,
-  \`enable_pay_in\`, \`enable_pay_out\`, \`status\`, \`last_activity\`, \`created_at\`, \`updated_at\`
+  \`enable_pay_in\`, \`enable_pay_out\`, \`pay_in_limit\`, \`pay_out_limit\`,
+  \`status\`, \`last_activity\`, \`created_at\`, \`updated_at\`
 `;

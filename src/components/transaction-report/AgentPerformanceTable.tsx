@@ -45,7 +45,7 @@ export default function AgentPerformanceTable({ rows }: { rows: AgentPerformance
                 <TableRow key={`${row.agentId ?? "na"}-${row.agentName}`} className="hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
                   <TableCell className="px-5 py-3 text-sm font-medium text-brand-600 dark:text-brand-400">
                     {row.agentId ? (
-                      <Link href={`/agents/${row.agentId}`} className="hover:underline">
+                      <Link href={`/agent/${row.agentId}`} className="hover:underline">
                         {row.agentName}
                       </Link>
                     ) : (

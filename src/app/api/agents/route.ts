@@ -1,10 +1,12 @@
 import { hash } from "bcryptjs";
 import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { allocateAgentReferralCode } from "@/lib/agent-referral-code";
 import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
+export const dynamic = "force-dynamic";
 type AgentRow = RowDataPacket & {
   id: number;
   fullname: string | null;
@@ -12,11 +14,14 @@ type AgentRow = RowDataPacket & {
   email: string | null;
   security_deposit: string | number;
   credit_limit: string | number;
+  previous_balance: string | number;
   net_pay_in: string | number;
   net_pay_out: string | number;
+  running_balance: string | number;
   pay_in_commission: string | number;
   pay_out_commission: string | number;
   referral_commission: string | number;
+  referral_code: string;
   status: string;
 };
 
@@ -44,7 +49,8 @@ export async function GET(req: Request) {
 
   let sql = `
     SELECT \`id\`, \`fullname\`, \`username\`, \`email\`, \`security_deposit\`, \`credit_limit\`,
-           \`net_pay_in\`, \`net_pay_out\`, \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`status\`
+           \`previous_balance\`, \`net_pay_in\`, \`net_pay_out\`, \`running_balance\`,
+           \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`referral_code\`, \`status\`
     FROM \`agents\`
   `;
   const params: string[] = [];
@@ -63,15 +69,21 @@ export async function GET(req: Request) {
     email: r.email,
     security_deposit: num(r.security_deposit),
     credit_limit: num(r.credit_limit),
+    previous_balance: num(r.previous_balance),
     net_pay_in: num(r.net_pay_in),
     net_pay_out: num(r.net_pay_out),
+    running_balance: num(r.running_balance),
     pay_in_commission: num(r.pay_in_commission),
     pay_out_commission: num(r.pay_out_commission),
     referral_commission: num(r.referral_commission),
+    referral_code: (r.referral_code ?? "").trim(),
     status: r.status,
   }));
 
-  return NextResponse.json({ ok: true as const, agents });
+  return NextResponse.json(
+    { ok: true as const, agents },
+    { headers: { "Cache-Control": "private, no-store, max-age=0" } },
+  );
 }
 
 export async function POST(req: Request) {
@@ -106,12 +118,13 @@ export async function POST(req: Request) {
   const passwordHash = await hash(passwordRaw, 10);
 
   try {
+    const referralCode = await allocateAgentReferralCode(pool);
     const [result] = await pool.execute<ResultSetHeader>(
       `INSERT INTO \`agents\` (
         \`fullname\`, \`username\`, \`email\`, \`security_deposit\`, \`credit_limit\`,
         \`net_pay_in\`, \`net_pay_out\`, \`previous_balance\`, \`running_balance\`, \`settlement_amount\`, \`settlement_date\`,
-        \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`password\`, \`status\`
-      ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, ?, ?, ?, ?, ?)`,
+        \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`referral_code\`, \`password\`, \`status\`
+      ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
       [
         fullname || null,
         username,
@@ -121,6 +134,7 @@ export async function POST(req: Request) {
         payIn,
         payOut,
         referral,
+        referralCode,
         passwordHash,
         status,
       ],
@@ -134,6 +148,7 @@ export async function POST(req: Request) {
         fullname: fullname || null,
         email: email || null,
         status,
+        referral_code: referralCode,
       },
     });
   } catch (e: unknown) {

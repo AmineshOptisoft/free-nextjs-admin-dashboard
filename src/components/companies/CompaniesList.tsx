@@ -215,7 +215,7 @@ function EditModal({ company, onClose, onSaved }: EditModalProps) {
                 </button>
               )}
             </div>
-            <div>
+            {/* <div>
               <label className={labelCls}>Or logo URL</label>
               <input
                 value={form.logo}
@@ -227,7 +227,7 @@ function EditModal({ company, onClose, onSaved }: EditModalProps) {
                 placeholder="https://… or /uploads/…"
                 disabled={saving}
               />
-            </div>
+            </div> */}
           </div>
           <div className="sm:col-span-2">
             <label className={labelCls}>New password (optional)</label>
@@ -614,7 +614,15 @@ export default function CompaniesList() {
       </div>
 
       {/* ── Modals ── */}
-      {showCreate && <CreateCompanyModal onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateCompanyModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setPage(1);
+            void load();
+          }}
+        />
+      )}
       {editCompany && (
         <EditModal
           company={editCompany}

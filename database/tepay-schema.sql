@@ -46,6 +46,7 @@ CREATE TABLE `agents` (
   `pay_in_commission` decimal(10,2) NOT NULL DEFAULT 0.00,
   `pay_out_commission` decimal(10,2) NOT NULL DEFAULT 0.00,
   `referral_commission` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `referral_code` varchar(32) NOT NULL,
   `password` varchar(255) NOT NULL,
   `token` text DEFAULT NULL,
   `status` enum('active','deactivated','pending','blocked') NOT NULL DEFAULT 'pending',
@@ -61,6 +62,7 @@ CREATE TABLE `agents` (
 
 CREATE TABLE `clients` (
   `id` bigint(20) UNSIGNED NOT NULL,
+  `company_id` bigint(20) UNSIGNED NOT NULL,
   `client_id` varchar(100) NOT NULL,
   `client_name` varchar(255) NOT NULL,
   `phone` varchar(20) DEFAULT '',
@@ -183,6 +185,7 @@ CREATE TABLE `transactions` (
   `last_assignment_signal_at` datetime DEFAULT NULL,
   `dispute_raised` tinyint(1) NOT NULL DEFAULT 0,
   `dispute_reason` text DEFAULT NULL,
+  `dispute_state` enum('NONE','PENDING','RESOLVED','OTHER','EXPIRED') NOT NULL DEFAULT 'NONE',
   `dispute_type` enum('PAYIN','PAYOUT','') DEFAULT '',
   `dispute_raised_by` bigint(20) UNSIGNED DEFAULT NULL,
   `dispute_raised_at` datetime DEFAULT NULL,
@@ -202,12 +205,14 @@ ALTER TABLE `admin`
 ALTER TABLE `agents`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `username` (`username`),
+  ADD UNIQUE KEY `uniq_referral_code` (`referral_code`),
   ADD KEY `idx_email` (`email`),
   ADD KEY `idx_status` (`status`);
 
 ALTER TABLE `clients`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `client_id` (`client_id`),
+  ADD UNIQUE KEY `uniq_company_client` (`company_id`, `client_id`),
+  ADD KEY `idx_company_id` (`company_id`),
   ADD KEY `idx_client_id` (`client_id`),
   ADD KEY `idx_client_name` (`client_name`),
   ADD KEY `idx_phone` (`phone`),

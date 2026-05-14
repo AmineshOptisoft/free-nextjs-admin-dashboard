@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { RowDataPacket } from "mysql2/promise";
+import { AGENT_SETTLED_LEDGER_SQL_IN } from "@/lib/agent-ledger-statuses";
 import { pool } from "@/lib/db";
 import { requireAgentSession } from "@/lib/require-agent-api";
 
@@ -38,7 +39,7 @@ function num(v: string | number | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-const SUCCESS_IN = `('PAID','APPROVED','APPROVED_BY_ADMIN','APPROVED_BY_AGENT','EXPIRED_APPROVED_BY_ADMIN','EXPIRED_APPROVED_BY_AGENT')`;
+const SUCCESS_IN = AGENT_SETTLED_LEDGER_SQL_IN;
 const FAILED_IN = `('REJECTED','REVOKED','EXPIRED','NOT_ASSIGNED')`;
 
 export async function GET() {

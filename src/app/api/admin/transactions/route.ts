@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { rowToPayInItem, rowToPayOutItem, type TxRow } from "@/lib/agent-transactions-map";
 import { pool } from "@/lib/db";
 import { requireAdminSession } from "@/lib/require-admin-api";
+import { expireOpenRequestsPastDeadline } from "@/lib/request-expiry";
 
 const SELECT_TX = `
   \`id\`, \`random_code\`, \`order_id\`, \`amount\`, \`status\`, \`type\`,
   \`client_name\`, \`client_upi\`, \`assigned_upi\`, \`user_upi\`,
   \`utr_code\`, \`payment_image\`, \`user_note\`,
-  \`created_at\`, \`assigned_date\`,
-  \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`dispute_raised\`
+  \`created_at\`, \`assigned_date\`, \`assigned_agent_id\`,
+  \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`dispute_raised\`, \`expires_at\`
 `;
 
 export async function GET(req: Request) {
@@ -41,8 +42,12 @@ export async function GET(req: Request) {
   `;
 
   try {
+    await expireOpenRequestsPastDeadline(pool);
     const [rows] = await pool.execute<TxRow[]>(sql, params);
-    const items = typeRaw === "PAYIN" ? rows.map((r) => rowToPayInItem(r)) : rows.map((r) => rowToPayOutItem(r));
+    const items =
+      typeRaw === "PAYIN"
+        ? rows.map((r) => rowToPayInItem(r))
+        : rows.map((r) => rowToPayOutItem(r, "admin"));
     return NextResponse.json({ ok: true as const, items });
   } catch (e: unknown) {
     const code = typeof e === "object" && e !== null && "code" in e ? String((e as { code?: string }).code) : "";

@@ -4,6 +4,7 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
 import { requireAgentSession } from "@/lib/require-agent-api";
+import { sqlExpiresAtFromNow } from "@/lib/request-expiry";
 
 type PayMethodRow = RowDataPacket & {
   id: number;
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
         ?, 'PAYIN', ?, ?, 'INR', ?, 'PENDING', ?, ?, NULL,
         ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?, NOW(), NULLIF(?, ''), DATE_ADD(NOW(), INTERVAL 24 HOUR)
+        ?, ?, NOW(), NULLIF(?, ''), ${sqlExpiresAtFromNow()}
       )`,
       [
         randomCode,

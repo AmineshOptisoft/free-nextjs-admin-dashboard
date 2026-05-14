@@ -49,6 +49,7 @@ function OverviewCard({ card }: { card: SummaryCard }) {
 }
 
 export default function CompanyDashboard() {
+  const [refreshTick, setRefreshTick] = useState(0);
   const [payIns, setPayIns] = useState<
     {
       id: string;
@@ -74,6 +75,12 @@ export default function CompanyDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    const onRefresh = () => setRefreshTick((t) => t + 1);
+    window.addEventListener("tepay:company-dashboard-refresh", onRefresh);
+    return () => window.removeEventListener("tepay:company-dashboard-refresh", onRefresh);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -127,7 +134,7 @@ export default function CompanyDashboard() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [refreshTick]);
 
   const liveCards = useMemo(() => {
     if (!payIns.length && !payOuts.length) return cards;

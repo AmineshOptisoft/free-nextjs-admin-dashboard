@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
 import { IoIosWarning } from "react-icons/io";
@@ -7,7 +7,7 @@ import { IoIosWarning } from "react-icons/io";
 
 const PAGE_SIZE = 5;
 
-type DisputeStatus  = "PENDING" | "RESOLVED" | "EXPIRED";
+type DisputeStatus = "PENDING" | "RESOLVED" | "EXPIRED" | "OTHER";
 type PaymentStatus  = "PAYIN_APPROVED" | "PAYIN_PENDING" | "PAYOUT_APPROVED" | "PAYOUT_PENDING" | "FAILED";
 type DisputeReason  = string;
 
@@ -29,18 +29,20 @@ interface DisputeItem {
 }
 
 const STATUS_TABS: { label: string; value: DisputeStatus | "ALL" }[] = [
-  { label: "All",      value: "ALL" },
-  { label: "Pending",  value: "PENDING" },
+  { label: "All", value: "ALL" },
+  { label: "Pending", value: "PENDING" },
   { label: "Resolved", value: "RESOLVED" },
-  { label: "Expired",  value: "EXPIRED" },
+  { label: "Other", value: "OTHER" },
+  { label: "Expired", value: "EXPIRED" },
 ];
 
-const STATUS_FILTER_OPTIONS = ["All", "PENDING", "RESOLVED", "EXPIRED"];
+const STATUS_FILTER_OPTIONS = ["All", "PENDING", "RESOLVED", "OTHER", "EXPIRED"];
 
 const disputeStatusStyle: Record<DisputeStatus, string> = {
-  PENDING:  "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+  PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
   RESOLVED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-500",
-  EXPIRED:  "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
+  EXPIRED: "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
+  OTHER: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
 
 const paymentStatusStyle: Record<PaymentStatus, string> = {
@@ -60,9 +62,10 @@ const paymentStatusLabel: Record<PaymentStatus, string> = {
 };
 
 const disputeStatusLabel: Record<DisputeStatus, string> = {
-  PENDING:  "DISPUTE PENDING",
+  PENDING: "DISPUTE PENDING",
   RESOLVED: "DISPUTE RESOLVED",
-  EXPIRED:  "DISPUTE EXPIRED",
+  EXPIRED: "DISPUTE EXPIRED",
+  OTHER: "DISPUTE OTHER",
 };
 
 function DetailField({ label, value }: { label: string; value: string }) {
@@ -87,11 +90,34 @@ function ChevronBtn({ rotated, onClick }: { rotated: boolean; onClick: () => voi
   );
 }
 
-function DisputeCard({ item }: { item: DisputeItem }) {
+function DisputeCard({ item, onReload }: { item: DisputeItem; onReload: () => void }) {
   const [extraOpen, setExtraOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const canResolve = item.disputeStatus === "PENDING";
+
+  async function patchDisputeState(next: "RESOLVED" | "OTHER") {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/transactions/${item.id}/dispute`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dispute_state: next }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        window.alert(data.error ?? "Could not update dispute.");
+        return;
+      }
+      onReload();
+    } catch {
+      window.alert("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const detailsContent = (
     <>
@@ -128,14 +154,28 @@ function DisputeCard({ item }: { item: DisputeItem }) {
           Chats
         </button>
         <button
+          type="button"
+          disabled={!canResolve || busy}
+          onClick={() => void patchDisputeState("RESOLVED")}
           className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors shadow-sm ${
             canResolve
               ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100"
               : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed"
           }`}
-          disabled={!canResolve}
         >
-          Resolve Dispute
+          Resolve
+        </button>
+        <button
+          type="button"
+          disabled={!canResolve || busy}
+          onClick={() => void patchDisputeState("OTHER")}
+          className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
+            canResolve
+              ? "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+              : "border-gray-200 dark:border-gray-700 text-gray-400 cursor-not-allowed"
+          }`}
+        >
+          Other
         </button>
       </div>
     </div>
@@ -204,48 +244,45 @@ export default function DisputeList() {
   // Pagination
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const res = await fetch("/api/admin/disputes?limit=500", { credentials: "include" });
-        if (!mounted) return;
-        if (res.status === 401) {
-          setItems([]);
-          setLoadError("Please sign in to view disputes.");
-          return;
-        }
-        const data = (await res.json()) as { ok?: boolean; items?: DisputeItem[]; error?: string };
-        if (!res.ok || !data.ok || !data.items) {
-          setLoadError(data.error ?? "Could not load disputes.");
-          setItems([]);
-          return;
-        }
-        setLoadError(null);
-        setItems(data.items);
-      } catch {
-        if (!mounted) return;
-        setLoadError("Network error.");
+  const loadDisputes = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/admin/disputes?limit=500", { credentials: "include" });
+      if (res.status === 401) {
         setItems([]);
-      } finally {
-        if (mounted) setLoading(false);
+        setLoadError("Please sign in to view disputes.");
+        return;
       }
-    })();
-    return () => {
-      mounted = false;
-    };
+      const data = (await res.json()) as { ok?: boolean; items?: DisputeItem[]; error?: string };
+      if (!res.ok || !data.ok || !data.items) {
+        setLoadError(data.error ?? "Could not load disputes.");
+        setItems([]);
+        return;
+      }
+      setLoadError(null);
+      setItems(data.items);
+    } catch {
+      setLoadError("Network error.");
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadDisputes();
+  }, [loadDisputes]);
 
   const baseData = items;
   const totalOrders = baseData.length;
 
   const counts: Partial<Record<DisputeStatus | "ALL", number>> = {
-    ALL:      baseData.length,
-    PENDING:  baseData.filter((d) => d.disputeStatus === "PENDING").length,
+    ALL: baseData.length,
+    PENDING: baseData.filter((d) => d.disputeStatus === "PENDING").length,
     RESOLVED: baseData.filter((d) => d.disputeStatus === "RESOLVED").length,
-    EXPIRED:  baseData.filter((d) => d.disputeStatus === "EXPIRED").length,
+    OTHER: baseData.filter((d) => d.disputeStatus === "OTHER").length,
+    EXPIRED: baseData.filter((d) => d.disputeStatus === "EXPIRED").length,
   };
 
   const filtered = baseData.filter((d) => {
@@ -435,7 +472,7 @@ export default function DisputeList() {
             No disputes found.
           </div>
         ) : (
-          paginated.map((item) => <DisputeCard key={item.id} item={item} />)
+          paginated.map((item) => <DisputeCard key={item.id} item={item} onReload={() => void loadDisputes()} />)
         )}
       </div>
 

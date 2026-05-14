@@ -15,6 +15,7 @@ type DisputeRow = RowDataPacket & {
   assigned_upi: string | null;
   dispute_raised: number;
   dispute_reason: string | null;
+  dispute_state: string | null;
   created_at: Date | string | null;
   company_name: string | null;
   agent_username: string | null;
@@ -34,9 +35,11 @@ function toPaymentStatus(type: string, status: string): string {
   return isApproved ? "PAYOUT_APPROVED" : "PAYOUT_PENDING";
 }
 
-function toDisputeStatus(disputeRaised: number, txStatus: string): string {
+function toDisputeStatus(disputeState: string | null | undefined, disputeRaised: number, txStatus: string): string {
+  const ds = String(disputeState ?? "").trim().toUpperCase();
+  if (ds === "PENDING" || ds === "RESOLVED" || ds === "OTHER" || ds === "EXPIRED") return ds;
   if (disputeRaised === 1) return "PENDING";
-  const s = String(txStatus ?? "").toUpperCase();
+  const s = String(txStatus ?? "").trim().toUpperCase();
   if (s.includes("EXPIRED") || s === "REVOKED") return "EXPIRED";
   return "RESOLVED";
 }
@@ -55,6 +58,12 @@ function formatDt(v: Date | string | null): string {
   });
 }
 
+function isMissingDisputeStateColumn(e: unknown): boolean {
+  const errno = (e as { errno?: number })?.errno;
+  const msg = String((e as { sqlMessage?: string })?.sqlMessage ?? (e as Error)?.message ?? "");
+  return errno === 1054 && msg.toLowerCase().includes("dispute_state");
+}
+
 export async function GET(req: Request) {
   const auth = await requireAdminSession();
   if (!auth.ok) return auth.response;
@@ -64,8 +73,20 @@ export async function GET(req: Request) {
   const limitRaw = Number(searchParams.get("limit") ?? "500");
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 500) : 500;
 
-  const [rows] = await pool.execute<DisputeRow[]>(
-    `SELECT
+  const sqlWithState = `SELECT
+       t.\`id\`, t.\`order_id\`, t.\`amount\`, t.\`type\`, t.\`status\`,
+       t.\`client_name\`, t.\`client_upi\`, t.\`utr_code\`, t.\`assigned_upi\`,
+       t.\`dispute_raised\`, t.\`dispute_reason\`, t.\`dispute_state\`, t.\`created_at\`,
+       c.\`brand_name\` AS company_name,
+       a.\`username\` AS agent_username
+     FROM \`transactions\` t
+     LEFT JOIN \`companies\` c ON c.\`id\` = t.\`company_id\`
+     LEFT JOIN \`agents\` a ON a.\`id\` = t.\`assigned_agent_id\`
+     WHERE (t.\`dispute_raised\` = 1 OR (t.\`dispute_reason\` IS NOT NULL AND t.\`dispute_reason\` <> ''))
+     ORDER BY t.\`id\` DESC
+     LIMIT ${limit}`;
+
+  const sqlLegacy = `SELECT
        t.\`id\`, t.\`order_id\`, t.\`amount\`, t.\`type\`, t.\`status\`,
        t.\`client_name\`, t.\`client_upi\`, t.\`utr_code\`, t.\`assigned_upi\`,
        t.\`dispute_raised\`, t.\`dispute_reason\`, t.\`created_at\`,
@@ -76,27 +97,40 @@ export async function GET(req: Request) {
      LEFT JOIN \`agents\` a ON a.\`id\` = t.\`assigned_agent_id\`
      WHERE (t.\`dispute_raised\` = 1 OR (t.\`dispute_reason\` IS NOT NULL AND t.\`dispute_reason\` <> ''))
      ORDER BY t.\`id\` DESC
-     LIMIT ${limit}`,
-  );
+     LIMIT ${limit}`;
 
-  const items = rows
-    .map((r) => ({
-      id: String(r.id),
-      ref: `#${String(r.order_id).slice(0, 11)}`,
-      amount: num(r.amount),
-      disputeStatus: toDisputeStatus(Number(r.dispute_raised ?? 0), r.status),
-      paymentStatus: toPaymentStatus(r.type, r.status),
-      orderId: r.order_id,
-      companyName: (r.company_name ?? "").trim() || "—",
-      subAdminName: (r.agent_username ?? "").trim() || "—",
-      clientName: (r.client_name ?? "").trim() || "—",
-      clientUpi: (r.client_upi ?? "").trim() || "—",
-      utrCode: (r.utr_code ?? "").trim() || "—",
-      assignedUpi: (r.assigned_upi ?? "").trim() || "—",
-      reason: (r.dispute_reason ?? "").trim() || "Other",
-      createdOn: formatDt(r.created_at),
-    }))
-    .filter((r) => !status || r.disputeStatus === status);
+  try {
+    let rows: DisputeRow[];
+    try {
+      const [r] = await pool.execute<DisputeRow[]>(sqlWithState);
+      rows = r;
+    } catch (e: unknown) {
+      if (!isMissingDisputeStateColumn(e)) throw e;
+      const [r2] = await pool.execute<RowDataPacket[]>(sqlLegacy);
+      rows = r2.map((row) => ({ ...(row as DisputeRow), dispute_state: null }));
+    }
 
-  return NextResponse.json({ ok: true as const, items });
+    const items = rows
+      .map((r) => ({
+        id: String(r.id),
+        ref: `#${String(r.order_id).slice(0, 11)}`,
+        amount: num(r.amount),
+        disputeStatus: toDisputeStatus(r.dispute_state, Number(r.dispute_raised ?? 0), r.status),
+        paymentStatus: toPaymentStatus(r.type, r.status),
+        orderId: r.order_id,
+        companyName: (r.company_name ?? "").trim() || "—",
+        subAdminName: (r.agent_username ?? "").trim() || "—",
+        clientName: (r.client_name ?? "").trim() || "—",
+        clientUpi: (r.client_upi ?? "").trim() || "—",
+        utrCode: (r.utr_code ?? "").trim() || "—",
+        assignedUpi: (r.assigned_upi ?? "").trim() || "—",
+        reason: (r.dispute_reason ?? "").trim() || "Other",
+        createdOn: formatDt(r.created_at),
+      }))
+      .filter((r) => !status || r.disputeStatus === status);
+
+    return NextResponse.json({ ok: true as const, items });
+  } catch {
+    return NextResponse.json({ ok: false, error: "Could not load disputes" }, { status: 500 });
+  }
 }

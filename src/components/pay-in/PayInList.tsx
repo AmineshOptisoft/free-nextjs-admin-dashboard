@@ -4,6 +4,8 @@ import type { AgentPayInListItem } from "@/lib/agent-transactions-map";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
 import { Modal } from "../ui/modal";
+import PendingExpireCountdown from "../ui/PendingExpireCountdown";
+import { compressImageDataUrlIfLarge } from "@/lib/compress-image-data-url";
 import { PiContactlessPaymentFill } from "react-icons/pi";
 import CompanyPayInView from "./CompanyPayInView";
 
@@ -38,6 +40,16 @@ const showReject = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING" || 
 /** Revoke / unassign — not offered for receipt-pending (reject only there). */
 const showCancel = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING";
 const showActionButtons = (s: PayInStatus) => showApprove(s) || showReject(s) || showCancel(s);
+
+function showPayInExpireCountdown(item: PayInItem): boolean {
+  if (!item.expiresAtIso) return false;
+  return (
+    item.status === "PENDING" ||
+    item.status === "UNASSIGNED" ||
+    item.status === "RECEIPT_PENDING" ||
+    item.status === "PROCESSING"
+  );
+}
 
 function MoneyIcon() {
   return (
@@ -239,6 +251,7 @@ function PayInCard({
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${statusStyle[item.status]}`}>
           {item.status.replace("_", " ")}
         </span>
+        {showPayInExpireCountdown(item) ? <PendingExpireCountdown expiresAtIso={item.expiresAtIso!} /> : null}
       </div>
 
       {/* right-side action buttons */}
@@ -509,11 +522,14 @@ export default function PayInList() {
     setModalError(null);
     const reader = new FileReader();
     reader.onload = () => {
-      const r = reader.result;
-      if (typeof r === "string") {
-        setModalProofDataUrl(r);
-        setModalProofName(f.name);
-      }
+      void (async () => {
+        const r = reader.result;
+        if (typeof r === "string") {
+          const out = await compressImageDataUrlIfLarge(r);
+          setModalProofDataUrl(out);
+          setModalProofName(f.name);
+        }
+      })();
     };
     reader.readAsDataURL(f);
   }
@@ -562,9 +578,13 @@ export default function PayInList() {
     setActionBusyId(item.id);
     setModalError(null);
 
+    let normalizedProof = "";
     if (action === "approve") {
-      const proof = (opts?.paymentImage ?? "").trim();
-      if (!item.hasReceipt && !proof) {
+      normalizedProof = (opts?.paymentImage ?? "").trim();
+      if (normalizedProof.startsWith("data:image/")) {
+        normalizedProof = (await compressImageDataUrlIfLarge(normalizedProof)).trim();
+      }
+      if (!item.hasReceipt && !normalizedProof) {
         setModalError("Upload payment proof (screenshot) before approving.");
         setActionBusyId(null);
         return;
@@ -580,8 +600,7 @@ export default function PayInList() {
     if (action === "approve") {
       const utr = (opts?.utr ?? "").trim();
       if (utr) body.utr_code = utr;
-      const proof = (opts?.paymentImage ?? "").trim();
-      if (proof) body.payment_image = proof;
+      if (normalizedProof) body.payment_image = normalizedProof;
     }
 
     try {
@@ -828,7 +847,7 @@ export default function PayInList() {
               item={item}
               onOpenAction={openActionModal}
               onOpenProof={(url) => setProofPreviewUrl(url)}
-              onView={() => (window.location.href = `/transactions/${item.id}`)}
+              onView={resolvedRole === "admin" ? () => (window.location.href = `/transactions/${item.id}`) : undefined}
               busy={actionBusyId === item.id}
               isAdmin={resolvedRole === "admin"}
               onDispute={raiseDispute}

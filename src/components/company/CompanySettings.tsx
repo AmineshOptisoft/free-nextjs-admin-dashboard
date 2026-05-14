@@ -21,6 +21,7 @@ function encodeCompanyKey(raw: string): string {
 
 export default function CompanySettings() {
   const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [company, setCompany] = useState<CompanyMe | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -69,11 +70,63 @@ export default function CompanySettings() {
     }
   };
 
+  const copyCompanyCode = async () => {
+    const code = company?.company_code?.trim() ?? "";
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 1500);
+    } catch {
+      setCopiedCode(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Settings</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Payment link, QR, and company identifiers. Share the link or QR with customers to collect payments.
+        </p>
       </div>
+
+      {!loading && !loadError && company && (
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/3">
+          <div className="border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">Company profile</h3>
+          </div>
+          <dl className="grid gap-3 p-5 sm:grid-cols-2">
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Brand</dt>
+              <dd className="mt-0.5 text-sm text-gray-900 dark:text-white">{company.brand_name || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Login</dt>
+              <dd className="mt-0.5 text-sm text-gray-900 dark:text-white">{company.username}</dd>
+            </div>
+            <div className="sm:col-span-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Company code</dt>
+              <dd className="mt-1 flex flex-wrap items-center gap-2">
+                <span className="font-mono text-sm text-gray-900 dark:text-gray-100">{company.company_code?.trim() || "—"}</span>
+                {company.company_code?.trim() ? (
+                  <button
+                    type="button"
+                    onClick={copyCompanyCode}
+                    className="inline-flex h-8 items-center rounded-lg border border-gray-200 px-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-white/5"
+                  >
+                    {copiedCode ? "Copied" : "Copy code"}
+                  </button>
+                ) : null}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</dt>
+              <dd className="mt-0.5 text-sm capitalize text-gray-900 dark:text-white">{company.status || "—"}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/3">
         <div className="border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">

@@ -5,6 +5,7 @@ import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
 import { payInDisplayStatus, publicPayInDisplayMethod, sqlFieldToUtf8 } from "@/lib/payin-lifecycle";
 import { tryAssignPayInTransaction, deleteNotAssignedPayIn, PAYIN_NO_ELIGIBLE_AGENT_MESSAGE } from "@/lib/payin-assignment";
+import { sqlExpiresAtFromNow } from "@/lib/request-expiry";
 
 type CompanyRow = RowDataPacket & {
   id: number;
@@ -33,6 +34,7 @@ type TxRow = RowDataPacket & {
   utr_code: string | null;
   payment_image: string | null;
   qr_code_url: string | null;
+  expires_at: Date | string | null;
 };
 
 function decodeCompanyKey(raw: string): string {
@@ -64,6 +66,13 @@ function num(v: string | number): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   const n = Number.parseFloat(String(v));
   return Number.isFinite(n) ? n : 0;
+}
+
+function expiresAtToIso(v: Date | string | null | undefined): string | undefined {
+  if (v == null) return undefined;
+  const d = typeof v === "string" ? new Date(v) : v;
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
 }
 
 function pickPreferredMethod(raw: unknown): "UPI" | "BANK" | "" {
@@ -98,6 +107,7 @@ function mapRequest(tx: TxRow) {
     hasReceipt: Boolean(tx.payment_image && String(tx.payment_image).trim().length > 0),
     utrCode: sqlFieldToUtf8(tx.utr_code),
     qrCodeUrl: sqlFieldToUtf8(tx.qr_code_url),
+    expiresAtIso: expiresAtToIso(tx.expires_at),
   };
 }
 
@@ -159,7 +169,7 @@ export async function POST(req: Request, context: { params: { companyKey: string
     const [rows] = await pool.execute<TxRow[]>(
       `SELECT \`id\`, \`order_id\`, \`amount\`, \`status\`, \`client_name\`, \`client_upi\`, \`assigned_upi\`,
               \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`payment_method\`, \`account_holder_name\`,
-              \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`, \`qr_code_url\`
+              \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`, \`qr_code_url\`, \`expires_at\`
        FROM \`transactions\` WHERE \`id\` = ? LIMIT 1`,
       [id],
     );
@@ -175,15 +185,30 @@ export async function POST(req: Request, context: { params: { companyKey: string
     });
   }
 
-  function noEligiblePayInResponse() {
-    return NextResponse.json({ ok: false as const, error: PAYIN_NO_ELIGIBLE_AGENT_MESSAGE }, { status: 503 });
+  function noEligiblePayInResponse(detail?: string) {
+    const msg = detail?.trim() ? detail.trim() : PAYIN_NO_ELIGIBLE_AGENT_MESSAGE;
+    return NextResponse.json({ ok: false as const, error: msg }, { status: 503 });
+  }
+
+  async function assignPayInOr503(txId: number, amt: number, method: "UPI" | "BANK" | ""): Promise<Response | null> {
+    try {
+      const r = await tryAssignPayInTransaction(txId, amt, method);
+      if (!r.assigned) {
+        await deleteNotAssignedPayIn(txId);
+        return noEligiblePayInResponse(r.reason);
+      }
+    } catch {
+      await deleteNotAssignedPayIn(txId);
+      return noEligiblePayInResponse();
+    }
+    return null;
   }
 
   if (idempotencyKey) {
     const [existingRows] = await pool.execute<TxRow[]>(
       `SELECT \`id\`, \`order_id\`, \`amount\`, \`status\`, \`client_name\`, \`client_upi\`, \`assigned_upi\`,
               \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`payment_method\`, \`account_holder_name\`,
-              \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`, \`qr_code_url\`
+              \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`, \`qr_code_url\`, \`expires_at\`
        FROM \`transactions\`
        WHERE \`company_id\` = ? AND \`type\` = 'PAYIN' AND \`idempotency_key\` = ?
        LIMIT 1`,
@@ -196,12 +221,8 @@ export async function POST(req: Request, context: { params: { companyKey: string
         return respondWithTx(ex);
       }
       if (st === "NOT_ASSIGNED") {
-        try {
-          await tryAssignPayInTransaction(Number(ex.id), num(ex.amount), pickPreferredMethod(ex.payment_method));
-        } catch {
-          await deleteNotAssignedPayIn(Number(ex.id));
-          return noEligiblePayInResponse();
-        }
+        const early = await assignPayInOr503(Number(ex.id), num(ex.amount), pickPreferredMethod(ex.payment_method));
+        if (early) return early;
       }
       const fresh = await loadTxById(Number(ex.id));
       if (!fresh) return NextResponse.json({ ok: false, error: "Could not load request" }, { status: 500 });
@@ -223,7 +244,7 @@ export async function POST(req: Request, context: { params: { companyKey: string
       `INSERT INTO \`transactions\` (
         \`random_code\`, \`type\`, \`order_id\`, \`amount\`, \`currency\`, \`payment_method\`,
         \`status\`, \`client_name\`, \`client_upi\`, \`company_id\`, \`idempotency_key\`, \`expires_at\`
-      ) VALUES (?, 'PAYIN', ?, ?, 'INR', ?, 'NOT_ASSIGNED', ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+      ) VALUES (?, 'PAYIN', ?, ?, 'INR', ?, 'NOT_ASSIGNED', ?, ?, ?, ?, ${sqlExpiresAtFromNow()})`,
       [randomCode, orderId, amount, preferredMethod, clientName, clientUpi, company.id, idemParam],
     );
     insertId = Number(res.insertId);
@@ -232,7 +253,7 @@ export async function POST(req: Request, context: { params: { companyKey: string
       const [again] = await pool.execute<TxRow[]>(
         `SELECT \`id\`, \`order_id\`, \`amount\`, \`status\`, \`client_name\`, \`client_upi\`, \`assigned_upi\`,
                 \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`payment_method\`, \`account_holder_name\`,
-                \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`, \`qr_code_url\`
+                \`pay_method_id\`, \`assigned_agent_id\`, \`utr_code\`, \`payment_image\`, \`qr_code_url\`, \`expires_at\`
          FROM \`transactions\`
          WHERE \`company_id\` = ? AND \`type\` = 'PAYIN' AND \`idempotency_key\` = ?
          LIMIT 1`,
@@ -241,12 +262,8 @@ export async function POST(req: Request, context: { params: { companyKey: string
       const row = again[0];
       if (row) {
         if (String(row.status).toUpperCase() === "NOT_ASSIGNED") {
-          try {
-            await tryAssignPayInTransaction(Number(row.id), num(row.amount), pickPreferredMethod(row.payment_method));
-          } catch {
-            await deleteNotAssignedPayIn(Number(row.id));
-            return noEligiblePayInResponse();
-          }
+          const early = await assignPayInOr503(Number(row.id), num(row.amount), pickPreferredMethod(row.payment_method));
+          if (early) return early;
         }
         const fresh = await loadTxById(Number(row.id));
         if (fresh) {
@@ -261,12 +278,8 @@ export async function POST(req: Request, context: { params: { companyKey: string
     throw e;
   }
 
-  try {
-    await tryAssignPayInTransaction(insertId, amount, preferredMethod);
-  } catch {
-    await deleteNotAssignedPayIn(insertId);
-    return noEligiblePayInResponse();
-  }
+  const assignNew = await assignPayInOr503(insertId, amount, preferredMethod);
+  if (assignNew) return assignNew;
   const tx = await loadTxById(insertId);
   if (!tx) return NextResponse.json({ ok: false, error: "Could not load created request" }, { status: 500 });
   if (String(tx.status).toUpperCase() === "NOT_ASSIGNED") {

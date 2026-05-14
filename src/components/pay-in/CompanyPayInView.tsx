@@ -18,6 +18,7 @@ type CompanyPayIn = {
   remarks?: string;
   assignedAtIso?: string;
   assignedToLabel?: string;
+  expiresAtIso?: string;
 };
 
 type TabValue = "ALL" | "NOT_ASSIGNED" | "PENDING" | "PAID" | "APPROVED" | "REJECTED" | "EXPIRED";
@@ -215,6 +216,7 @@ export default function CompanyPayInView() {
             assignedAtIso={it.assignedAtIso}
             assignedToLabel={it.assignedToLabel ?? "—"}
             remarks={it.remarks ?? ""}
+            expiresAtIso={it.expiresAtIso}
             // footer={
             //   it.status === "PENDING" || it.status === "RE_ASSIGNED" ? (
             //     <button

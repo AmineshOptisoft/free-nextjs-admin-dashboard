@@ -3,7 +3,7 @@ import React, { useState } from "react";
 
 interface Props {
   onClose: () => void;
-  onCreated?: () => void;
+  onCreated?: () => void | Promise<void>;
 }
 
 function localPartFromEmail(email: string): string {
@@ -27,7 +27,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
     creditLimit: "",
     payinCommission: "",
     payoutCommission: "",
-    referralCode: "",
+    referral: "",
     referralCommission: "",
   });
 
@@ -39,7 +39,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
   const labelCls =
     "block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2";
 
-  const referralCodeFilled = form.referralCode.trim().length > 0;
+  const referralEntered = form.referral.trim().length > 0;
 
   async function submit() {
     setError(null);
@@ -64,7 +64,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
           credit_limit: form.creditLimit || "0",
           pay_in_commission: form.payinCommission || "0",
           pay_out_commission: form.payoutCommission || "0",
-          referral_commission: referralCodeFilled ? form.referralCommission.trim() || "0" : "0",
+          referral_commission: referralEntered ? form.referralCommission.trim() || "0" : "0",
           status: isActive ? "active" : "blocked",
         }),
       });
@@ -77,7 +77,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
         setError(data.error ?? "Could not create agent.");
         return;
       }
-      onCreated?.();
+      await Promise.resolve(onCreated?.());
       onClose();
     } catch {
       setError("Network error.");
@@ -173,7 +173,17 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
 
           <div>
             <label className={labelCls}>Credit Limit</label>
-            <input type="number" value={form.creditLimit} onChange={set("creditLimit")} placeholder="Pay-in limit" className={inputCls} disabled={saving} />
+            <input
+              type="number"
+              value={form.creditLimit}
+              onChange={set("creditLimit")}
+              placeholder="0"
+              className={inputCls}
+              disabled={saving}
+            />
+            <p className="mt-1 text-[10px] leading-snug text-gray-500 dark:text-gray-400">
+              Extra PayIn headroom beyond the security pool — PayIns can still be accepted up to this amount even when deposit-backed room is exhausted.
+            </p>
           </div>
 
           <div>
@@ -188,26 +198,29 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
 
           <div className="sm:col-span-2">
             <label className={labelCls}>
-              Referral code <span className="normal-case font-normal text-gray-400">(Optional)</span>
+              Referral <span className="normal-case font-normal text-gray-400">(optional)</span>
             </label>
             <input
               type="text"
-              value={form.referralCode}
+              value={form.referral}
               onChange={(e) => {
                 const v = e.target.value;
                 setForm((p) => ({
                   ...p,
-                  referralCode: v,
+                  referral: v,
                   referralCommission: v.trim() === "" ? "" : p.referralCommission,
                 }));
               }}
-              placeholder="Enter referral code if any"
+              placeholder="Enter referral / invite reference if applicable"
               className={inputCls}
               disabled={saving}
             />
+            <p className="mt-1 text-[10px] leading-snug text-gray-500 dark:text-gray-400">
+              This vendor&apos;s public referral code is generated automatically after creation. Use the field above only when you need to set a referral commission %.
+            </p>
           </div>
 
-          {referralCodeFilled && (
+          {referralEntered && (
             <div className="sm:col-span-2">
               <label className={labelCls}>Referral commission (%)</label>
               <input

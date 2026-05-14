@@ -10,6 +10,8 @@ export type Agent = {
   pay_in_commission: number;
   pay_out_commission: number;
   referral_commission: number;
+  /** Auto-generated vendor referral / tracking code */
+  referral_code: string;
   status: string;
 };
 

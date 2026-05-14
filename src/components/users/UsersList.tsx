@@ -31,6 +31,8 @@ interface User {
   username: string;
   status: UserStatus;
   role: UserRole;
+  /** Raw `role_label` from API — used for Vendor / Peer filters. */
+  roleLabelRaw: string;
   tags: UserTag[];
   indicatorColor: string;
   lastSeen: string;
@@ -64,6 +66,8 @@ type ApiPaymentMethod = {
   branch_name?: string | null;
   account_holder_name?: string | null;
   financial?: PayMethodFinancial;
+  pay_in_limit?: number;
+  pay_out_limit?: number;
 };
 
 const emptyFinancial: FinancialOverview = {
@@ -103,6 +107,7 @@ function paymentMethodToUser(s: ApiPaymentMethod): User {
     username: s.username,
     status,
     role: roleLabelToUserRole(s.role_label),
+    roleLabelRaw: s.role_label || "",
     tags: tagsToUserTags(s.tags.length ? s.tags : ["UPI"]),
     indicatorColor: status === "active" ? "bg-green-400" : "bg-gray-300",
     lastSeen: s.last_seen_label || "Never",
@@ -144,6 +149,14 @@ function payMethodToEditPayload(s: ApiPaymentMethod): PaymentMethodEditPayload {
     accountNo: s.account_no ?? "",
     ifscCode: s.ifsc_code ?? "",
     branchName: s.branch_name ?? "",
+    payInLimit: (() => {
+      const n = Number(s.pay_in_limit);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    })(),
+    payOutLimit: (() => {
+      const n = Number(s.pay_out_limit);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    })(),
   };
 }
 
@@ -213,8 +226,6 @@ function UserCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const [finOpen, setFinOpen] = useState(false);
-
   return (
     <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
       <div className="p-4">
@@ -311,12 +322,8 @@ function UserCard({
         </div>
       </div>
 
-      <div className="border-t border-gray-100 dark:border-gray-800">
-        <button
-          type="button"
-          onClick={() => setFinOpen((v) => !v)}
-          className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
-        >
+      <details className="group border-t border-gray-100 dark:border-gray-800">
+        <summary className="flex w-full cursor-pointer list-none items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/[0.02] [&::-webkit-details-marker]:hidden">
           <div className="flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -324,20 +331,18 @@ function UserCard({
             Financial Overview
           </div>
           <svg
-            className={`w-4 h-4 transition-transform duration-200 ${finOpen ? "rotate-180" : ""}`}
+            className="w-4 h-4 shrink-0 transition-transform duration-200 group-open:rotate-180"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
-        </button>
-        {finOpen && (
-          <div className="px-4 pb-4">
-            <FinancialOverview data={user.financial} />
-          </div>
-        )}
-      </div>
+        </summary>
+        <div className="px-4 pb-4">
+          <FinancialOverview data={user.financial} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -403,21 +408,20 @@ function UserRow({
 
 function roleFilterMatch(roleFilter: string, u: User): boolean {
   if (roleFilter === "All Roles") return true;
-  const map: Record<string, UserRole> = {
-    Peer: "peer",
-    Agent: "agent",
-    Merchant: "merchant",
-    Admin: "admin",
-  };
-  const want = map[roleFilter];
-  return want === undefined || u.role === want;
+  const raw = (u.roleLabelRaw || "").toLowerCase();
+  if (roleFilter === "Vendor") return raw.includes("vendor");
+  if (roleFilter === "Merchant") return raw.includes("merchant");
+  if (roleFilter === "Admin") return raw.includes("admin");
+  if (roleFilter === "Peer") return raw.includes("peer") || raw.includes("sub");
+  return true;
 }
 
 function opFilterMatch(opFilter: string, u: User): boolean {
   const t = u.operationType;
-  if (opFilter === "PayIn & PayOut") return t === "PayIn & PayOut";
+  if (opFilter === "All") return true;
   if (opFilter === "PayIn") return t === "PayIn Only" || t === "PayIn & PayOut";
   if (opFilter === "PayOut") return t === "PayOut Only" || t === "PayIn & PayOut";
+  if (opFilter === "PayIn & PayOut") return t === "PayIn & PayOut";
   return true;
 }
 
@@ -444,7 +448,7 @@ export default function UsersList() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All Roles");
-  const [opFilter, setOpFilter] = useState("PayIn & PayOut");
+  const [opFilter, setOpFilter] = useState("All");
   const [gwFilter, setGwFilter] = useState("All");
   const [page, setPage] = useState(1);
 
@@ -480,6 +484,10 @@ export default function UsersList() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, searchQuery, roleFilter, opFilter, gwFilter]);
 
   async function patchFlags(methodId: string, payIn: boolean, payOut: boolean) {
     setPatchingId(methodId);
@@ -724,7 +732,7 @@ export default function UsersList() {
                   onChange={(e) => setOpFilter(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
                 >
-                  {["PayIn & PayOut", "PayIn", "PayOut"].map((o) => (
+                  {["All", "PayIn", "PayOut", "PayIn & PayOut"].map((o) => (
                     <option key={o}>
                       {o}
                     </option>
@@ -798,22 +806,26 @@ export default function UsersList() {
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {paginated.map((u) => (
-            <UserCard
-              key={u.id}
-              user={u}
-              patchBusy={patchingId === u.id}
-              onPatchFlags={(payIn, payOut) => void patchFlags(u.id, payIn, payOut)}
-              onEdit={() => {
-                const s = rawPaymentMethods.find((x) => x.id === u.id);
-                if (s) {
-                  setEditPaymentMethod(payMethodToEditPayload(s));
-                  setShowCreateModal(true);
-                }
-              }}
-              onDelete={() => void deletePaymentMethod(u.id)}
-            />
-          ))}
+          {paginated.map((u, idxOnPage) => {
+            const listPosition = (page - 1) * PAGE_SIZE + idxOnPage;
+            const cardKey = `${listPosition}-${String(u.id)}-${u.username}`;
+            return (
+              <UserCard
+                key={cardKey}
+                user={u}
+                patchBusy={patchingId === u.id}
+                onPatchFlags={(payIn, payOut) => void patchFlags(u.id, payIn, payOut)}
+                onEdit={() => {
+                  const s = rawPaymentMethods.find((x) => x.id === u.id);
+                  if (s) {
+                    setEditPaymentMethod(payMethodToEditPayload(s));
+                    setShowCreateModal(true);
+                  }
+                }}
+                onDelete={() => void deletePaymentMethod(u.id)}
+              />
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">

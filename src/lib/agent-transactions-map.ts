@@ -12,6 +12,8 @@ export type AgentPayInListItem = {
   assignedUpi: string;
   createdOn: string;
   createdAtIso?: string;
+  /** When set, open requests auto-expire at this instant (server `expires_at`). */
+  expiresAtIso?: string;
   totalAmount: number;
   discountAmount: number;
   assignedTo: string;
@@ -29,7 +31,15 @@ export type AgentPayOutListItem = {
   id: string;
   ref: string;
   amount: number;
-  status: "CREATED" | "UNASSIGNED" | "PENDING" | "PROCESSING" | "EXPIRED" | "APPROVED" | "DECLINED";
+  status:
+    | "CREATED"
+    | "UNASSIGNED"
+    | "PENDING"
+    | "ASSIGNED"
+    | "PROCESSING"
+    | "EXPIRED"
+    | "APPROVED"
+    | "DECLINED";
   orderId: string;
   clientName: string;
   clientUpi: string;
@@ -40,11 +50,16 @@ export type AgentPayOutListItem = {
   createdAtIso?: string;
   assignedTo?: string;
   assignedOn?: string;
+  /** Present when an agent is linked to this payout (admin list / filters). */
+  assignedAgentId?: string | null;
   remarks?: string;
   hasReceipt?: boolean;
   /** Raw proof URL or data URL for preview modal */
   paymentProof?: string | null;
   disputeRaised?: boolean;
+  expiresAtIso?: string;
+  /** When admin assigned this payout (ISO); used for post-assignment approve delay. */
+  assignedAtIso?: string;
 };
 
 export type TxRow = RowDataPacket & {
@@ -67,6 +82,8 @@ export type TxRow = RowDataPacket & {
   bank_account_number: string | null;
   ifsc_code: string | null;
   dispute_raised: number | boolean | null;
+  assigned_agent_id?: number | null;
+  expires_at?: Date | string | null;
 };
 
 function num(v: string | number): number {
@@ -179,12 +196,18 @@ export function rowToPayInItem(r: TxRow): AgentPayInListItem {
     paymentProof: (r.payment_image && String(r.payment_image).trim()) ? String(r.payment_image).trim() : undefined,
     utrCode: utr || undefined,
     disputeRaised: Number(r.dispute_raised ?? 0) === 1,
+    expiresAtIso: toIso(r.expires_at),
   };
 }
 
-export function rowToPayOutItem(r: TxRow): AgentPayOutListItem {
+export function rowToPayOutItem(r: TxRow, listRole: "admin" | "agent" = "agent"): AgentPayOutListItem {
   const amt = num(r.amount);
-  const ui = mapDbStatusToPayOutUi(r.status);
+  const dbSt = String(r.status ?? "").toUpperCase();
+  const aid = r.assigned_agent_id != null && Number(r.assigned_agent_id) > 0 ? String(r.assigned_agent_id) : null;
+  let ui = mapDbStatusToPayOutUi(r.status);
+  if (listRole === "admin" && dbSt === "PENDING" && aid) {
+    ui = "ASSIGNED";
+  }
   return {
     id: String(r.id),
     ref: `#${String(r.order_id).slice(0, 10)}`,
@@ -202,5 +225,8 @@ export function rowToPayOutItem(r: TxRow): AgentPayOutListItem {
     hasReceipt: Boolean(r.payment_image && String(r.payment_image).length > 0),
     paymentProof: (r.payment_image && String(r.payment_image).trim()) ? String(r.payment_image).trim() : undefined,
     disputeRaised: Number(r.dispute_raised ?? 0) === 1,
+    assignedAgentId: aid,
+    expiresAtIso: toIso(r.expires_at),
+    assignedAtIso: toIso(r.assigned_date),
   };
 }

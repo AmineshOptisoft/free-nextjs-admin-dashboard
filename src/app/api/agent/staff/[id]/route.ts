@@ -5,12 +5,21 @@ import {
   gatewayToPaymentMethod,
   PAY_METHOD_SELECT,
   payMethodToStaffApi,
+  boolPay,
   type PayMethodRow,
 } from "@/lib/agent-payment-method-map";
+import { validateAgentPayMethodPayload } from "@/lib/agent-pay-method-limits";
 import { pool } from "@/lib/db";
 import { isMysqlErNoSuchTable, PAY_METHODS_TABLE_HINT } from "@/lib/mysql-table-error";
 import { requireAgentSession } from "@/lib/require-agent-api";
 import { loadPayMethodFinancials } from "@/lib/transactions-pay-method-financials";
+
+function parseMoneyLimit(v: unknown): number {
+  if (v == null || v === "") return 0;
+  const n = typeof v === "number" ? v : Number.parseFloat(String(v).trim());
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(n, 1e16);
+}
 
 async function getOwnedPayMethod(agentId: number, id: number): Promise<PayMethodRow | null> {
   const [rows] = await pool.execute<PayMethodRow[]>(
@@ -114,6 +123,14 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
       updates.push("`account_holder_name` = NULLIF(?, '')");
       params.push(body.account_holder_name.trim());
     }
+    if (body.pay_in_limit !== undefined) {
+      updates.push("`pay_in_limit` = ?");
+      params.push(parseMoneyLimit(body.pay_in_limit));
+    }
+    if (body.pay_out_limit !== undefined) {
+      updates.push("`pay_out_limit` = ?");
+      params.push(parseMoneyLimit(body.pay_out_limit));
+    }
     if (body.status === "active" || body.status === "inactive") {
       updates.push("`status` = ?");
       params.push(body.status === "active" ? "ACTIVE" : "INACTIVE");
@@ -131,6 +148,49 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
         ok: true as const,
         payment_method: payMethodToStaffApi(existing, auth.username, fin0.get(rowId)),
       });
+    }
+
+    const needsPayMethodValidation =
+      typeof body.operation_type === "string" ||
+      typeof body.pay_in_enabled === "boolean" ||
+      typeof body.pay_out_enabled === "boolean" ||
+      typeof body.gateway === "string" ||
+      typeof body.upi_id === "string" ||
+      body.pay_in_limit !== undefined ||
+      body.pay_out_limit !== undefined;
+
+    if (needsPayMethodValidation) {
+    let mergedIn = boolPay(existing.enable_pay_in);
+    let mergedOut = boolPay(existing.enable_pay_out);
+    if (typeof body.operation_type === "string") {
+      const f = opTypeToFlags(body.operation_type);
+      mergedIn = f.in;
+      mergedOut = f.out;
+    }
+    if (typeof body.pay_in_enabled === "boolean") mergedIn = body.pay_in_enabled;
+    if (typeof body.pay_out_enabled === "boolean") mergedOut = body.pay_out_enabled;
+    let mergedPm: "UPI" | "BANK" =
+      String(existing.payment_method ?? "").toUpperCase() === "BANK" ? "BANK" : "UPI";
+    if (typeof body.gateway === "string") {
+      mergedPm = gatewayToPaymentMethod(body.gateway.trim()) === "BANK" ? "BANK" : "UPI";
+    }
+    const mergedUpi =
+      typeof body.upi_id === "string" ? body.upi_id.trim() : String(existing.upi_id ?? "").trim();
+    const mergedPin =
+      body.pay_in_limit !== undefined ? parseMoneyLimit(body.pay_in_limit) : parseMoneyLimit(existing.pay_in_limit);
+    const mergedPout =
+      body.pay_out_limit !== undefined ? parseMoneyLimit(body.pay_out_limit) : parseMoneyLimit(existing.pay_out_limit);
+    const mergedErr = validateAgentPayMethodPayload({
+      paymentMethod: mergedPm,
+      payInEnabled: mergedIn,
+      payOutEnabled: mergedOut,
+      payInLimit: mergedPin,
+      payOutLimit: mergedPout,
+      upiId: mergedUpi,
+    });
+    if (mergedErr) {
+      return NextResponse.json({ ok: false, error: mergedErr }, { status: 400 });
+    }
     }
 
     params.push(rowId, auth.agentId);

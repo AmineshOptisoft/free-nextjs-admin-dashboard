@@ -8,6 +8,8 @@ type TxRow = RowDataPacket & {
   dispute_raised: number;
 };
 
+const DISPUTE_STATES = new Set(["PENDING", "RESOLVED", "OTHER", "EXPIRED", "NONE"]);
+
 export async function PATCH(req: Request, context: { params: { id: string } | Promise<{ id: string }> }) {
   const auth = await requireAdminSession();
   if (!auth.ok) return auth.response;
@@ -24,6 +26,8 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   } catch {
     body = {};
   }
+
+  const stateRaw = typeof body.dispute_state === "string" ? body.dispute_state.trim().toUpperCase() : "";
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
 
   const [rows] = await pool.execute<TxRow[]>(
@@ -34,12 +38,58 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     return NextResponse.json({ ok: false, error: "Transaction not found" }, { status: 404 });
   }
 
-  const [res] = await pool.execute<ResultSetHeader>(
-    "UPDATE `transactions` SET `dispute_raised` = 1, `dispute_reason` = ? WHERE `id` = ?",
-    [reason || "Other", txId],
-  );
-  if (res.affectedRows === 0) {
-    return NextResponse.json({ ok: false, error: "Could not raise dispute" }, { status: 500 });
+  if ("dispute_state" in body) {
+    if (!stateRaw || !DISPUTE_STATES.has(stateRaw)) {
+      return NextResponse.json(
+        { ok: false, error: "dispute_state must be one of: NONE, PENDING, RESOLVED, OTHER, EXPIRED" },
+        { status: 400 },
+      );
+    }
+    try {
+      const [res] = await pool.execute<ResultSetHeader>(
+        "UPDATE `transactions` SET `dispute_state` = ? WHERE `id` = ?",
+        [stateRaw, txId],
+      );
+      if (res.affectedRows === 0) {
+        return NextResponse.json({ ok: false, error: "Could not update dispute state" }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true as const, dispute_state: stateRaw });
+    } catch (e: unknown) {
+      const code = typeof e === "object" && e !== null && "code" in e ? String((e as { code?: string }).code) : "";
+      if (code === "ER_BAD_FIELD_ERROR") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Run database migration `database/migrations/003_dispute_state.sql` to enable dispute states.",
+          },
+          { status: 503 },
+        );
+      }
+      throw e;
+    }
   }
-  return NextResponse.json({ ok: true as const });
+
+  try {
+    const [res] = await pool.execute<ResultSetHeader>(
+      "UPDATE `transactions` SET `dispute_raised` = 1, `dispute_reason` = ?, `dispute_state` = 'PENDING' WHERE `id` = ?",
+      [reason || "Other", txId],
+    );
+    if (res.affectedRows === 0) {
+      return NextResponse.json({ ok: false, error: "Could not raise dispute" }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true as const });
+  } catch (e: unknown) {
+    const code = typeof e === "object" && e !== null && "code" in e ? String((e as { code?: string }).code) : "";
+    if (code === "ER_BAD_FIELD_ERROR") {
+      const [res] = await pool.execute<ResultSetHeader>(
+        "UPDATE `transactions` SET `dispute_raised` = 1, `dispute_reason` = ? WHERE `id` = ?",
+        [reason || "Other", txId],
+      );
+      if (res.affectedRows === 0) {
+        return NextResponse.json({ ok: false, error: "Could not raise dispute" }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true as const });
+    }
+    throw e;
+  }
 }

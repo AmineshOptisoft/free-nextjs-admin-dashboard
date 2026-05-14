@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
 import { payInDisplayStatus, publicPayInDisplayMethod, sqlFieldToUtf8 } from "@/lib/payin-lifecycle";
+import { isMysqlPacketTooLarge, validatePaymentProofPayload } from "@/lib/payment-proof-limits";
+import { expireOpenRequestsPastDeadline } from "@/lib/request-expiry";
 
 type TxRow = RowDataPacket & {
   id: number;
@@ -21,6 +23,7 @@ type TxRow = RowDataPacket & {
   payment_method: string;
   account_holder_name: string | null;
   qr_code_url: string | null;
+  expires_at: Date | string | null;
 };
 
 function num(v: string | number): number {
@@ -29,11 +32,18 @@ function num(v: string | number): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function expiresAtToIso(v: Date | string | null | undefined): string | undefined {
+  if (v == null) return undefined;
+  const d = typeof v === "string" ? new Date(v) : v;
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
 async function loadTx(txId: number): Promise<TxRow | null> {
   const [rows] = await pool.execute<TxRow[]>(
     `SELECT \`id\`, \`order_id\`, \`amount\`, \`status\`, \`client_name\`, \`client_upi\`, \`assigned_upi\`,
             \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`utr_code\`, \`payment_image\`,
-            \`pay_method_id\`, \`assigned_agent_id\`, \`payment_method\`, \`account_holder_name\`, \`qr_code_url\`
+            \`pay_method_id\`, \`assigned_agent_id\`, \`payment_method\`, \`account_holder_name\`, \`qr_code_url\`, \`expires_at\`
      FROM \`transactions\`
      WHERE \`id\` = ? AND \`type\` = 'PAYIN'
      LIMIT 1`,
@@ -66,6 +76,7 @@ function mapTx(tx: TxRow) {
     waitForAgent: dbStatus === "NOT_ASSIGNED" || !tx.pay_method_id || !tx.assigned_agent_id,
     proofSubmitted,
     qrCodeUrl: sqlFieldToUtf8(tx.qr_code_url),
+    expiresAtIso: expiresAtToIso(tx.expires_at),
   };
 }
 
@@ -75,6 +86,7 @@ export async function GET(_req: Request, context: { params: { id: string } | Pro
   if (!Number.isInteger(txId) || txId < 1) {
     return NextResponse.json({ ok: false, error: "Invalid id" }, { status: 400 });
   }
+  await expireOpenRequestsPastDeadline(pool);
   const tx = await loadTx(txId);
   if (!tx) return NextResponse.json({ ok: false, error: "Request not found" }, { status: 404 });
   return NextResponse.json({ ok: true as const, request: mapTx(tx) });
@@ -87,8 +99,13 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     return NextResponse.json({ ok: false, error: "Invalid id" }, { status: 400 });
   }
 
+  await expireOpenRequestsPastDeadline(pool);
   const tx = await loadTx(txId);
   if (!tx) return NextResponse.json({ ok: false, error: "Request not found" }, { status: 404 });
+  const st = String(tx.status).toUpperCase();
+  if (st === "EXPIRED") {
+    return NextResponse.json({ ok: false, error: "This payment request has expired." }, { status: 410 });
+  }
   if (String(tx.status).toUpperCase() !== "PENDING") {
     return NextResponse.json(
       { ok: false, error: `UTR/proof can only be submitted while status is PENDING (current: ${tx.status})` },
@@ -113,15 +130,36 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     return NextResponse.json({ ok: false, error: "Provide utr_code or payment_image" }, { status: 400 });
   }
 
-  const [res] = await pool.execute<ResultSetHeader>(
-    `UPDATE \`transactions\`
-     SET \`utr_code\` = COALESCE(NULLIF(?, ''), \`utr_code\`),
-         \`payment_image\` = COALESCE(NULLIF(?, ''), \`payment_image\`),
-         \`user_upi\` = COALESCE(NULLIF(?, ''), \`user_upi\`)
-     WHERE \`id\` = ? AND \`type\` = 'PAYIN' AND \`status\` = 'PENDING'
-       AND \`pay_method_id\` IS NOT NULL AND \`assigned_agent_id\` IS NOT NULL`,
-    [utr, image, userUpi, txId],
-  );
+  const proofCheck = validatePaymentProofPayload({ utr_code: utr, payment_image: image, user_upi: userUpi });
+  if (!proofCheck.ok) {
+    return NextResponse.json({ ok: false, error: proofCheck.error }, { status: proofCheck.status });
+  }
+
+  let res: ResultSetHeader;
+  try {
+    const [r] = await pool.execute<ResultSetHeader>(
+      `UPDATE \`transactions\`
+       SET \`utr_code\` = COALESCE(NULLIF(?, ''), \`utr_code\`),
+           \`payment_image\` = COALESCE(NULLIF(?, ''), \`payment_image\`),
+           \`user_upi\` = COALESCE(NULLIF(?, ''), \`user_upi\`)
+       WHERE \`id\` = ? AND \`type\` = 'PAYIN' AND \`status\` = 'PENDING'
+         AND \`pay_method_id\` IS NOT NULL AND \`assigned_agent_id\` IS NOT NULL`,
+      [utr, image, userUpi, txId],
+    );
+    res = r;
+  } catch (e: unknown) {
+    if (isMysqlPacketTooLarge(e)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Proof data is too large for the database server. Use a smaller screenshot (under ~500 KB) or enter UTR only.",
+        },
+        { status: 413 },
+      );
+    }
+    throw e;
+  }
   if (res.affectedRows === 0) {
     return NextResponse.json(
       { ok: false, error: "Could not save proof (status may have changed or row is not assignable)" },

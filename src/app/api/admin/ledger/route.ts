@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { RowDataPacket } from "mysql2/promise";
+import { AGENT_SETTLED_LEDGER_STATUSES } from "@/lib/agent-ledger-statuses";
 import { pool } from "@/lib/db";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
@@ -34,7 +35,7 @@ function num(v: string | number | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-const LEDGER_STATUSES = ["APPROVED", "APPROVED_BY_AGENT", "APPROVED_BY_ADMIN", "PAID"] as const;
+const LEDGER_STATUSES = [...AGENT_SETTLED_LEDGER_STATUSES];
 
 export async function GET(req: Request) {
   const auth = await requireAdminSession();
@@ -45,7 +46,13 @@ export async function GET(req: Request) {
   const toRaw = searchParams.get("to")?.trim();
   const agentIdRaw = searchParams.get("agentId")?.trim();
 
-  const from = fromRaw ? new Date(fromRaw) : new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
+  const from = fromRaw
+    ? new Date(fromRaw)
+    : (() => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d;
+      })();
   const to = toRaw ? new Date(toRaw) : new Date();
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
     return NextResponse.json({ ok: false, error: "Invalid date range" }, { status: 400 });
@@ -55,9 +62,13 @@ export async function GET(req: Request) {
   const toSql = new Date(to);
   toSql.setHours(23, 59, 59, 999);
 
-  const selectedAgentId = agentIdRaw ? Number(agentIdRaw) : null;
-  if (agentIdRaw && (!Number.isInteger(selectedAgentId) || selectedAgentId < 1)) {
-    return NextResponse.json({ ok: false, error: "Invalid agentId" }, { status: 400 });
+  let selectedAgentId: number | null = null;
+  if (agentIdRaw) {
+    const n = Number(agentIdRaw);
+    if (!Number.isInteger(n) || n < 1) {
+      return NextResponse.json({ ok: false, error: "Invalid agentId" }, { status: 400 });
+    }
+    selectedAgentId = n;
   }
 
   const statusPlaceholders = LEDGER_STATUSES.map(() => "?").join(", ");
@@ -125,7 +136,8 @@ export async function GET(req: Request) {
     const prev = num(a.previous_balance);
     const security = num(a.security_deposit);
     const credit = num(a.credit_limit);
-    let runningForEntries = openingMap.get(a.id) ?? 0;
+    const openingFromTx = openingMap.get(a.id) ?? 0;
+    let runningForEntries = prev + openingFromTx;
     let payIn = 0;
     let payOut = 0;
 
@@ -145,15 +157,15 @@ export async function GET(req: Request) {
     });
 
     const net = payIn - payOut;
-    const running = prev + net;
-    const final = running - security;
+    const closingBalance = runningForEntries;
+    const final = closingBalance - security;
     const remaining = credit - final;
 
     return {
       agentId: a.id,
       name: (a.fullname && a.fullname.trim()) || a.username,
-      openingBalance: prev,
-      closingBalance: running,
+      openingBalance: prev + openingFromTx,
+      closingBalance,
       security,
       credit,
       payIn,

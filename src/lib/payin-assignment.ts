@@ -1,6 +1,82 @@
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
 
+async function countScalar(sql: string, params: (string | number)[]): Promise<number> {
+  const [rows] = await pool.execute<RowDataPacket[]>(sql, params);
+  const v = rows[0]?.c ?? rows[0]?.C;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Human-readable reason when no `pay_methods` row matches the assignment query
+ * (separate from race/conflict retries).
+ */
+export async function explainPayInAssignmentFailure(amount: number, preferredMethod: "UPI" | "BANK" | ""): Promise<string> {
+  const activeAgents = await countScalar(`SELECT COUNT(*) AS c FROM \`agents\` WHERE LOWER(TRIM(\`status\`)) = 'active'`, []);
+  if (activeAgents === 0) {
+    return "No agent is active (all are inactive, pending, or blocked). Activate an agent to accept PayIns.";
+  }
+
+  const enabledLines = await countScalar(
+    `SELECT COUNT(*) AS c FROM \`pay_methods\` pm
+     INNER JOIN \`agents\` a ON a.\`id\` = pm.\`agent_id\`
+     WHERE pm.\`enable_pay_in\` = 1 AND UPPER(TRIM(pm.\`status\`)) = 'ACTIVE' AND LOWER(TRIM(a.\`status\`)) = 'active'`,
+    [],
+  );
+  if (enabledLines === 0) {
+    return "No Pay In–enabled active payment method exists: turn on Pay In on an agent’s UPI/Bank line, or activate the agent account.";
+  }
+
+  if (preferredMethod === "UPI" || preferredMethod === "BANK") {
+    const methodLines = await countScalar(
+      `SELECT COUNT(*) AS c FROM \`pay_methods\` pm
+       INNER JOIN \`agents\` a ON a.\`id\` = pm.\`agent_id\`
+       WHERE pm.\`enable_pay_in\` = 1 AND UPPER(TRIM(pm.\`status\`)) = 'ACTIVE' AND LOWER(TRIM(a.\`status\`)) = 'active'
+         AND UPPER(TRIM(pm.\`payment_method\`)) = ?`,
+      [preferredMethod],
+    );
+    if (methodLines === 0) {
+      return `No active Pay In line uses ${preferredMethod}. Add a ${preferredMethod} method or change the payer’s payment type.`;
+    }
+  }
+
+  const limitParams: (string | number)[] = [amount];
+  let limitSql = `SELECT COUNT(*) AS c FROM \`pay_methods\` pm
+     INNER JOIN \`agents\` a ON a.\`id\` = pm.\`agent_id\`
+     WHERE pm.\`enable_pay_in\` = 1 AND UPPER(TRIM(pm.\`status\`)) = 'ACTIVE' AND LOWER(TRIM(a.\`status\`)) = 'active'
+       AND (pm.\`pay_in_limit\` <= 0 OR (pm.\`today_total_pay_in_amount\` + ?) <= pm.\`pay_in_limit\`)`;
+  if (preferredMethod === "UPI" || preferredMethod === "BANK") {
+    limitSql += " AND UPPER(TRIM(pm.`payment_method`)) = ?";
+    limitParams.push(preferredMethod);
+  }
+  const underLimit = await countScalar(limitSql, limitParams);
+  if (underLimit === 0) {
+    return "All matching Pay In accounts have hit their daily Pay In limit (today’s total + this amount exceeds the cap). Raise limits or retry after reset.";
+  }
+
+  const poolParams: (string | number)[] = [amount, amount];
+  let poolSql = `SELECT COUNT(*) AS c FROM \`pay_methods\` pm
+     INNER JOIN \`agents\` a ON a.\`id\` = pm.\`agent_id\`
+     WHERE pm.\`enable_pay_in\` = 1 AND UPPER(TRIM(pm.\`status\`)) = 'ACTIVE' AND LOWER(TRIM(a.\`status\`)) = 'active'
+       AND (pm.\`pay_in_limit\` <= 0 OR (pm.\`today_total_pay_in_amount\` + ?) <= pm.\`pay_in_limit\`)
+       AND (
+         COALESCE(a.\`security_deposit\`, 0) + COALESCE(a.\`credit_limit\`, 0) - COALESCE(a.\`running_balance\`, 0)
+       ) >= ? + COALESCE((
+         SELECT SUM(pm2.\`today_total_pay_in_amount\`) FROM \`pay_methods\` pm2 WHERE pm2.\`agent_id\` = pm.\`agent_id\`
+       ), 0)`;
+  if (preferredMethod === "UPI" || preferredMethod === "BANK") {
+    poolSql += " AND UPPER(TRIM(pm.`payment_method`)) = ?";
+    poolParams.push(preferredMethod);
+  }
+  const poolOk = await countScalar(poolSql, poolParams);
+  if (poolOk === 0) {
+    return "Agent security/credit pool is insufficient for this Pay In after today’s Pay In exposure on that agent. Add credit, lower running balance, or reduce amount.";
+  }
+
+  return "No line matched at assignment time (another Pay In may have taken capacity). Please retry.";
+}
+
 type CandidateRow = RowDataPacket & {
   pay_method_id: number;
   agent_id: number;
@@ -31,8 +107,19 @@ function buildUpiPayload(upi: string, payeeName: string, amount: number): string
   return `upi://pay?${params.toString()}`;
 }
 
-/** Build candidate query: params are [amount, amount] for pay-in limit + pool check, then optional method. */
-function buildCandidateQuery(preferredMethod: "UPI" | "BANK" | "", useAmount: number): { sql: string; params: (number | string)[] } {
+type CandidatePickOpts = {
+  /** When set, prefer agents with fewer PayIns already assigned today for this company. */
+  companyId: number | null;
+  /** Agents to skip this pick (e.g. failed increment/update in a previous retry). */
+  excludeAgentIds: number[];
+};
+
+/** Eligible pay_method row: same filters as assign; order = least loaded agent today, then random tie-break. */
+function buildCandidateQuery(
+  preferredMethod: "UPI" | "BANK" | "",
+  useAmount: number,
+  pick: CandidatePickOpts,
+): { sql: string; params: (number | string)[] } {
   const params: (number | string)[] = [useAmount, useAmount];
   let sql = `SELECT
        pm.id AS pay_method_id,
@@ -57,17 +144,46 @@ function buildCandidateQuery(preferredMethod: "UPI" | "BANK" | "", useAmount: nu
        ) >= ? + COALESCE((
          SELECT SUM(pm2.today_total_pay_in_amount) FROM \`pay_methods\` pm2 WHERE pm2.agent_id = pm.agent_id
        ), 0)`;
+
+  const uniqExclude = [...new Set(pick.excludeAgentIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (uniqExclude.length > 0) {
+    sql += ` AND pm.agent_id NOT IN (${uniqExclude.map(() => "?").join(", ")}) `;
+    params.push(...uniqExclude);
+  }
+
   if (preferredMethod === "UPI" || preferredMethod === "BANK") {
     sql += " AND pm.payment_method = ? ";
     params.push(preferredMethod);
   }
-  sql += " ORDER BY RAND() LIMIT 1";
+
+  if (pick.companyId != null && pick.companyId > 0) {
+    sql += ` ORDER BY (
+       SELECT COUNT(*) FROM \`transactions\` t2
+       WHERE t2.type = 'PAYIN'
+         AND t2.assigned_agent_id = pm.agent_id
+         AND t2.assigned_date IS NOT NULL
+         AND DATE(t2.assigned_date) = CURDATE()
+         AND t2.company_id = ?
+     ) ASC, RAND() LIMIT 1`;
+    params.push(pick.companyId);
+  } else {
+    sql += ` ORDER BY (
+       SELECT COUNT(*) FROM \`transactions\` t2
+       WHERE t2.type = 'PAYIN'
+         AND t2.assigned_agent_id = pm.agent_id
+         AND t2.assigned_date IS NOT NULL
+         AND DATE(t2.assigned_date) = CURDATE()
+     ) ASC, RAND() LIMIT 1`;
+  }
+
   return { sql, params };
 }
 
 /**
  * Auto-assign PAYIN: only while status is NOT_ASSIGNED.
- * Uses a DB transaction, random eligible pay_method, pool + per-account limits, then increments today_total_pay_in_amount.
+ * Picks among eligible pay_methods using least-loaded-by-agent-today (per company when `company_id` is set),
+ * avoids re-picking agents that failed in the same retry sequence when others exist, then increments
+ * `today_total_pay_in_amount` and updates the transaction under row locks.
  */
 export async function tryAssignPayInTransaction(
   txId: number,
@@ -77,6 +193,8 @@ export async function tryAssignPayInTransaction(
 ): Promise<AssignResult> {
   const maxAttempts = options?.maxAttempts ?? 5;
   const method = preferredMethod ?? "";
+  /** Skip these agent ids on the next pick when multiple agents could still match. */
+  const excludeAgents: number[] = [];
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const conn = await pool.getConnection();
@@ -84,13 +202,15 @@ export async function tryAssignPayInTransaction(
       await conn.beginTransaction();
 
       const [lockRows] = await conn.execute<RowDataPacket[]>(
-        `SELECT \`id\`, \`status\`, \`amount\`, \`type\`
+        `SELECT \`id\`, \`status\`, \`amount\`, \`type\`, \`company_id\`
          FROM \`transactions\`
          WHERE \`id\` = ? AND \`type\` = 'PAYIN'
          FOR UPDATE`,
         [txId],
       );
-      const cur = lockRows[0] as { status: string; amount: string | number } | undefined;
+      const cur = lockRows[0] as
+        | { status: string; amount: string | number; company_id: number | null }
+        | undefined;
       if (!cur) {
         await conn.rollback();
         return { assigned: false, reason: "Transaction not found." };
@@ -102,13 +222,25 @@ export async function tryAssignPayInTransaction(
 
       const amt = typeof cur.amount === "number" ? cur.amount : Number.parseFloat(String(cur.amount));
       const useAmount = Number.isFinite(amt) && amt > 0 ? amt : amount;
+      const rawCo = cur.company_id;
+      const fairCompanyId = rawCo != null && Number(rawCo) > 0 ? Number(rawCo) : null;
 
-      const { sql: candSql, params: candParams } = buildCandidateQuery(method, useAmount);
-      const [candidates] = await conn.execute<CandidateRow[]>(candSql, candParams);
-      const candidate = candidates[0];
+      let candidate: CandidateRow | undefined;
+      for (const relax of [false, true] as const) {
+        const pick: CandidatePickOpts = {
+          companyId: fairCompanyId,
+          excludeAgentIds: relax ? [] : excludeAgents,
+        };
+        const { sql: candSql, params: candParams } = buildCandidateQuery(method, useAmount, pick);
+        const [candidates] = await conn.execute<CandidateRow[]>(candSql, candParams);
+        candidate = candidates[0];
+        if (candidate) break;
+      }
+
       if (!candidate) {
         await conn.rollback();
-        return { assigned: false, reason: "No eligible active payin account available right now." };
+        const detail = await explainPayInAssignmentFailure(useAmount, method);
+        return { assigned: false, reason: detail };
       }
 
       const [incRes] = await conn.execute<ResultSetHeader>(
@@ -122,6 +254,7 @@ export async function tryAssignPayInTransaction(
       );
       if (incRes.affectedRows === 0) {
         await conn.rollback();
+        if (!excludeAgents.includes(candidate.agent_id)) excludeAgents.push(candidate.agent_id);
         continue;
       }
 
@@ -168,6 +301,7 @@ export async function tryAssignPayInTransaction(
       );
       if (updRes.affectedRows === 0) {
         await conn.rollback();
+        if (!excludeAgents.includes(candidate.agent_id)) excludeAgents.push(candidate.agent_id);
         continue;
       }
 
@@ -181,7 +315,8 @@ export async function tryAssignPayInTransaction(
     }
   }
 
-  return { assigned: false, reason: "Assignment conflict — please retry." };
+  const detail = await explainPayInAssignmentFailure(amount, method);
+  return { assigned: false, reason: `${detail} (assignment conflict after retries — please retry.)` };
 }
 
 /** Shown when auto-assign finds no eligible account and the draft PAYIN row is removed. */
