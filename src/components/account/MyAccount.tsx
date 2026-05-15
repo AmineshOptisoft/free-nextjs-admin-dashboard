@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { IoPersonCircle } from "react-icons/io5";
+import { MyAccountIcon } from "@/icons/nav-icons";
 
 type AccountUser = {
   name: string;
@@ -130,7 +130,7 @@ export default function MyAccount() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-        <IoPersonCircle className="w-6 h-6" />
+        <MyAccountIcon />
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">My Account</h1>
       </div>
 

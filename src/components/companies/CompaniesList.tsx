@@ -7,6 +7,7 @@ import Pagination from "../ui/Pagination";
 import { GoOrganization } from "react-icons/go";
 import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
 import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
+import { CompaniesIcon } from "@/icons/nav-icons";
 
 export type Company = {
   id: string;
@@ -408,7 +409,7 @@ export default function CompaniesList() {
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <GoOrganization className="w-6 h-6" />
+          <CompaniesIcon />
           <h1 className="text-xl font-bold">Companies Management</h1>
         </div>
         <button

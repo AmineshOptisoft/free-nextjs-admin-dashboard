@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ListIcon } from "@/icons";
 import { Modal } from "../ui/modal";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
+import { SettlementLogIcon } from "@/icons/nav-icons";
 
 type PartyType = "AGENT" | "COMPANY";
 
@@ -244,11 +245,10 @@ export default function SettlementLog() {
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t
+            className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${tab === t
                 ? "bg-white text-gray-900 shadow dark:bg-gray-800 dark:text-white"
                 : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-            }`}
+              }`}
           >
             {t === "AGENT" ? "Agent settlements" : "Company settlements"}
           </button>
@@ -338,11 +338,10 @@ export default function SettlementLog() {
                     <TableCell className="px-4 py-3 text-sm font-medium text-gray-800 dark:text-gray-100">{r.partyName}</TableCell>
                     <TableCell className="px-4 py-3 text-sm">
                       <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          r.displayType === "Credit"
-                            ? "bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400"
-                            : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
-                        }`}
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${r.displayType === "Credit"
+                          ? "bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400"
+                          : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
+                          }`}
                       >
                         {r.displayType}
                       </span>
@@ -386,9 +385,8 @@ export default function SettlementLog() {
                     <li key={p.id}>
                       <button
                         type="button"
-                        className={`block w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                          partyId === p.id ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "text-gray-800 dark:text-gray-200"
-                        }`}
+                        className={`block w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 ${partyId === p.id ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "text-gray-800 dark:text-gray-200"
+                          }`}
                         onMouseDown={(e) => {
                           e.preventDefault();
                           selectParty(p);

@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
-import { IoIosWarning } from "react-icons/io";
+import { DisputesIcon } from "@/icons/nav-icons";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 
@@ -348,7 +348,7 @@ export default function DisputeList() {
       {/* Page header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <IoIosWarning className="w-6 h-6" />
+          <DisputesIcon />
           <h1 className="text-xl font-bold ">Disputes</h1>
         </div>
         {!loading && !loadError && (

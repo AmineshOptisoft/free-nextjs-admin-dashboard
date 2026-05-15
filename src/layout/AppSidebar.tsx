@@ -4,24 +4,24 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { ChevronDownIcon, HorizontaLDots } from "../icons/index";
 import {
-  AlertIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
-  BellIcon,
-  BoxCubeIcon,
-  ChevronDownIcon,
-  GridIcon,
-  GroupIcon,
-  HorizontaLDots,
-  ListIcon,
-  LockIcon,
-  PageIcon,
-  PieChartIcon,
-  TableIcon,
-  UserCircleIcon,
-  UserIcon,
-} from "../icons/index";
+  NavAdminDashboardIcon,
+  NavCompaniesIcon,
+  NavCompanyDashboardIcon,
+  NavDisputesIcon,
+  NavLedgerIcon,
+  NavMyAccountIcon,
+  NavNotificationsIcon,
+  NavPayInIcon,
+  NavPaymentMethodIcon,
+  NavPayOutIcon,
+  NavReportsIcon,
+  NavSettingsIcon,
+  NavSettlementLogIcon,
+  NavTransactionReportIcon,
+  NavVendorIcon,
+} from "../icons/nav-icons";
 
 /* ── Types ──────────────────────────────────────────────────── */
 type NavItem = {
@@ -45,23 +45,23 @@ const adminSections: NavSection[] = [
     heading: "",
     sectionKey: "admin-main",
     items: [
-      { icon: <GridIcon />,      name: "Dashboard",          path: "/" },
-      { icon: <GroupIcon />,     name: "Vendor",              path: "/agent" },
-      { icon: <BoxCubeIcon />,   name: "Companies",          path: "/companies" },
-      { icon: <ArrowDownIcon />, name: "Pay In",             path: "/pay-in" },
-      { icon: <ArrowUpIcon />,   name: "Pay Out",            path: "/pay-out" },
-      { icon: <PieChartIcon />,  name: "Transaction Report", path: "/transaction-report" },
-      { icon: <AlertIcon />,     name: "Disputes",           path: "/dispute" },
-      { icon: <ListIcon />,      name: "Settlement Log",     path: "/settlement-log" },
-      { icon: <TableIcon />,     name: "Ledger",             path: "/ledger" },
-      { icon: <BellIcon />,      name: "Notifications",      path: "/notifications" },
+      { icon: <NavAdminDashboardIcon />,     name: "Dashboard",          path: "/" },
+      { icon: <NavVendorIcon />,             name: "Vendor",              path: "/agent" },
+      { icon: <NavCompaniesIcon />,          name: "Companies",          path: "/companies" },
+      { icon: <NavPayInIcon />,              name: "Pay In",             path: "/pay-in" },
+      { icon: <NavPayOutIcon />,             name: "Pay Out",            path: "/pay-out" },
+      { icon: <NavTransactionReportIcon />,  name: "Transaction Report", path: "/transaction-report" },
+      { icon: <NavDisputesIcon />,           name: "Disputes",           path: "/dispute" },
+      { icon: <NavSettlementLogIcon />,      name: "Settlement Log",     path: "/settlement-log" },
+      { icon: <NavLedgerIcon />,             name: "Ledger",             path: "/ledger" },
+      { icon: <NavNotificationsIcon />,      name: "Notifications",      path: "/notifications" },
     ],
   },
   {
     heading: "Account",
     sectionKey: "admin-account",
     items: [
-      { icon: <UserCircleIcon />, name: "My Account", path: "/my-account" },
+      { icon: <NavMyAccountIcon />, name: "My Account", path: "/my-account" },
     ],
   },
 ];
@@ -71,9 +71,9 @@ const agentSections: NavSection[] = [
     heading: "",
     sectionKey: "vendor-main",
     items: [
-      { icon: <GridIcon />,      name: "Dashboard", path: "/agent-dashboard" },
-      { icon: <ArrowDownIcon />, name: "Pay In",    path: "/pay-in" },
-      { icon: <ArrowUpIcon />,   name: "Pay Out",   path: "/pay-out" },
+      { icon: <NavCompanyDashboardIcon />, name: "Dashboard", path: "/agent-dashboard" },
+      { icon: <NavPayInIcon />,            name: "Pay In",    path: "/pay-in" },
+      { icon: <NavPayOutIcon />,           name: "Pay Out",   path: "/pay-out" },
     ],
   },
   // {
@@ -87,14 +87,14 @@ const agentSections: NavSection[] = [
     heading: "Management",
     sectionKey: "agent-mgmt",
     items: [
-      { icon: <UserIcon />,  name: "Payment Method", path: "/users" },
+      { icon: <NavPaymentMethodIcon />, name: "Payment Method", path: "/users" },
     ],
   },
   {
     heading: "Account",
     sectionKey: "agent-account",
     items: [
-      { icon: <UserCircleIcon />, name: "My Account", path: "/my-account" },
+      { icon: <NavMyAccountIcon />, name: "My Account", path: "/my-account" },
     ],
   },
 ];
@@ -104,12 +104,12 @@ const companySections: NavSection[] = [
     heading: "",
     sectionKey: "company-main",
     items: [
-      { icon: <GridIcon />,      name: "Dashboard",     path: "/company-dashboard" },
-      { icon: <ArrowDownIcon />, name: "PayIn",         path: "/pay-in" },
-      { icon: <ArrowUpIcon />,   name: "PayOut",        path: "/pay-out" },
-      { icon: <PieChartIcon />,  name: "Reports",       path: "/reports" },
-      { icon: <BellIcon />,      name: "Notifications", path: "/notifications" },
-      { icon: <PageIcon />,      name: "Settings",      path: "/company-settings" },
+      { icon: <NavCompanyDashboardIcon />, name: "Dashboard",     path: "/company-dashboard" },
+      { icon: <NavPayInIcon />,              name: "PayIn",         path: "/pay-in" },
+      { icon: <NavPayOutIcon />,             name: "PayOut",        path: "/pay-out" },
+      { icon: <NavReportsIcon />,            name: "Reports",       path: "/reports" },
+      { icon: <NavNotificationsIcon />,      name: "Notifications", path: "/notifications" },
+      { icon: <NavSettingsIcon />,           name: "Settings",      path: "/company-settings" },
     ],
   },
 ];
@@ -351,8 +351,8 @@ const AppSidebar: React.FC = () => {
         <Link href={homePath}>
           {showLabel ? (
             <>
-              <Image className="dark:hidden" src="/images/logo/logo.png" alt="Logo" width={150} height={40} />
-              <Image className="hidden dark:block" src="/images/logo/logo.png" alt="Logo" width={150} height={40} />
+              <Image className="dark:hidden" src="/images/logo/logo-dark.svg" alt="Logo" width={150} height={40} />
+              <Image className="hidden dark:block" src="/images/logo/logo.svg" alt="Logo" width={150} height={40} />
             </>
           ) : (
             <Image src="/images/logo/logo-icon.svg" alt="Logo" width={32} height={32} />

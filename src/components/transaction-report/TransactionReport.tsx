@@ -14,6 +14,7 @@ import {
 import { GrTransaction } from "react-icons/gr";
 import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
 import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
+import { TransactionReportIcon } from "@/icons/nav-icons";
 
 type Tx = {
   id: string;
@@ -240,7 +241,7 @@ export default function TransactionReport() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-        <GrTransaction className="w-6 h-6" />
+        <TransactionReportIcon />
         <h1 className="text-xl font-bold">Transaction Report</h1>
       </div>
       <p className="text-xs text-purple-600 dark:text-purple-400">

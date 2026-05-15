@@ -11,6 +11,7 @@ import { compressImageDataUrlIfLarge } from "@/lib/compress-image-data-url";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 import { PiContactlessPaymentFill } from "react-icons/pi";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
+import { PayOutIcon } from "@/icons/nav-icons";
 
 const PAGE_SIZE = 5;
 
@@ -344,12 +345,12 @@ function PayOutCard({
         </span>
         {showPayOutExpireCountdown(item) ? <PendingExpireCountdown expiresAtIso={item.expiresAtIso!} /> : null}
         {isAgent &&
-        item.status === "PENDING" &&
-        baseApprove &&
-        !approveUnlocked &&
-        item.assignedAtIso &&
-        agentApproveDelayMinutes != null &&
-        agentApproveDelayMinutes > 0 ? (
+          item.status === "PENDING" &&
+          baseApprove &&
+          !approveUnlocked &&
+          item.assignedAtIso &&
+          agentApproveDelayMinutes != null &&
+          agentApproveDelayMinutes > 0 ? (
           <span
             className="text-[10px] font-semibold tabular-nums text-amber-700 dark:text-amber-300"
             title="Approve is available after the assignment cooling period (set by server)."
@@ -388,15 +389,15 @@ function PayOutCard({
           onDispute &&
           !item.disputeRaised &&
           (showApproveBtn || showReject(item.status) || showCancel(item.status) || item.status === "ASSIGNED") && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onDispute(item)}
-            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-900/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            Dispute
-          </button>
-        )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDispute(item)}
+              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-900/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              Dispute
+            </button>
+          )}
         {onView && <ViewButton onClick={onView} />}
         {item.hasReceipt && (
           <button
@@ -454,7 +455,7 @@ function PayOutCard({
             <DetailField label="Created On" value={item.createdOn} />
             {item.assignedTo && <DetailField label="Assigned To" value={item.assignedTo} />}
             {item.assignedOn && <DetailField label="Assigned On" value={item.assignedOn} />}
-            {item.remarks   && <DetailField label="Remarks"     value={item.remarks} />}
+            {item.remarks && <DetailField label="Remarks" value={item.remarks} />}
           </div>
         )}
       </div>
@@ -462,16 +463,16 @@ function PayOutCard({
       {/* ── MOBILE: accordion ── */}
       {mobileOpen && (
         <div className="lg:hidden border-t border-gray-100 dark:border-gray-800 px-4 py-4 grid grid-cols-1 gap-4">
-          <DetailField label="Order ID"   value={item.orderId} />
+          <DetailField label="Order ID" value={item.orderId} />
           <DetailField label="Client Name" value={item.clientName} />
           <DetailField label="Client UPI" value={item.clientUpi} />
-          <DetailField label="Bank Name"  value={item.bankName} />
+          <DetailField label="Bank Name" value={item.bankName} />
           <DetailField label="Account No" value={item.accountNo} />
-          <DetailField label="IFSC"       value={item.ifsc} />
+          <DetailField label="IFSC" value={item.ifsc} />
           <DetailField label="Created On" value={item.createdOn} />
           {item.assignedTo && <DetailField label="Assigned To" value={item.assignedTo} />}
           {item.assignedOn && <DetailField label="Assigned On" value={item.assignedOn} />}
-          {item.remarks    && <DetailField label="Remarks"     value={item.remarks} />}
+          {item.remarks && <DetailField label="Remarks" value={item.remarks} />}
         </div>
       )}
     </div>
@@ -774,7 +775,7 @@ function CompanyPayOutView() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <PiContactlessPaymentFill className="w-6 h-6 rotate-180" />
+          <PayOutIcon />
           <h1 className="text-xl font-bold">PayOut Management</h1>
         </div>
         <button
@@ -795,11 +796,10 @@ function CompanyPayOutView() {
               <button
                 key={tab.value}
                 onClick={() => setActiveTab(tab.value)}
-                className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeTab === tab.value
+                className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${activeTab === tab.value
                     ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
                     : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>
@@ -984,24 +984,24 @@ export default function PayOutList() {
           data.agents
             .filter((a) => String(a.status ?? "").trim().toLowerCase() === "active")
             .map((a) => {
-            const name = (a.fullname && a.fullname.trim()) || a.username;
-            const prev = typeof a.previous_balance === "number" ? a.previous_balance : Number(a.previous_balance ?? 0);
-            const nIn = typeof a.net_pay_in === "number" ? a.net_pay_in : Number(a.net_pay_in ?? 0);
-            const nOut = typeof a.net_pay_out === "number" ? a.net_pay_out : Number(a.net_pay_out ?? 0);
-            const dbRun = typeof a.running_balance === "number" ? a.running_balance : Number(a.running_balance ?? 0);
-            const computed =
-              (Number.isFinite(prev) ? prev : 0) +
-              (Number.isFinite(nIn) ? nIn : 0) -
-              (Number.isFinite(nOut) ? nOut : 0);
-            const run = Number.isFinite(computed) ? computed : dbRun;
-            const runLabel = Number.isFinite(run)
-              ? ` · Running ₹${run.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
-              : "";
-            return {
-              id: a.id,
-              label: `${name}${runLabel}`,
-            };
-          }),
+              const name = (a.fullname && a.fullname.trim()) || a.username;
+              const prev = typeof a.previous_balance === "number" ? a.previous_balance : Number(a.previous_balance ?? 0);
+              const nIn = typeof a.net_pay_in === "number" ? a.net_pay_in : Number(a.net_pay_in ?? 0);
+              const nOut = typeof a.net_pay_out === "number" ? a.net_pay_out : Number(a.net_pay_out ?? 0);
+              const dbRun = typeof a.running_balance === "number" ? a.running_balance : Number(a.running_balance ?? 0);
+              const computed =
+                (Number.isFinite(prev) ? prev : 0) +
+                (Number.isFinite(nIn) ? nIn : 0) -
+                (Number.isFinite(nOut) ? nOut : 0);
+              const run = Number.isFinite(computed) ? computed : dbRun;
+              const runLabel = Number.isFinite(run)
+                ? ` · Running ₹${run.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
+                : "";
+              return {
+                id: a.id,
+                label: `${name}${runLabel}`,
+              };
+            }),
         );
       } catch {
         // keep empty agent list; assignment modal shows validation
@@ -1250,7 +1250,7 @@ export default function PayOutList() {
       {/* Page header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <PiContactlessPaymentFill className="w-6 h-6 rotate-180" />
+          <PayOutIcon />
           <h1 className="text-xl font-bold">Pay Out</h1>
         </div>
         {!listLoading && !listError && (
@@ -1388,11 +1388,10 @@ export default function PayOutList() {
             const isActive = activeTab === tab.value;
             return (
               <button key={tab.value} onClick={() => { setActiveTab(tab.value); setPage(1); }}
-                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                  isActive
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${isActive
                     ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
                     : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                }`}
+                  }`}
               >
                 {tab.label}
                 {count !== undefined && count > 0 && !isActive && (
@@ -1406,11 +1405,10 @@ export default function PayOutList() {
         </div>
 
         <button onClick={() => setShowFilter((v) => !v)}
-          className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors ${
-            showFilter
+          className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors ${showFilter
               ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
               : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
+            }`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}

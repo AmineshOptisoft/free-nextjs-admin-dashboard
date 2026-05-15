@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 import CompanyTxnAccordionCard from "../company/CompanyTxnAccordionCard";
 import { Modal } from "../ui/modal";
-import { PiContactlessPaymentFill } from "react-icons/pi";
+import { PayInIcon } from "@/icons/nav-icons";
 
 type CompanyPayIn = {
   id: string;
@@ -171,7 +171,7 @@ export default function CompanyPayInView() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <PiContactlessPaymentFill className="w-6 h-6" />
+          <PayInIcon />
           <h1 className="text-xl font-bold">Pay In Management</h1>
         </div>
         {/* <button onClick={() => setRequestOpen(true)} className="inline-flex items-center rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white">

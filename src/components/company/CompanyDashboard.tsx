@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
-import { PieChartIcon } from "@/icons";
+import { CompanyDashboardIcon } from "@/icons/nav-icons";
 
 type SummaryCard = { title: string; value: string; sub: string };
 type TxnRow = {
@@ -206,7 +206,7 @@ export default function CompanyDashboard() {
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <PieChartIcon className="w-6 h-6" />
+          <CompanyDashboardIcon />
           <h1 className="text-xl font-bold">Company Dashboard</h1>
         </div>
         <Link href="/company-settings" className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-600 dark:border-brand-800 dark:bg-brand-900/20 dark:text-brand-300">
