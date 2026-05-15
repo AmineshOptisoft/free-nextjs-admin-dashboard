@@ -9,6 +9,7 @@ import { pool } from "@/lib/db";
 import { isMysqlErNoSuchTable, PAY_METHODS_TABLE_HINT } from "@/lib/mysql-table-error";
 import { requireAdminSession } from "@/lib/require-admin-api";
 import { loadPayMethodFinancials } from "@/lib/transactions-pay-method-financials";
+import { parseDateRangeFromSearchParams } from "@/lib/date-range";
 
 type AgentRow = RowDataPacket & { id: number; username: string | null };
 
@@ -37,6 +38,9 @@ export async function GET(
   const agentUsername = (agentRow.username ?? "").trim() || `Agent #${agentId}`;
 
   try {
+    const { searchParams } = new URL(_req.url);
+    const { from, to } = parseDateRangeFromSearchParams(searchParams);
+
     const [rows] = await pool.execute<PayMethodRow[]>(
       `SELECT ${PAY_METHOD_SELECT}
        FROM \`pay_methods\` WHERE \`agent_id\` = ? ORDER BY \`id\` DESC`,
@@ -44,7 +48,7 @@ export async function GET(
     );
 
     const ids = rows.map((r) => r.id);
-    const financialByPm = await loadPayMethodFinancials(agentId, ids);
+    const financialByPm = await loadPayMethodFinancials(agentId, ids, from, to);
     const payment_methods = rows.map((r) => payMethodToStaffApi(r, agentUsername, financialByPm.get(r.id)));
 
     return NextResponse.json({ ok: true as const, payment_methods });

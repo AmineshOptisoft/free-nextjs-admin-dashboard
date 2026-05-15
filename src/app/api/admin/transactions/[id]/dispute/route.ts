@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
+import { isMissingDisputeStateColumn, isOpenDispute } from "@/lib/dispute";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
 type TxRow = RowDataPacket & {
   id: number;
+  type: string;
   dispute_raised: number;
+  dispute_state: string | null;
 };
 
 const DISPUTE_STATES = new Set(["PENDING", "RESOLVED", "OTHER", "EXPIRED", "NONE"]);
@@ -31,10 +35,11 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
 
   const [rows] = await pool.execute<TxRow[]>(
-    "SELECT `id`, `dispute_raised` FROM `transactions` WHERE `id` = ? LIMIT 1",
+    "SELECT `id`, `type`, `dispute_raised`, `dispute_state` FROM `transactions` WHERE `id` = ? LIMIT 1",
     [txId],
   );
-  if (!rows[0]) {
+  const tx = rows[0];
+  if (!tx) {
     return NextResponse.json({ ok: false, error: "Transaction not found" }, { status: 404 });
   }
 
@@ -45,18 +50,41 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
         { status: 400 },
       );
     }
+
+    const releasing = stateRaw === "RESOLVED" || stateRaw === "NONE";
     try {
-      const [res] = await pool.execute<ResultSetHeader>(
-        "UPDATE `transactions` SET `dispute_state` = ? WHERE `id` = ?",
-        [stateRaw, txId],
-      );
-      if (res.affectedRows === 0) {
-        return NextResponse.json({ ok: false, error: "Could not update dispute state" }, { status: 500 });
+      if (releasing) {
+        const [res] = await pool.execute<ResultSetHeader>(
+          "UPDATE `transactions` SET `dispute_state` = 'NONE', `dispute_raised` = 0 WHERE `id` = ?",
+          [txId],
+        );
+        if (res.affectedRows === 0) {
+          return NextResponse.json({ ok: false, error: "Could not resolve dispute" }, { status: 500 });
+        }
+      } else {
+        const [res] = await pool.execute<ResultSetHeader>(
+          "UPDATE `transactions` SET `dispute_state` = ?, `dispute_raised` = 1 WHERE `id` = ?",
+          [stateRaw, txId],
+        );
+        if (res.affectedRows === 0) {
+          return NextResponse.json({ ok: false, error: "Could not update dispute state" }, { status: 500 });
+        }
       }
-      return NextResponse.json({ ok: true as const, dispute_state: stateRaw });
+      emitTransactionRealtime(txId, "dispute");
+      return NextResponse.json({ ok: true as const, dispute_state: releasing ? "NONE" : stateRaw });
     } catch (e: unknown) {
-      const code = typeof e === "object" && e !== null && "code" in e ? String((e as { code?: string }).code) : "";
-      if (code === "ER_BAD_FIELD_ERROR") {
+      if (isMissingDisputeStateColumn(e)) {
+        if (releasing) {
+          const [res] = await pool.execute<ResultSetHeader>(
+            "UPDATE `transactions` SET `dispute_raised` = 0 WHERE `id` = ?",
+            [txId],
+          );
+          if (res.affectedRows === 0) {
+            return NextResponse.json({ ok: false, error: "Could not resolve dispute" }, { status: 500 });
+          }
+          emitTransactionRealtime(txId, "dispute");
+          return NextResponse.json({ ok: true as const, dispute_state: "NONE" });
+        }
         return NextResponse.json(
           {
             ok: false,
@@ -69,16 +97,41 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     }
   }
 
+  if (isOpenDispute(tx.dispute_state, tx.dispute_raised)) {
+    return NextResponse.json({ ok: false, error: "Transaction is already in dispute" }, { status: 409 });
+  }
+
+  const txType = String(tx.type ?? "").trim().toUpperCase();
+  const disputeType = txType === "PAYOUT" ? "PAYOUT" : "PAYIN";
+
   try {
     const [res] = await pool.execute<ResultSetHeader>(
-      "UPDATE `transactions` SET `dispute_raised` = 1, `dispute_reason` = ?, `dispute_state` = 'PENDING' WHERE `id` = ?",
-      [reason || "Other", txId],
+      `UPDATE \`transactions\`
+       SET \`dispute_raised\` = 1,
+           \`dispute_reason\` = ?,
+           \`dispute_state\` = 'PENDING',
+           \`dispute_type\` = ?,
+           \`dispute_raised_at\` = NOW()
+       WHERE \`id\` = ?`,
+      [reason || "Other", disputeType, txId],
     );
     if (res.affectedRows === 0) {
       return NextResponse.json({ ok: false, error: "Could not raise dispute" }, { status: 500 });
     }
-    return NextResponse.json({ ok: true as const });
+    emitTransactionRealtime(txId, "dispute");
+    return NextResponse.json({ ok: true as const, dispute_state: "PENDING" });
   } catch (e: unknown) {
+    if (isMissingDisputeStateColumn(e)) {
+      const [res] = await pool.execute<ResultSetHeader>(
+        "UPDATE `transactions` SET `dispute_raised` = 1, `dispute_reason` = ? WHERE `id` = ?",
+        [reason || "Other", txId],
+      );
+      if (res.affectedRows === 0) {
+        return NextResponse.json({ ok: false, error: "Could not raise dispute" }, { status: 500 });
+      }
+      emitTransactionRealtime(txId, "dispute");
+      return NextResponse.json({ ok: true as const });
+    }
     const code = typeof e === "object" && e !== null && "code" in e ? String((e as { code?: string }).code) : "";
     if (code === "ER_BAD_FIELD_ERROR") {
       const [res] = await pool.execute<ResultSetHeader>(
@@ -88,6 +141,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
       if (res.affectedRows === 0) {
         return NextResponse.json({ ok: false, error: "Could not raise dispute" }, { status: 500 });
       }
+      emitTransactionRealtime(txId, "dispute");
       return NextResponse.json({ ok: true as const });
     }
     throw e;

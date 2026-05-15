@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
+import { getSessionRole } from "@/lib/get-session-role-server";
 
 export const metadata: Metadata = {
-  title: "Admin Dashboard | TePay",
-  description: "TePay admin financial statistics dashboard",
+  title: "Dashboard | TePay",
+  description: "TePay dashboard",
 };
 
-export default function Dashboard() {
+export default async function Dashboard() {
+  const role = await getSessionRole();
+  if (role === "agent") redirect("/agent-dashboard");
+  if (role === "company") redirect("/company-dashboard");
   return <AdminDashboard />;
 }

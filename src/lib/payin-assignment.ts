@@ -1,5 +1,6 @@
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 
 async function countScalar(sql: string, params: (string | number)[]): Promise<number> {
   const [rows] = await pool.execute<RowDataPacket[]>(sql, params);
@@ -137,7 +138,7 @@ function buildCandidateQuery(
      WHERE pm.agent_id IS NOT NULL
        AND pm.status = 'ACTIVE'
        AND pm.enable_pay_in = 1
-       AND a.status = 'active'
+       AND LOWER(TRIM(a.\`status\`)) = 'active'
        AND (pm.pay_in_limit <= 0 OR (pm.today_total_pay_in_amount + ?) <= pm.pay_in_limit)
        AND (
          COALESCE(a.security_deposit, 0) + COALESCE(a.credit_limit, 0) - COALESCE(a.running_balance, 0)
@@ -306,6 +307,7 @@ export async function tryAssignPayInTransaction(
       }
 
       await conn.commit();
+      emitTransactionRealtime(txId, "assign");
       return { assigned: true, payMethodId: candidate.pay_method_id, agentId: candidate.agent_id };
     } catch (e) {
       await conn.rollback();

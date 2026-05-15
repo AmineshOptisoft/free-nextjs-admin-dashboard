@@ -10,6 +10,7 @@ import { Modal } from "../ui/modal";
 import { compressImageDataUrlIfLarge } from "@/lib/compress-image-data-url";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 import { PiContactlessPaymentFill } from "react-icons/pi";
+import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 
 const PAGE_SIZE = 5;
 
@@ -359,17 +360,21 @@ function PayOutCard({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
-        {allowAssign && showAssign(item) && <AssignButton onClick={() => onOpenAction(item, "assign")} disabled={busy} />}
-        {showApproveBtn && <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />}
-        {showReject(item.status) && showCancel(item.status) ? (
+        {!item.disputeRaised && allowAssign && showAssign(item) && (
+          <AssignButton onClick={() => onOpenAction(item, "assign")} disabled={busy} />
+        )}
+        {!item.disputeRaised && showApproveBtn && (
+          <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />
+        )}
+        {!item.disputeRaised && showReject(item.status) && showCancel(item.status) ? (
           <DeclineMenu
             disabled={busy}
             onReject={() => onOpenAction(item, "reject")}
             onRevoke={() => onOpenAction(item, "cancel")}
           />
-        ) : showReject(item.status) ? (
+        ) : !item.disputeRaised && showReject(item.status) ? (
           <RejectButton onClick={() => onOpenAction(item, "reject")} disabled={busy} />
-        ) : showCancel(item.status) ? (
+        ) : !item.disputeRaised && showCancel(item.status) ? (
           <button
             type="button"
             disabled={busy}
@@ -763,6 +768,8 @@ function CompanyPayOutView() {
     void loadCompanyPayouts();
   }, [loadCompanyPayouts]);
 
+  useTransactionRealtimeRefresh({ types: ["PAYOUT"], onRefresh: () => void loadCompanyPayouts() });
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -908,8 +915,8 @@ export default function PayOutList() {
     setListError(null);
     const endpoint =
       resolvedRole === "admin"
-        ? "/api/admin/transactions?type=PAYOUT&limit=500"
-        : "/api/agent/transactions?type=PAYOUT&limit=500";
+        ? "/api/admin/transactions?type=PAYOUT&limit=10"
+        : "/api/agent/transactions?type=PAYOUT&limit=10";
     try {
       const res = await fetch(endpoint, { credentials: "include" });
       if (res.status === 401) {
@@ -946,6 +953,13 @@ export default function PayOutList() {
     void loadPayOuts();
   }, [resolvedRole, loadPayOuts]);
 
+  useTransactionRealtimeRefresh({
+    types: ["PAYOUT"],
+    onRefresh: () => {
+      if (resolvedRole !== "company") void loadPayOuts();
+    },
+  });
+
   useEffect(() => {
     if (resolvedRole !== "admin") return;
     let mounted = true;
@@ -958,6 +972,7 @@ export default function PayOutList() {
             id: string;
             fullname?: string | null;
             username: string;
+            status?: string;
             previous_balance?: number;
             net_pay_in?: number;
             net_pay_out?: number;
@@ -966,7 +981,9 @@ export default function PayOutList() {
         };
         if (!mounted || !res.ok || !data.ok || !data.agents) return;
         setAgents(
-          data.agents.map((a) => {
+          data.agents
+            .filter((a) => String(a.status ?? "").trim().toLowerCase() === "active")
+            .map((a) => {
             const name = (a.fullname && a.fullname.trim()) || a.username;
             const prev = typeof a.previous_balance === "number" ? a.previous_balance : Number(a.previous_balance ?? 0);
             const nIn = typeof a.net_pay_in === "number" ? a.net_pay_in : Number(a.net_pay_in ?? 0);
@@ -1013,6 +1030,7 @@ export default function PayOutList() {
           return;
         }
         await loadPayOuts();
+        window.alert("Dispute raised. Request moved to Disputes — approve/reject blocked until resolved.");
       } catch {
         window.alert("Network error.");
       }

@@ -5,6 +5,8 @@ import EditAgentModal from "./EditAgentModal";
 import ResetAgentPasswordModal from "./ResetAgentPasswordModal";
 import Pagination from "../ui/Pagination";
 import type { Agent, AgentDetailApi } from "./types";
+import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
+import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
 
 function statusBadgeClass(s: string) {
   const x = s.toLowerCase();
@@ -303,7 +305,7 @@ function AgentPayMethodFinancialOverview({ data }: { data: NonNullable<PayMethod
 }
 
 /** Payment-method card (matches agent `/users` list). */
-function AgentPayMethodCard({ pm }: { pm: PayMethodStaffApi }) {
+function AgentPayMethodCard({ pm, onDelete, onTogglePayIn, onTogglePayOut }: { pm: PayMethodStaffApi; onDelete?: (id: string) => Promise<void> | void; onTogglePayIn?: (pm: PayMethodStaffApi) => Promise<void> | void; onTogglePayOut?: (pm: PayMethodStaffApi) => Promise<void> | void; }) {
   const [finOpen, setFinOpen] = useState(false);
   const fin = pm.financial ?? {
     totalPayIn: 0,
@@ -366,17 +368,15 @@ function AgentPayMethodCard({ pm }: { pm: PayMethodStaffApi }) {
         <div className="flex gap-2 mb-3">
           <button
             type="button"
-            disabled
-            title="Edit agent ke Payment Method page se hota hai"
-            className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 py-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-70"
+            onClick={() => onTogglePayIn && onTogglePayIn(pm)}
+            className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            Edit
+            {pm.pay_in_enabled ? "Disable Pay-In" : "Enable Pay-In"}
           </button>
           <button
             type="button"
-            disabled
-            title="Delete agent ke Payment Method page se hota hai"
-            className="flex-1 rounded-lg border border-red-100 dark:border-red-900/30 py-1.5 text-xs font-semibold text-gray-400 dark:text-red-900/40 cursor-not-allowed opacity-70"
+            onClick={() => onDelete && onDelete(pm.id)}
+            className="flex-1 rounded-lg border border-red-100 dark:border-red-900/30 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
           >
             Delete
           </button>
@@ -455,10 +455,18 @@ export default function AgentDetail({ id }: { id: string }) {
   const [txError, setTxError] = useState<string | null>(null);
   const [payMethods, setPayMethods] = useState<PayMethodStaffApi[]>([]);
   const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [dateRangeTx, setDateRangeTx] = useState<DateRange | null>(() => ({
+    from: new Date(daysAgoInputDate(30) + "T00:00:00"),
+    to: new Date(todayInputDate() + "T00:00:00"),
+  }));
+  const [dateRangeAccounts, setDateRangeAccounts] = useState<DateRange | null>(() => ({
+    from: new Date(daysAgoInputDate(90) + "T00:00:00"),
+    to: new Date(todayInputDate() + "T00:00:00"),
+  }));
 
   useEffect(() => {
     setActPage(1);
-  }, [id]);
+  }, [id, dateRangeTx]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -478,10 +486,16 @@ export default function AgentDetail({ id }: { id: string }) {
       return;
     }
     try {
+      const txFrom = dateRangeTx?.from ? dateRangeTx.from.toISOString().slice(0, 10) : "";
+      const txTo = dateRangeTx?.to ? dateRangeTx.to.toISOString().slice(0, 10) : "";
+      const pmFrom = dateRangeAccounts?.from ? dateRangeAccounts.from.toISOString().slice(0, 10) : "";
+      const pmTo = dateRangeAccounts?.to ? dateRangeAccounts.to.toISOString().slice(0, 10) : "";
       const [agentRes, txRes, pmRes] = await Promise.all([
         fetch(`/api/agents/${id}`, { credentials: "include" }),
-        fetch(`/api/admin/agents/${id}/transactions`, { credentials: "include" }),
-        fetch(`/api/admin/agents/${id}/pay-methods`, { credentials: "include" }),
+        fetch(appendDateRangeToUrl(`/api/admin/agents/${id}/transactions`, txFrom, txTo), {
+          credentials: "include",
+        }),
+        fetch(appendDateRangeToUrl(`/api/admin/agents/${id}/pay-methods`, pmFrom, pmTo), { credentials: "include" }),
       ]);
 
       if (agentRes.status === 401) {
@@ -564,7 +578,7 @@ export default function AgentDetail({ id }: { id: string }) {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, dateRangeTx, dateRangeAccounts]);
 
   useEffect(() => {
     void load();
@@ -885,7 +899,14 @@ export default function AgentDetail({ id }: { id: string }) {
 
               {/* Recent Activity */}
               <div id="recent-activity" className="scroll-mt-24">
-                <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-3">Recent Activity</h3>
+                <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-end sm:justify-between">
+                  <h3 className="text-sm font-bold text-gray-800 dark:text-white">Recent Activity</h3>
+                  <DateRangePicker
+                    value={dateRangeTx}
+                    onChange={(r) => setDateRangeTx(r)}
+                    fullWidth
+                  />
+                </div>
                 <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[560px] text-sm">
@@ -1005,14 +1026,60 @@ export default function AgentDetail({ id }: { id: string }) {
               {payMethods.length > 0 ? (
                 <>
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-base font-bold text-gray-900 dark:text-white">Payment accounts</h3>
-                    <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                      {payMethods.length} {payMethods.length === 1 ? "account" : "accounts"}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-bold text-gray-900 dark:text-white">Payment accounts</h3>
+                      <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        {payMethods.length} {payMethods.length === 1 ? "account" : "accounts"}
+                      </span>
+                    </div>
+                    <div className="w-64">
+                      <DateRangePicker
+                        value={dateRangeAccounts}
+                        onChange={(r) => setDateRangeAccounts(r)}
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {payMethods.map((pm) => (
-                      <AgentPayMethodCard key={pm.id} pm={pm} />
+                      <AgentPayMethodCard
+                        key={pm.id}
+                        pm={pm}
+                        onDelete={async (pmId) => {
+                          if (!confirm("Delete this payment account? This cannot be undone.")) return;
+                          try {
+                            const res = await fetch(`/api/admin/agents/${id}/pay-methods/${pmId}`, {
+                              method: "DELETE",
+                              credentials: "include",
+                            });
+                            const d = await res.json().catch(() => ({}));
+                            if (!res.ok || !d.ok) {
+                              setAccountsError(d.error ?? "Could not delete account.");
+                              return;
+                            }
+                            await load();
+                          } catch {
+                            setAccountsError("Network error.");
+                          }
+                        }}
+                        onTogglePayIn={async (pmRow) => {
+                          try {
+                            const res = await fetch(`/api/admin/agents/${id}/pay-methods/${pmRow.id}`, {
+                              method: "PATCH",
+                              credentials: "include",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ pay_in_enabled: !pmRow.pay_in_enabled }),
+                            });
+                            const d = await res.json().catch(() => ({}));
+                            if (!res.ok || !d.ok) {
+                              setAccountsError(d.error ?? "Could not update account.");
+                              return;
+                            }
+                            await load();
+                          } catch {
+                            setAccountsError("Network error.");
+                          }
+                        }}
+                      />
                     ))}
                   </div>
                 </>

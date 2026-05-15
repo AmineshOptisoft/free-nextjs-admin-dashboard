@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
+import { isMissingDisputeStateColumn, sqlOnlyOpenDispute, sqlOnlyOpenDisputeLegacy } from "@/lib/dispute";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
 type DisputeRow = RowDataPacket & {
@@ -58,12 +59,6 @@ function formatDt(v: Date | string | null): string {
   });
 }
 
-function isMissingDisputeStateColumn(e: unknown): boolean {
-  const errno = (e as { errno?: number })?.errno;
-  const msg = String((e as { sqlMessage?: string })?.sqlMessage ?? (e as Error)?.message ?? "");
-  return errno === 1054 && msg.toLowerCase().includes("dispute_state");
-}
-
 export async function GET(req: Request) {
   const auth = await requireAdminSession();
   if (!auth.ok) return auth.response;
@@ -82,7 +77,7 @@ export async function GET(req: Request) {
      FROM \`transactions\` t
      LEFT JOIN \`companies\` c ON c.\`id\` = t.\`company_id\`
      LEFT JOIN \`agents\` a ON a.\`id\` = t.\`assigned_agent_id\`
-     WHERE (t.\`dispute_raised\` = 1 OR (t.\`dispute_reason\` IS NOT NULL AND t.\`dispute_reason\` <> ''))
+     WHERE ${sqlOnlyOpenDispute("t")}
      ORDER BY t.\`id\` DESC
      LIMIT ${limit}`;
 
@@ -95,7 +90,7 @@ export async function GET(req: Request) {
      FROM \`transactions\` t
      LEFT JOIN \`companies\` c ON c.\`id\` = t.\`company_id\`
      LEFT JOIN \`agents\` a ON a.\`id\` = t.\`assigned_agent_id\`
-     WHERE (t.\`dispute_raised\` = 1 OR (t.\`dispute_reason\` IS NOT NULL AND t.\`dispute_reason\` <> ''))
+     WHERE ${sqlOnlyOpenDisputeLegacy("t")}
      ORDER BY t.\`id\` DESC
      LIMIT ${limit}`;
 

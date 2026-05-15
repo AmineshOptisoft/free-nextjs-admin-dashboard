@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { rowToPayInItem, rowToPayOutItem, type TxRow } from "@/lib/agent-transactions-map";
 import { pool } from "@/lib/db";
 import { requireAdminSession } from "@/lib/require-admin-api";
+import { isMissingDisputeStateColumn, sqlExcludeOpenDispute, sqlExcludeOpenDisputeLegacy } from "@/lib/dispute";
 import { expireOpenRequestsPastDeadline } from "@/lib/request-expiry";
 
 const SELECT_TX = `
@@ -33,17 +34,27 @@ export async function GET(req: Request) {
     params.push(statusRaw);
   }
 
-  const sql = `
-    SELECT ${SELECT_TX}
-    FROM \`transactions\`
-    WHERE ${where.join(" AND ")}
-    ORDER BY \`id\` DESC
-    LIMIT ${limit}
-  `;
+  async function loadRows(excludeDisputeSql: string) {
+    const sql = `
+      SELECT ${SELECT_TX}
+      FROM \`transactions\`
+      WHERE ${where.join(" AND ")} AND (${excludeDisputeSql})
+      ORDER BY \`id\` DESC
+      LIMIT ${limit}
+    `;
+    const [rows] = await pool.execute<TxRow[]>(sql, params);
+    return rows;
+  }
 
   try {
     await expireOpenRequestsPastDeadline(pool);
-    const [rows] = await pool.execute<TxRow[]>(sql, params);
+    let rows: TxRow[];
+    try {
+      rows = await loadRows(sqlExcludeOpenDispute());
+    } catch (e: unknown) {
+      if (!isMissingDisputeStateColumn(e)) throw e;
+      rows = await loadRows(sqlExcludeOpenDisputeLegacy());
+    }
     const items =
       typeRaw === "PAYIN"
         ? rows.map((r) => rowToPayInItem(r))

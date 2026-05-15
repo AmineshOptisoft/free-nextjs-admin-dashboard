@@ -12,6 +12,8 @@ import {
   type TransactionStatusDistributionRow,
 } from ".";
 import { GrTransaction } from "react-icons/gr";
+import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
+import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
 
 type Tx = {
   id: string;
@@ -65,6 +67,10 @@ export default function TransactionReport() {
   const [role, setRole] = useState<"admin" | "agent" | "company">("admin");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => ({
+    from: new Date(daysAgoInputDate(30) + "T00:00:00"),
+    to: new Date(todayInputDate() + "T00:00:00"),
+  }));
 
   useEffect(() => {
     let mounted = true;
@@ -79,7 +85,11 @@ export default function TransactionReport() {
         setRole(currentRole);
 
         if (currentRole === "admin") {
-          const res = await fetch("/api/admin/transaction-report?limit=5000", { credentials: "include" });
+          const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
+          const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
+          const res = await fetch(appendDateRangeToUrl("/api/admin/transaction-report?limit=5000", from, to), {
+            credentials: "include",
+          });
           const data = (await res.json()) as ApiResponse;
           if (!res.ok || !data.ok) {
             setError(data.error ?? "Could not load report data.");
@@ -88,9 +98,13 @@ export default function TransactionReport() {
           setPayIns(data.payins ?? []);
           setPayOuts(data.payouts ?? []);
         } else {
+          const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
+          const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
+          const piUrl = appendDateRangeToUrl("/api/company/payins?limit=10", from, to);
+          const poUrl = appendDateRangeToUrl("/api/company/payouts?limit=10", from, to);
           const [piRes, poRes] = await Promise.all([
-            fetch("/api/company/payins?limit=500", { credentials: "include" }),
-            fetch("/api/company/payouts?limit=500", { credentials: "include" }),
+            fetch(piUrl, { credentials: "include" }),
+            fetch(poUrl, { credentials: "include" }),
           ]);
           const pi = (await piRes.json()) as ApiResponse;
           const po = (await poRes.json()) as ApiResponse;
@@ -110,7 +124,7 @@ export default function TransactionReport() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [dateRange]);
 
   const totals = useMemo(() => {
     const all = [...payIns, ...payOuts];
@@ -232,7 +246,12 @@ export default function TransactionReport() {
       <p className="text-xs text-purple-600 dark:text-purple-400">
         {role === "admin" ? "Live admin-wide data" : "Live company-only data"}
       </p>
-
+      <div className="w-full sm:w-1/2 md:w-1/3 lg:w-1/4 ml-auto flex items-center justify-end">
+        <DateRangePicker
+          value={dateRange}
+          onChange={(r) => setDateRange(r)}
+        />
+      </div>
       {loading && <div className="text-sm text-gray-500">Loading report data...</div>}
       {error && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{error}</div>}
       <TransactionSummaryCards cards={summaryCards} />

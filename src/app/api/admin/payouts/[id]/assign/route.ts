@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
+import { DISPUTE_BLOCKS_ACTION_MSG, isOpenDispute } from "@/lib/dispute";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 import { canAdminAssign } from "@/lib/payout-lifecycle";
+import { AGENT_BLOCKED_ASSIGN_MSG, isAgentActiveForAssignment } from "@/lib/party-status";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
 type TxRow = RowDataPacket & {
   id: number;
   status: string;
   amount: string | number;
+  dispute_raised: number;
+  dispute_state: string | null;
 };
 
 type AgentRow = RowDataPacket & {
   id: number;
+  status: string;
 };
 
 type PayMethodRow = RowDataPacket & {
@@ -85,21 +91,38 @@ export async function POST(req: Request, context: { params: { id: string } | Pro
     return NextResponse.json({ ok: false, error: "payMethodId must be a positive number" }, { status: 400 });
   }
 
-  const [txRows] = await pool.execute<TxRow[]>(
-    "SELECT `id`, `status`, `amount` FROM `transactions` WHERE `id` = ? AND `type` = 'PAYOUT' LIMIT 1",
-    [txId],
-  );
+  let txRows: TxRow[];
+  try {
+    const [r] = await pool.execute<TxRow[]>(
+      "SELECT `id`, `status`, `amount`, `dispute_raised`, `dispute_state` FROM `transactions` WHERE `id` = ? AND `type` = 'PAYOUT' LIMIT 1",
+      [txId],
+    );
+    txRows = r;
+  } catch {
+    const [r] = await pool.execute<TxRow[]>(
+      "SELECT `id`, `status`, `amount`, `dispute_raised` FROM `transactions` WHERE `id` = ? AND `type` = 'PAYOUT' LIMIT 1",
+      [txId],
+    );
+    txRows = r.map((row) => ({ ...row, dispute_state: null }));
+  }
   const tx = txRows[0];
   if (!tx) return NextResponse.json({ ok: false, error: "Payout not found" }, { status: 404 });
+  if (isOpenDispute(tx.dispute_state, tx.dispute_raised)) {
+    return NextResponse.json({ ok: false, error: DISPUTE_BLOCKS_ACTION_MSG }, { status: 409 });
+  }
   if (!canAdminAssign(tx.status)) {
     return NextResponse.json({ ok: false, error: `Cannot assign payout while status is ${tx.status}` }, { status: 409 });
   }
 
   const [agents] = await pool.execute<AgentRow[]>(
-    "SELECT `id` FROM `agents` WHERE `id` = ? LIMIT 1",
+    "SELECT `id`, `status` FROM `agents` WHERE `id` = ? LIMIT 1",
     [agentId],
   );
-  if (!agents[0]) return NextResponse.json({ ok: false, error: "Agent not found" }, { status: 404 });
+  const agentRow = agents[0];
+  if (!agentRow) return NextResponse.json({ ok: false, error: "Agent not found" }, { status: 404 });
+  if (!isAgentActiveForAssignment(agentRow.status)) {
+    return NextResponse.json({ ok: false, error: AGENT_BLOCKED_ASSIGN_MSG }, { status: 409 });
+  }
 
   if (payMethodId != null) {
     const [payMethods] = await pool.execute<PayMethodRow[]>(
@@ -160,6 +183,7 @@ export async function POST(req: Request, context: { params: { id: string } | Pro
     }
 
     await conn.commit();
+    emitTransactionRealtime(txId, "assign");
   } catch (e) {
     await conn.rollback();
     throw e;

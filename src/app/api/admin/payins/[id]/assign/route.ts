@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
 import { canAssignPayIn } from "@/lib/payin-lifecycle";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
+import { AGENT_BLOCKED_ASSIGN_MSG, isAgentActiveForAssignment } from "@/lib/party-status";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
 type TxRow = RowDataPacket & {
@@ -9,6 +11,11 @@ type TxRow = RowDataPacket & {
   status: string;
   amount: string | number;
   pay_method_id: number | null;
+};
+
+type AgentRow = RowDataPacket & {
+  id: number;
+  status: string;
 };
 
 type PayMethodRow = RowDataPacket & {
@@ -67,6 +74,18 @@ export async function POST(req: Request, context: { params: { id: string } | Pro
   }
   if (!canAssignPayIn(tx.status)) {
     return NextResponse.json({ ok: false, error: `Cannot assign payin while status is ${tx.status}` }, { status: 409 });
+  }
+
+  const [agentRows] = await pool.execute<AgentRow[]>(
+    "SELECT `id`, `status` FROM `agents` WHERE `id` = ? LIMIT 1",
+    [agentId],
+  );
+  const agentRow = agentRows[0];
+  if (!agentRow) {
+    return NextResponse.json({ ok: false, error: "Agent not found" }, { status: 404 });
+  }
+  if (!isAgentActiveForAssignment(agentRow.status)) {
+    return NextResponse.json({ ok: false, error: AGENT_BLOCKED_ASSIGN_MSG }, { status: 409 });
   }
 
   const [payMethods] = await pool.execute<PayMethodRow[]>(
@@ -134,6 +153,7 @@ export async function POST(req: Request, context: { params: { id: string } | Pro
     }
 
     await conn.commit();
+    emitTransactionRealtime(txId, "assign");
   } catch (e) {
     await conn.rollback();
     throw e;

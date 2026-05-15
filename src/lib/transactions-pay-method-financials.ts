@@ -38,6 +38,8 @@ const FAILED_IN_SQL = `('REJECTED','REVOKED','EXPIRED','NOT_ASSIGNED')`;
 export async function loadPayMethodFinancials(
   agentId: number,
   payMethodIds: number[],
+  from?: Date | null,
+  to?: Date | null,
 ): Promise<Map<number, PayMethodFinancial>> {
   const out = new Map<number, PayMethodFinancial>();
   for (const id of payMethodIds) {
@@ -48,6 +50,17 @@ export async function loadPayMethodFinancials(
   if (ids.length === 0) return out;
 
   const placeholders = ids.map(() => "?").join(",");
+
+  let dateClause = "";
+  const dateParams: unknown[] = [];
+  if (from) {
+    dateClause += " AND t.`created_at` >= ?";
+    dateParams.push(from);
+  }
+  if (to) {
+    dateClause += " AND t.`created_at` <= ?";
+    dateParams.push(to);
+  }
 
   const sql = `
     SELECT
@@ -60,10 +73,10 @@ export async function loadPayMethodFinancials(
     WHERE t.\`assigned_agent_id\` = ?
       AND t.\`pay_method_id\` IS NOT NULL
       AND t.\`pay_method_id\` IN (${placeholders})
+      ${dateClause}
     GROUP BY t.\`pay_method_id\`, t.\`type\`
   `;
-
-  const params: unknown[] = [agentId, ...ids];
+  const params: unknown[] = [agentId, ...ids, ...dateParams];
 
   type AggRow = RowDataPacket & {
     link_id: number;

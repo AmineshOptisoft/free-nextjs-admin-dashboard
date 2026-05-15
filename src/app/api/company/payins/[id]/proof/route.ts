@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
 import { isMysqlPacketTooLarge, validatePaymentProofPayload } from "@/lib/payment-proof-limits";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 import { requireCompanySession } from "@/lib/require-company-api";
 
 type TxRow = RowDataPacket & {
@@ -94,5 +95,6 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   if (res.affectedRows === 0) {
     return NextResponse.json({ ok: false, error: "Could not submit proof (wrong status or not assigned)" }, { status: 409 });
   }
+  emitTransactionRealtime(txId, "proof");
   return NextResponse.json({ ok: true as const, status: "PENDING" });
 }

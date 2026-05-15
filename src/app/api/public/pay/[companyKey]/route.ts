@@ -5,6 +5,7 @@ import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
 import { payInDisplayStatus, publicPayInDisplayMethod, sqlFieldToUtf8 } from "@/lib/payin-lifecycle";
 import { tryAssignPayInTransaction, deleteNotAssignedPayIn, PAYIN_NO_ELIGIBLE_AGENT_MESSAGE } from "@/lib/payin-assignment";
+import { companyPaymentsBlockMessage, isCompanyAcceptingPayments } from "@/lib/party-status";
 import { sqlExpiresAtFromNow } from "@/lib/request-expiry";
 
 type CompanyRow = RowDataPacket & {
@@ -55,11 +56,24 @@ async function loadCompanyByKey(companyKey: string): Promise<CompanyRow | null> 
   const [rows] = await pool.execute<CompanyRow[]>(
     `SELECT \`id\`, \`username\`, \`brand_name\`, \`logo\`, \`status\`, \`company_code\`
      FROM \`companies\`
-     WHERE (\`company_code\` = ? OR \`username\` = ?) AND \`status\` = 'ACTIVE'
+     WHERE \`company_code\` = ? OR \`username\` = ?
      LIMIT 1`,
     [decoded, decoded],
   );
   return rows[0] ?? null;
+}
+
+function mapPublicCompany(company: CompanyRow) {
+  const paymentsEnabled = isCompanyAcceptingPayments(company.status);
+  return {
+    id: String(company.id),
+    brand_name: company.brand_name ?? company.username,
+    logo: company.logo,
+    company_code: company.company_code,
+    status: String(company.status ?? "").trim(),
+    paymentsEnabled,
+    blockMessage: paymentsEnabled ? null : companyPaymentsBlockMessage(company.status),
+  };
 }
 
 function num(v: string | number): number {
@@ -121,16 +135,11 @@ export async function GET(_req: Request, context: { params: { companyKey: string
   const { companyKey } = await Promise.resolve(context.params);
   const company = await loadCompanyByKey(companyKey);
   if (!company) {
-    return NextResponse.json({ ok: false, error: "Invalid or inactive company link" }, { status: 404 });
+    return NextResponse.json({ ok: false, error: "Invalid payment link" }, { status: 404 });
   }
   return NextResponse.json({
     ok: true as const,
-    company: {
-      id: String(company.id),
-      brand_name: company.brand_name ?? company.username,
-      logo: company.logo,
-      company_code: company.company_code,
-    },
+    company: mapPublicCompany(company),
   });
 }
 
@@ -138,7 +147,13 @@ export async function POST(req: Request, context: { params: { companyKey: string
   const { companyKey } = await Promise.resolve(context.params);
   const company = await loadCompanyByKey(companyKey);
   if (!company) {
-    return NextResponse.json({ ok: false, error: "Invalid or inactive company link" }, { status: 404 });
+    return NextResponse.json({ ok: false, error: "Invalid payment link" }, { status: 404 });
+  }
+  if (!isCompanyAcceptingPayments(company.status)) {
+    return NextResponse.json(
+      { ok: false, error: companyPaymentsBlockMessage(company.status) },
+      { status: 403 },
+    );
   }
 
   let body: Record<string, unknown>;

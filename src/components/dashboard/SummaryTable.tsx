@@ -39,8 +39,8 @@ export default function SummaryTable() {
     (async () => {
       try {
         const [inRes, outRes] = await Promise.all([
-          fetch("/api/agent/transactions?type=PAYIN&limit=500", { credentials: "include" }),
-          fetch("/api/agent/transactions?type=PAYOUT&limit=500", { credentials: "include" }),
+          fetch("/api/agent/transactions?type=PAYIN&limit=10", { credentials: "include" }),
+          fetch("/api/agent/transactions?type=PAYOUT&limit=10", { credentials: "include" }),
         ]);
         const inJson = (await inRes.json()) as { ok?: boolean; items?: Array<{ amount: number; status: string; createdAtIso?: string }> };
         const outJson = (await outRes.json()) as { ok?: boolean; items?: Array<{ amount: number; status: string; createdAtIso?: string }> };

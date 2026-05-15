@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
+import { parseDateRangeFromSearchParams, sqlCreatedAtRange } from "@/lib/date-range";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
 type TxRow = RowDataPacket & {
@@ -27,6 +28,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const limitRaw = Number(searchParams.get("limit") ?? "2000");
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(100, limitRaw), 5000) : 2000;
+  const { from, to } = parseDateRangeFromSearchParams(searchParams);
+  const range = sqlCreatedAtRange("t", from, to);
 
   const [rows] = await pool.execute<TxRow[]>(
     `SELECT
@@ -39,9 +42,10 @@ export async function GET(req: Request) {
      FROM \`transactions\` t
      LEFT JOIN \`pay_methods\` pm ON pm.\`id\` = t.\`pay_method_id\`
      LEFT JOIN \`agents\` a ON a.\`id\` = COALESCE(NULLIF(t.\`assigned_agent_id\`, 0), NULLIF(pm.\`agent_id\`, 0))
-     WHERE t.\`type\` IN ('PAYIN', 'PAYOUT')
+     WHERE t.\`type\` IN ('PAYIN', 'PAYOUT') AND (${range.sql})
      ORDER BY t.\`id\` DESC
      LIMIT ${limit}`,
+    range.params,
   );
 
   const payins: Array<{

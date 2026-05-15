@@ -3,6 +3,8 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { applyAgentLedgerForTransactionStatusChange } from "@/lib/agent-ledger";
 import { pool } from "@/lib/db";
 import { paymentImageDbLimitMessage, paymentImageExceedsDbLimit } from "@/lib/payment-image-db-limit";
+import { DISPUTE_BLOCKS_ACTION_MSG, isOpenDispute } from "@/lib/dispute";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 import { canAgentVerifyPayIn } from "@/lib/payin-lifecycle";
 import { requireAgentSession } from "@/lib/require-agent-api";
 
@@ -12,6 +14,8 @@ type TxRow = RowDataPacket & {
   payment_image: string | null;
   amount: string | number;
   assigned_agent_id: number | null;
+  dispute_raised: number;
+  dispute_state: string | null;
 };
 
 function num(v: string | number): number {
@@ -51,19 +55,37 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   try {
     await conn.beginTransaction();
 
-    const [rows] = await conn.execute<TxRow[]>(
-      `SELECT \`id\`, \`status\`, \`payment_image\`, \`amount\`, \`assigned_agent_id\`
-       FROM \`transactions\`
-       WHERE \`id\` = ? AND \`type\` = 'PAYIN' AND \`assigned_agent_id\` = ?
-       LIMIT 1 FOR UPDATE`,
-      [txId, auth.agentId],
-    );
+    let rows: TxRow[];
+    try {
+      const [r] = await conn.execute<TxRow[]>(
+        `SELECT \`id\`, \`status\`, \`payment_image\`, \`amount\`, \`assigned_agent_id\`, \`dispute_raised\`, \`dispute_state\`
+         FROM \`transactions\`
+         WHERE \`id\` = ? AND \`type\` = 'PAYIN' AND \`assigned_agent_id\` = ?
+         LIMIT 1 FOR UPDATE`,
+        [txId, auth.agentId],
+      );
+      rows = r;
+    } catch {
+      const [r] = await conn.execute<TxRow[]>(
+        `SELECT \`id\`, \`status\`, \`payment_image\`, \`amount\`, \`assigned_agent_id\`, \`dispute_raised\`
+         FROM \`transactions\`
+         WHERE \`id\` = ? AND \`type\` = 'PAYIN' AND \`assigned_agent_id\` = ?
+         LIMIT 1 FOR UPDATE`,
+        [txId, auth.agentId],
+      );
+      rows = r.map((row) => ({ ...row, dispute_state: null }));
+    }
     const tx = rows[0];
     if (!tx) {
       await conn.rollback();
       return NextResponse.json({ ok: false, error: "PayIn not found for this agent" }, { status: 404 });
     }
     const fromStatus = String(tx.status ?? "").trim().toUpperCase();
+
+    if (isOpenDispute(tx.dispute_state, tx.dispute_raised)) {
+      await conn.rollback();
+      return NextResponse.json({ ok: false, error: DISPUTE_BLOCKS_ACTION_MSG }, { status: 409 });
+    }
 
     if (!canAgentVerifyPayIn(fromStatus, toStatus)) {
       await conn.rollback();
@@ -112,6 +134,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     }
 
     await conn.commit();
+    emitTransactionRealtime(txId, "status");
   } catch (e) {
     await conn.rollback();
     console.error(e);

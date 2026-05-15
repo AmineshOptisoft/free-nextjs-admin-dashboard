@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { ADMIN_COOKIE, verifyAdminSession } from "@/lib/session";
 
 export async function requireAdminSession(): Promise<
-  { ok: true } | { ok: false; response: NextResponse }
+  { ok: true; adminId: number } | { ok: false; response: NextResponse }
 > {
   const secret = process.env.SESSION_SECRET;
   if (!secret) {
@@ -14,5 +14,5 @@ export async function requireAdminSession(): Promise<
   if (!session) {
     return { ok: false, response: NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 }) };
   }
-  return { ok: true };
+  return { ok: true, adminId: session.adminId };
 }

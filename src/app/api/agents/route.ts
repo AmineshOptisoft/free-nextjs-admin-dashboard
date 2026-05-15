@@ -4,6 +4,7 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { allocateAgentReferralCode } from "@/lib/agent-referral-code";
 import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
+import { parseDateRangeFromSearchParams, sqlCreatedAtRange } from "@/lib/date-range";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
 export const dynamic = "force-dynamic";
@@ -46,19 +47,52 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("search")?.trim() ?? "";
+  const { from, to } = parseDateRangeFromSearchParams(searchParams);
+  const hasRange = Boolean(from || to);
+  const range = sqlCreatedAtRange("t", from, to);
 
-  let sql = `
-    SELECT \`id\`, \`fullname\`, \`username\`, \`email\`, \`security_deposit\`, \`credit_limit\`,
-           \`previous_balance\`, \`net_pay_in\`, \`net_pay_out\`, \`running_balance\`,
-           \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`referral_code\`, \`status\`
-    FROM \`agents\`
-  `;
-  const params: string[] = [];
-  if (q) {
-    sql += ` WHERE (\`username\` LIKE CONCAT('%', ?, '%') OR \`fullname\` LIKE CONCAT('%', ?, '%') OR \`email\` LIKE CONCAT('%', ?, '%')) `;
-    params.push(q, q, q);
+  let sql: string;
+  const params: (string | Date)[] = [];
+
+  if (hasRange) {
+    sql = `
+      SELECT a.\`id\`, a.\`fullname\`, a.\`username\`, a.\`email\`, a.\`security_deposit\`, a.\`credit_limit\`,
+             a.\`previous_balance\`,
+             COALESCE(p.\`period_pay_in\`, 0) AS \`net_pay_in\`,
+             COALESCE(p.\`period_pay_out\`, 0) AS \`net_pay_out\`,
+             a.\`running_balance\`,
+             a.\`pay_in_commission\`, a.\`pay_out_commission\`, a.\`referral_commission\`, a.\`referral_code\`, a.\`status\`
+      FROM \`agents\` a
+      LEFT JOIN (
+        SELECT
+          COALESCE(NULLIF(t.\`assigned_agent_id\`, 0), NULLIF(pm.\`agent_id\`, 0)) AS \`agent_id\`,
+          COALESCE(SUM(CASE WHEN t.\`type\` = 'PAYIN' THEN CAST(t.\`amount\` AS DECIMAL(18,2)) ELSE 0 END), 0) AS \`period_pay_in\`,
+          COALESCE(SUM(CASE WHEN t.\`type\` = 'PAYOUT' THEN CAST(t.\`amount\` AS DECIMAL(18,2)) ELSE 0 END), 0) AS \`period_pay_out\`
+        FROM \`transactions\` t
+        LEFT JOIN \`pay_methods\` pm ON pm.\`id\` = t.\`pay_method_id\`
+        WHERE COALESCE(NULLIF(t.\`assigned_agent_id\`, 0), NULLIF(pm.\`agent_id\`, 0)) IS NOT NULL
+          AND (${range.sql})
+        GROUP BY \`agent_id\`
+      ) p ON p.\`agent_id\` = a.\`id\`
+    `;
+    params.push(...range.params);
+    if (q) {
+      sql += ` WHERE (a.\`username\` LIKE CONCAT('%', ?, '%') OR a.\`fullname\` LIKE CONCAT('%', ?, '%') OR a.\`email\` LIKE CONCAT('%', ?, '%')) `;
+      params.push(q, q, q);
+    }
+  } else {
+    sql = `
+      SELECT \`id\`, \`fullname\`, \`username\`, \`email\`, \`security_deposit\`, \`credit_limit\`,
+             \`previous_balance\`, \`net_pay_in\`, \`net_pay_out\`, \`running_balance\`,
+             \`pay_in_commission\`, \`pay_out_commission\`, \`referral_commission\`, \`referral_code\`, \`status\`
+      FROM \`agents\`
+    `;
+    if (q) {
+      sql += ` WHERE (\`username\` LIKE CONCAT('%', ?, '%') OR \`fullname\` LIKE CONCAT('%', ?, '%') OR \`email\` LIKE CONCAT('%', ?, '%')) `;
+      params.push(q, q, q);
+    }
   }
-  sql += ` ORDER BY \`id\` DESC LIMIT 500`;
+  sql += hasRange ? ` ORDER BY a.\`id\` DESC LIMIT 500` : ` ORDER BY \`id\` DESC LIMIT 500`;
 
   const [rows] = await pool.execute<AgentRow[]>(sql, params);
 
@@ -81,7 +115,7 @@ export async function GET(req: Request) {
   }));
 
   return NextResponse.json(
-    { ok: true as const, agents },
+    { ok: true as const, agents, dateRangeActive: hasRange },
     { headers: { "Cache-Control": "private, no-store, max-age=0" } },
   );
 }

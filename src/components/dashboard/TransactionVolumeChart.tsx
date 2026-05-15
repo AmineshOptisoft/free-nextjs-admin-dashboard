@@ -26,7 +26,7 @@ export default function TransactionVolumeChart() {
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch("/api/agent/transactions?type=PAYIN&limit=500", { credentials: "include" });
+        const res = await fetch("/api/agent/transactions?type=PAYIN&limit=10", { credentials: "include" });
         const data = (await res.json()) as { ok?: boolean; items?: Array<{ status: string; createdAtIso?: string }> };
         if (!mounted || !res.ok || !data.ok || !data.items) return;
         setPayins(data.items);

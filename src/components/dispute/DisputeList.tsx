@@ -4,6 +4,7 @@ import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
 import { IoIosWarning } from "react-icons/io";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
+import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 
 
 const PAGE_SIZE = 5;
@@ -111,6 +112,9 @@ function DisputeCard({ item, onReload }: { item: DisputeItem; onReload: () => vo
       if (!res.ok || !data.ok) {
         window.alert(data.error ?? "Could not update dispute.");
         return;
+      }
+      if (next === "RESOLVED") {
+        window.alert("Dispute resolved. Request is back on Pay In or Pay Out (same type as before).");
       }
       onReload();
     } catch {
@@ -249,7 +253,7 @@ export default function DisputeList() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch("/api/admin/disputes?limit=500", { credentials: "include" });
+      const res = await fetch("/api/admin/disputes?limit=10", { credentials: "include" });
       if (res.status === 401) {
         setItems([]);
         setLoadError("Please sign in to view disputes.");
@@ -274,6 +278,8 @@ export default function DisputeList() {
   useEffect(() => {
     void loadDisputes();
   }, [loadDisputes]);
+
+  useTransactionRealtimeRefresh({ onRefresh: () => void loadDisputes() });
 
   const baseData = items;
   const totalOrders = baseData.length;

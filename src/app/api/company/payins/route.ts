@@ -4,6 +4,8 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
 import { tryAssignPayInTransaction, deleteNotAssignedPayIn, PAYIN_NO_ELIGIBLE_AGENT_MESSAGE } from "@/lib/payin-assignment";
+import { companyPaymentsBlockMessage, isCompanyAcceptingPayments } from "@/lib/party-status";
+import { parseDateRangeFromSearchParams, sqlCreatedAtRange } from "@/lib/date-range";
 import { requireCompanySession } from "@/lib/require-company-api";
 import { expireOpenRequestsPastDeadline, sqlExpiresAtFromNow } from "@/lib/request-expiry";
 
@@ -76,6 +78,8 @@ export async function GET(req: Request) {
   const status = searchParams.get("status")?.trim().toUpperCase() ?? "";
   const limitRaw = Number(searchParams.get("limit") ?? "200");
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 500) : 200;
+  const { from, to } = parseDateRangeFromSearchParams(searchParams);
+  const range = sqlCreatedAtRange("t", from, to);
 
   let sql = `
     SELECT t.\`id\`, t.\`order_id\`, t.\`amount\`, t.\`status\`, t.\`client_name\`, t.\`client_upi\`,
@@ -86,9 +90,9 @@ export async function GET(req: Request) {
     FROM \`transactions\` t
     LEFT JOIN \`pay_methods\` pm ON pm.\`id\` = t.\`pay_method_id\`
     LEFT JOIN \`agents\` a ON a.\`id\` = COALESCE(NULLIF(t.\`assigned_agent_id\`, 0), NULLIF(pm.\`agent_id\`, 0))
-    WHERE t.\`company_id\` = ? AND t.\`type\` = 'PAYIN'
+    WHERE t.\`company_id\` = ? AND t.\`type\` = 'PAYIN' AND (${range.sql})
   `;
-  const params: (number | string)[] = [auth.companyId];
+  const params: (number | string | Date)[] = [auth.companyId, ...range.params];
   if (status) {
     sql += " AND t.`status` = ? ";
     params.push(status);
@@ -103,6 +107,18 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const auth = await requireCompanySession();
   if (!auth.ok) return auth.response;
+
+  const [companyRows] = await pool.execute<RowDataPacket[]>(
+    "SELECT `status` FROM `companies` WHERE `id` = ? LIMIT 1",
+    [auth.companyId],
+  );
+  const companyStatus = String(companyRows[0]?.status ?? "");
+  if (!isCompanyAcceptingPayments(companyStatus)) {
+    return NextResponse.json(
+      { ok: false, error: companyPaymentsBlockMessage(companyStatus) },
+      { status: 403 },
+    );
+  }
 
   let body: Record<string, unknown>;
   try {

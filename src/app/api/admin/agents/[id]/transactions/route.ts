@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
+import { parseDateRangeFromSearchParams, sqlCreatedAtRange } from "@/lib/date-range";
 import { requireAdminSession } from "@/lib/require-admin-api";
 
 type TxRow = RowDataPacket & {
@@ -26,7 +27,7 @@ function num(v: string | number | null | undefined): number {
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   context: { params: { id: string } | Promise<{ id: string }> },
 ) {
   const auth = await requireAdminSession();
@@ -46,12 +47,17 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Agent not found" }, { status: 404 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const { from, to } = parseDateRangeFromSearchParams(searchParams);
+  const range = sqlCreatedAtRange("t", from, to);
+  const rangeParams = range.params;
+
   const [todayRows] = await pool.execute<TodayRow[]>(
     `SELECT
-       COALESCE(SUM(CASE WHEN \`type\` = 'PAYIN' AND DATE(\`created_at\`) = CURDATE() THEN \`amount\` ELSE 0 END), 0) AS today_pay_in,
-       COALESCE(SUM(CASE WHEN \`type\` = 'PAYOUT' AND DATE(\`created_at\`) = CURDATE() THEN \`amount\` ELSE 0 END), 0) AS today_pay_out
-     FROM \`transactions\`
-     WHERE \`assigned_agent_id\` = ?`,
+       COALESCE(SUM(CASE WHEN t.\`type\` = 'PAYIN' AND DATE(t.\`created_at\`) = CURDATE() THEN t.\`amount\` ELSE 0 END), 0) AS today_pay_in,
+       COALESCE(SUM(CASE WHEN t.\`type\` = 'PAYOUT' AND DATE(t.\`created_at\`) = CURDATE() THEN t.\`amount\` ELSE 0 END), 0) AS today_pay_out
+     FROM \`transactions\` t
+     WHERE t.\`assigned_agent_id\` = ?`,
     [agentId],
   );
   const today = todayRows[0];
@@ -59,12 +65,12 @@ export async function GET(
   const todayPayOut = num(today?.today_pay_out);
 
   const [rows] = await pool.execute<TxRow[]>(
-    `SELECT \`id\`, \`order_id\`, \`amount\`, \`status\`, \`type\`, \`client_name\`, \`created_at\`
-     FROM \`transactions\`
-     WHERE \`assigned_agent_id\` = ?
-     ORDER BY \`id\` DESC
+    `SELECT t.\`id\`, t.\`order_id\`, t.\`amount\`, t.\`status\`, t.\`type\`, t.\`client_name\`, t.\`created_at\`
+     FROM \`transactions\` t
+     WHERE t.\`assigned_agent_id\` = ? AND (${range.sql})
+     ORDER BY t.\`id\` DESC
      LIMIT 500`,
-    [agentId],
+    [agentId, ...rangeParams],
   );
 
   const transactions = rows.map((r) => ({

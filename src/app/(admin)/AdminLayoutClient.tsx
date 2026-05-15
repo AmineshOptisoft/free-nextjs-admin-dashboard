@@ -1,6 +1,7 @@
 "use client";
 
 import { useSidebar } from "@/context/SidebarContext";
+import { RealtimeProvider } from "@/context/RealtimeContext";
 import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
 import Backdrop from "@/layout/Backdrop";
@@ -16,13 +17,15 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       : "lg:pl-[90px]";
 
   return (
-    <div className="min-h-screen overflow-x-hidden">
-      <AppSidebar />
-      <Backdrop />
-      <div className={`min-w-0 w-full transition-all duration-300 ease-in-out ${mainContentOffset}`}>
-        <AppHeader />
-        <div className="p-3 w-full">{children}</div>
+    <RealtimeProvider>
+      <div className="min-h-screen overflow-x-hidden">
+        <AppSidebar />
+        <Backdrop />
+        <div className={`min-w-0 w-full transition-all duration-300 ease-in-out ${mainContentOffset}`}>
+          <AppHeader />
+          <div className="p-3 w-full">{children}</div>
+        </div>
       </div>
-    </div>
+    </RealtimeProvider>
   );
 }

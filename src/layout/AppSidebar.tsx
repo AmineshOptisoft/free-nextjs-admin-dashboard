@@ -200,6 +200,8 @@ const AppSidebar: React.FC = () => {
   }, []);
 
   const effectivePanel = lockedRole ?? panel;
+  const homePath =
+    effectivePanel === "agent" ? "/agent-dashboard" : effectivePanel === "company" ? "/company-dashboard" : "/";
   const currentSections =
     effectivePanel === "admin" ? adminSections : effectivePanel === "agent" ? agentSections : companySections;
 
@@ -346,7 +348,7 @@ const AppSidebar: React.FC = () => {
     >
       {/* Logo */}
       <div className={`py-5 flex ${!isExpanded && !isHovered ? "lg:justify-center justify-start" : "lg:justify-center justify-start"}`}>
-        <Link href="/">
+        <Link href={homePath}>
           {showLabel ? (
             <>
               <Image className="dark:hidden" src="/images/logo/logo.png" alt="Logo" width={150} height={40} />

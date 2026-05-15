@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useState } from "react";
+import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 import CompanyTxnAccordionCard from "../company/CompanyTxnAccordionCard";
 import { Modal } from "../ui/modal";
 import { PiContactlessPaymentFill } from "react-icons/pi";
@@ -146,6 +147,8 @@ export default function CompanyPayInView() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useTransactionRealtimeRefresh({ types: ["PAYIN"], onRefresh: () => void load() });
 
   async function submitProof(id: string) {
     const utr = window.prompt("Enter UTR code");

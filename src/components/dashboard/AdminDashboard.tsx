@@ -596,7 +596,8 @@ export default function AdminDashboard() {
                   className="relative z-10 flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-300"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (idx === 3) exportFinancialCsv({ visibleColumnsOnly: false });
+                    if (idx === 2) router.push("/settlement-log");
+                    else if (idx === 3) exportFinancialCsv({ visibleColumnsOnly: false });
                     else if (idx === 4) {
                       downloadCsv(`manual-payin-template-${csvExportTimestamp()}.csv`, [
                         ["order_id", "amount", "client_name", "client_upi", "utr", "remarks"],

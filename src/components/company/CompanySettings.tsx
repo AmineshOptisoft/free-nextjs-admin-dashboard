@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { copyTextToClipboard } from "@/lib/copy-clipboard";
 
 type CompanyMe = {
   id: string;
@@ -61,25 +62,17 @@ export default function CompanySettings() {
 
   const copyLink = async () => {
     if (!paymentLink) return;
-    try {
-      await navigator.clipboard.writeText(paymentLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
+    const ok = await copyTextToClipboard(paymentLink);
+    setCopied(ok);
+    if (ok) setTimeout(() => setCopied(false), 1500);
   };
 
   const copyCompanyCode = async () => {
     const code = company?.company_code?.trim() ?? "";
     if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 1500);
-    } catch {
-      setCopiedCode(false);
-    }
+    const ok = await copyTextToClipboard(code);
+    setCopiedCode(ok);
+    if (ok) setTimeout(() => setCopiedCode(false), 1500);
   };
 
   return (

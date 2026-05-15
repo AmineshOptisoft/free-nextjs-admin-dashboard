@@ -3,6 +3,7 @@ import { rowToPayInItem, rowToPayOutItem, type TxRow } from "@/lib/agent-transac
 import { pool } from "@/lib/db";
 import { requireAgentSession } from "@/lib/require-agent-api";
 import { getPayoutAgentApproveDelayMinutesFromEnv } from "@/lib/payout-agent-approve-delay";
+import { isMissingDisputeStateColumn, sqlExcludeOpenDispute, sqlExcludeOpenDisputeLegacy } from "@/lib/dispute";
 import { expireOpenRequestsPastDeadline } from "@/lib/request-expiry";
 
 const SELECT_PAYIN = `
@@ -16,6 +17,7 @@ const SELECT_PAYIN = `
 export async function GET(req: Request) {
   const auth = await requireAgentSession();
   if (!auth.ok) return auth.response;
+  const agentId = auth.agentId;
 
   const { searchParams } = new URL(req.url);
   const typeRaw = searchParams.get("type")?.toUpperCase() ?? "";
@@ -26,17 +28,27 @@ export async function GET(req: Request) {
   const limitRaw = Number(searchParams.get("limit") ?? "500");
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 500) : 500;
 
-  const sql = `
-    SELECT ${SELECT_PAYIN}
-    FROM \`transactions\`
-    WHERE \`assigned_agent_id\` = ? AND \`type\` = ?
-    ORDER BY \`id\` DESC
-    LIMIT ${limit}
-  `;
+  async function loadRows(excludeDisputeSql: string) {
+    const sql = `
+      SELECT ${SELECT_PAYIN}
+      FROM \`transactions\`
+      WHERE \`assigned_agent_id\` = ? AND \`type\` = ? AND (${excludeDisputeSql})
+      ORDER BY \`id\` DESC
+      LIMIT ${limit}
+    `;
+    const [rows] = await pool.execute<TxRow[]>(sql, [agentId, typeRaw]);
+    return rows;
+  }
 
   try {
     await expireOpenRequestsPastDeadline(pool);
-    const [rows] = await pool.execute<TxRow[]>(sql, [auth.agentId, typeRaw]);
+    let rows: TxRow[];
+    try {
+      rows = await loadRows(sqlExcludeOpenDispute());
+    } catch (e: unknown) {
+      if (!isMissingDisputeStateColumn(e)) throw e;
+      rows = await loadRows(sqlExcludeOpenDisputeLegacy());
+    }
     const items =
       typeRaw === "PAYIN"
         ? rows.map((r) => rowToPayInItem(r))

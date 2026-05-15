@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 import { requireAgentSession } from "@/lib/require-agent-api";
 import { sqlExpiresAtFromNow } from "@/lib/request-expiry";
 
@@ -132,6 +133,7 @@ export async function POST(req: Request) {
 
     await conn.commit();
     const id = Number(ins.insertId);
+    emitTransactionRealtime(id, "create");
     return NextResponse.json({
       ok: true as const,
       id: String(id),

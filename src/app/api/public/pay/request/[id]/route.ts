@@ -3,6 +3,7 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
 import { payInDisplayStatus, publicPayInDisplayMethod, sqlFieldToUtf8 } from "@/lib/payin-lifecycle";
 import { isMysqlPacketTooLarge, validatePaymentProofPayload } from "@/lib/payment-proof-limits";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 import { expireOpenRequestsPastDeadline } from "@/lib/request-expiry";
 
 type TxRow = RowDataPacket & {
@@ -168,5 +169,6 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   }
   const updated = await loadTx(txId);
   if (!updated) return NextResponse.json({ ok: false, error: "Request not found" }, { status: 404 });
+  emitTransactionRealtime(txId, "proof");
   return NextResponse.json({ ok: true as const, request: mapTx(updated) });
 }

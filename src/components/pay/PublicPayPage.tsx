@@ -10,6 +10,9 @@ type CompanyInfo = {
   brand_name: string;
   logo: string | null;
   company_code: string | null;
+  status?: string;
+  paymentsEnabled?: boolean;
+  blockMessage?: string | null;
 };
 
 type PayRequest = {
@@ -155,6 +158,8 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
 
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [companyError, setCompanyError] = useState<string | null>(null);
+  const [companyBlocked, setCompanyBlocked] = useState(false);
+  const [companyBlockMessage, setCompanyBlockMessage] = useState<string | null>(null);
   const [loadingCompany, setLoadingCompany] = useState(true);
 
   const [method, setMethod] = useState<"UPI" | "BANK">("UPI");
@@ -182,6 +187,8 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
     (async () => {
       setLoadingCompany(true);
       setCompanyError(null);
+      setCompanyBlocked(false);
+      setCompanyBlockMessage(null);
       setRequest(null);
       setUtrInput("");
       setProofDataUrl(null);
@@ -194,9 +201,18 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
         if (!res.ok || !data.ok || !data.company) {
           setCompanyError(data.error ?? "Invalid payment link");
           setCompany(null);
+          setCompanyBlocked(false);
           return;
         }
         setCompany(data.company);
+        const blocked = data.company.paymentsEnabled === false;
+        setCompanyBlocked(blocked);
+        setCompanyBlockMessage(
+          blocked
+            ? data.company.blockMessage?.trim() ||
+                "This company cannot accept payment requests right now because the account has been blocked."
+            : null,
+        );
       } catch {
         if (mounted) setCompanyError("Network error while loading payment page");
       } finally {
@@ -488,7 +504,31 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
           <div className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-800">{companyError}</div>
         )}
 
-        {company && !companyError && (
+        <Modal
+          isOpen={companyBlocked && Boolean(company)}
+          onClose={() => {}}
+          showCloseButton={false}
+          closeOnBackdropClick={false}
+          closeOnEscape={false}
+          className="max-w-md"
+        >
+          <div className="p-6 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+              <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Payments unavailable</h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+              {companyBlockMessage}
+            </p>
+            {company?.brand_name && (
+              <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">{company.brand_name}</p>
+            )}
+          </div>
+        </Modal>
+
+        {company && !companyError && !companyBlocked && (
           <>
             <div className="flex flex-col items-center gap-2">
               {company.logo ? (

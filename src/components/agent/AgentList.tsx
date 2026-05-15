@@ -5,6 +5,8 @@ import CreateAgentModal from "./CreateAgentModal";
 import EditAgentModal from "./EditAgentModal";
 import Pagination from "../ui/Pagination";
 import type { Agent } from "./types";
+import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
+import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
 
 export type { Agent } from "./types";
 
@@ -88,6 +90,11 @@ export default function AgentList() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => ({
+    from: new Date(daysAgoInputDate(30) + "T00:00:00"),
+    to: new Date(todayInputDate() + "T00:00:00"),
+  }));
+  const [periodMetrics, setPeriodMetrics] = useState(false);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true;
@@ -96,11 +103,18 @@ export default function AgentList() {
       setLoadError(null);
     }
     try {
-      const res = await fetch("/api/agents", {
+      const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
+      const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
+      const res = await fetch(appendDateRangeToUrl("/api/agents", from, to), {
         credentials: "include",
         cache: "no-store",
       });
-      const data = (await res.json()) as { ok?: boolean; agents?: Agent[]; error?: string };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        agents?: Agent[];
+        error?: string;
+        dateRangeActive?: boolean;
+      };
       if (res.status === 401) {
         setLoadError("Admin sign-in required.");
         setAgents([]);
@@ -112,13 +126,14 @@ export default function AgentList() {
         return;
       }
       setAgents(data.agents);
+      setPeriodMetrics(Boolean(data.dateRangeActive));
     } catch {
       setLoadError("Network error.");
       setAgents([]);
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [dateRange]);
 
   useEffect(() => {
     void load();
@@ -143,6 +158,20 @@ export default function AgentList() {
         </svg>
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Vendors</h1>
       </div>
+
+      <DateRangePicker
+        value={dateRange}
+        onChange={(r) => {
+          setDateRange(r);
+          setPage(1);
+        }}
+        fullWidth
+      />
+      {periodMetrics && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
+          Pay-in / Pay-out totals show selected date range only.
+        </p>
+      )}
 
       {/* ── Toolbar ── */}
       <div className="flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-4 py-3">

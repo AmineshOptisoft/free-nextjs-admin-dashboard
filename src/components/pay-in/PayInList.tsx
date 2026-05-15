@@ -9,6 +9,7 @@ import { compressImageDataUrlIfLarge } from "@/lib/compress-image-data-url";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 import { PiContactlessPaymentFill } from "react-icons/pi";
 import CompanyPayInView from "./CompanyPayInView";
+import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 
 const PAGE_SIZE = 5;
 
@@ -257,16 +258,18 @@ function PayInCard({
 
       {/* right-side action buttons */}
       <div className="flex items-center gap-2 shrink-0">
-        {showApprove(item.status) && <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />}
-        {showReject(item.status) && showCancel(item.status) ? (
+        {!item.disputeRaised && showApprove(item.status) && (
+          <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />
+        )}
+        {!item.disputeRaised && showReject(item.status) && showCancel(item.status) ? (
           <DeclineMenu
             disabled={busy}
             onReject={() => onOpenAction(item, "reject")}
             onRevoke={() => onOpenAction(item, "cancel")}
           />
-        ) : showReject(item.status) ? (
+        ) : !item.disputeRaised && showReject(item.status) ? (
           <RejectButton onClick={() => onOpenAction(item, "reject")} disabled={busy} />
-        ) : showCancel(item.status) ? (
+        ) : !item.disputeRaised && showCancel(item.status) ? (
           <button
             type="button"
             disabled={busy}
@@ -446,8 +449,8 @@ export default function PayInList() {
     setListError(null);
     const endpoint =
       resolvedRole === "admin"
-        ? "/api/admin/transactions?type=PAYIN&limit=500"
-        : "/api/agent/transactions?type=PAYIN&limit=500";
+        ? "/api/admin/transactions?type=PAYIN&limit=10"
+        : "/api/agent/transactions?type=PAYIN&limit=10";
     try {
       const res = await fetch(endpoint, { credentials: "include" });
       if (res.status === 401) {
@@ -476,6 +479,13 @@ export default function PayInList() {
     void loadPayIns();
   }, [resolvedRole, loadPayIns]);
 
+  useTransactionRealtimeRefresh({
+    types: ["PAYIN"],
+    onRefresh: () => {
+      if (resolvedRole !== "company") void loadPayIns();
+    },
+  });
+
   const raiseDispute = useCallback(
     async (item: PayInItem) => {
       if (resolvedRole !== "admin") return;
@@ -494,6 +504,7 @@ export default function PayInList() {
           return;
         }
         await loadPayIns();
+        window.alert("Dispute raised. Request moved to Disputes — approve/reject blocked until resolved.");
       } catch {
         window.alert("Network error.");
       }

@@ -17,18 +17,39 @@ export async function GET() {
 
   const store = await cookies();
   const adminToken = store.get(ADMIN_COOKIE)?.value;
-  if (adminToken && verifyAdminSession(adminToken, secret)) {
-    return NextResponse.json({ ok: true as const, role: "admin" as const });
+  if (adminToken) {
+    const adminSess = verifyAdminSession(adminToken, secret);
+    if (adminSess) {
+      return NextResponse.json({
+        ok: true as const,
+        role: "admin" as const,
+        adminId: adminSess.adminId,
+      });
+    }
   }
 
   const agentToken = store.get(AGENT_COOKIE)?.value;
-  if (agentToken && verifyAgentSession(agentToken, secret)) {
-    return NextResponse.json({ ok: true as const, role: "agent" as const });
+  if (agentToken) {
+    const agentSess = verifyAgentSession(agentToken, secret);
+    if (agentSess) {
+      return NextResponse.json({
+        ok: true as const,
+        role: "agent" as const,
+        agentId: agentSess.agentId,
+      });
+    }
   }
 
   const companyToken = store.get(COMPANY_COOKIE)?.value;
-  if (companyToken && verifyCompanySession(companyToken, secret)) {
-    return NextResponse.json({ ok: true as const, role: "company" as const });
+  if (companyToken) {
+    const companySess = verifyCompanySession(companyToken, secret);
+    if (companySess) {
+      return NextResponse.json({
+        ok: true as const,
+        role: "company" as const,
+        companyId: companySess.companyId,
+      });
+    }
   }
 
   return NextResponse.json({ ok: false as const, role: null }, { status: 401 });

@@ -5,6 +5,8 @@ import CreateCompanyModal from "./CreateCompanyModal";
 import LogoImagePicker from "./LogoImagePicker";
 import Pagination from "../ui/Pagination";
 import { GoOrganization } from "react-icons/go";
+import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
+import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
 
 export type Company = {
   id: string;
@@ -293,6 +295,11 @@ export default function CompaniesList() {
   // );
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
   const [removeSubmitting, setRemoveSubmitting] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => ({
+    from: new Date(daysAgoInputDate(30) + "T00:00:00"),
+    to: new Date(todayInputDate() + "T00:00:00"),
+  }));
+  const [periodMetrics, setPeriodMetrics] = useState(false);
 
   useEffect(() => {
     if (!removeConfirmId) return;
@@ -307,8 +314,17 @@ export default function CompaniesList() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch("/api/companies", { credentials: "include" });
-      const data = (await res.json()) as { ok?: boolean; companies?: Company[]; error?: string };
+      const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
+      const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
+      const res = await fetch(appendDateRangeToUrl("/api/companies", from, to), {
+        credentials: "include",
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        companies?: Company[];
+        error?: string;
+        dateRangeActive?: boolean;
+      };
       if (res.status === 401) {
         setLoadError("Admin sign-in required.");
         setCompanies([]);
@@ -320,13 +336,14 @@ export default function CompaniesList() {
         return;
       }
       setCompanies(data.companies);
+      setPeriodMetrics(Boolean(data.dateRangeActive));
     } catch {
       setLoadError("Network error.");
       setCompanies([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dateRange]);
 
   useEffect(() => {
     void load();
@@ -415,6 +432,21 @@ export default function CompaniesList() {
           </Link>
         </div>
       )}
+      <div className="w-full sm:w-1/2 md:w-1/3 lg:w-1/4 ml-auto flex items-center justify-end">
+        <DateRangePicker
+          value={dateRange}
+          onChange={(r) => {
+            setDateRange(r);
+            setPage(1);
+          }}
+          fullWidth
+        />
+      </div>
+      {periodMetrics && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
+          In/Out column shows pay-in and pay-out totals for the selected date range.
+        </p>
+      )}
 
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
@@ -449,7 +481,14 @@ export default function CompaniesList() {
                   Company <InfoTip text="Login username and company code" />
                 </th>
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  Today (In/Out) <InfoTip text="Not stored per company yet — shown as 0" />
+                  {periodMetrics ? "Period (In/Out)" : "Today (In/Out)"}{" "}
+                  <InfoTip
+                    text={
+                      periodMetrics
+                        ? "Pay-in and pay-out totals for the selected date range"
+                        : "Today's pay-in and pay-out totals"
+                    }
+                  />
                 </th>
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Net volume (In/Out) <InfoTip text="From database net_pay_in / net_pay_out" />
@@ -576,8 +615,8 @@ export default function CompaniesList() {
                           title={c.status === "ACTIVE" ? "Deactivate" : "Activate"}
                           onClick={() => void toggleStatus(c)}
                           className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${c.status === "ACTIVE"
-                              ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
-                              : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                            ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                            : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
                             }`}
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

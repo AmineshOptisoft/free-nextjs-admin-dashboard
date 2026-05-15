@@ -4,7 +4,9 @@ import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { clientsTableHasCompanyIdColumn } from "@/lib/clients-company-column";
 import { pool } from "@/lib/db";
+import { parseDateRangeFromSearchParams, sqlCreatedAtRange } from "@/lib/date-range";
 import { requireCompanySession } from "@/lib/require-company-api";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 import { expireOpenRequestsPastDeadline, sqlExpiresAtFromNow } from "@/lib/request-expiry";
 
 type TxRow = RowDataPacket & {
@@ -80,6 +82,8 @@ export async function GET(req: Request) {
   const status = searchParams.get("status")?.trim().toUpperCase() ?? "";
   const limitRaw = Number(searchParams.get("limit") ?? "200");
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 500) : 200;
+  const { from, to } = parseDateRangeFromSearchParams(searchParams);
+  const range = sqlCreatedAtRange("t", from, to);
 
   let sql = `
     SELECT t.\`id\`, t.\`order_id\`, t.\`amount\`, t.\`status\`, t.\`client_name\`, t.\`client_upi\`,
@@ -90,9 +94,9 @@ export async function GET(req: Request) {
     FROM \`transactions\` t
     LEFT JOIN \`pay_methods\` pm ON pm.\`id\` = t.\`pay_method_id\`
     LEFT JOIN \`agents\` a ON a.\`id\` = COALESCE(NULLIF(t.\`assigned_agent_id\`, 0), NULLIF(pm.\`agent_id\`, 0))
-    WHERE t.\`company_id\` = ? AND t.\`type\` = 'PAYOUT'
+    WHERE t.\`company_id\` = ? AND t.\`type\` = 'PAYOUT' AND (${range.sql})
   `;
-  const params: (number | string)[] = [auth.companyId];
+  const params: (number | string | Date)[] = [auth.companyId, ...range.params];
   if (status) {
     sql += " AND t.`status` = ? ";
     params.push(status);
@@ -250,6 +254,7 @@ export async function POST(req: Request) {
     }
 
     await conn.commit();
+    emitTransactionRealtime(Number(res.insertId), "create");
 
     try {
       if (useClientsTable) {
