@@ -27,28 +27,36 @@ export async function GET(req: Request) {
 
   const limitRaw = Number(searchParams.get("limit") ?? "500");
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 500) : 500;
+  const pageRaw = Number(searchParams.get("page") ?? "1");
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+  const offset = (page - 1) * limit;
 
   async function loadRows(excludeDisputeSql: string) {
+    const countSql = `SELECT COUNT(*) as c FROM \`transactions\` WHERE \`assigned_agent_id\` = ? AND \`type\` = ? AND (${excludeDisputeSql})`;
+    const [countRows] = await pool.execute<any[]>(countSql, [agentId, typeRaw]);
+    const total = (countRows[0]?.c) ?? 0;
+
     const sql = `
       SELECT ${SELECT_PAYIN}
       FROM \`transactions\`
       WHERE \`assigned_agent_id\` = ? AND \`type\` = ? AND (${excludeDisputeSql})
       ORDER BY \`id\` DESC
-      LIMIT ${limit}
+      LIMIT ${limit} OFFSET ${offset}
     `;
     const [rows] = await pool.execute<TxRow[]>(sql, [agentId, typeRaw]);
-    return rows;
+    return { rows, total };
   }
 
   try {
     await expireOpenRequestsPastDeadline(pool);
-    let rows: TxRow[];
+    let loaded;
     try {
-      rows = await loadRows(sqlExcludeOpenDispute());
+      loaded = await loadRows(sqlExcludeOpenDispute());
     } catch (e: unknown) {
       if (!isMissingDisputeStateColumn(e)) throw e;
-      rows = await loadRows(sqlExcludeOpenDisputeLegacy());
+      loaded = await loadRows(sqlExcludeOpenDisputeLegacy());
     }
+    const { rows, total } = loaded as { rows: TxRow[]; total: number };
     const items =
       typeRaw === "PAYIN"
         ? rows.map((r) => rowToPayInItem(r))
@@ -57,10 +65,11 @@ export async function GET(req: Request) {
       return NextResponse.json({
         ok: true as const,
         items,
+        total,
         payoutAgentApproveDelayMinutes: getPayoutAgentApproveDelayMinutesFromEnv(),
       });
     }
-    return NextResponse.json({ ok: true as const, items });
+    return NextResponse.json({ ok: true as const, items, total });
   } catch (e: unknown) {
     const code =
       typeof e === "object" && e !== null && "code" in e ? String((e as { code?: string }).code) : "";

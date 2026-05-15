@@ -11,7 +11,7 @@ import { PiContactlessPaymentFill } from "react-icons/pi";
 import CompanyPayInView from "./CompanyPayInView";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 
@@ -426,6 +426,7 @@ export default function PayInList() {
   const [showFilter, setShowFilter] = useState(false);
 
   const [items, setItems] = useState<PayInItem[]>([]);
+  const [totalOrders, setTotalOrders] = useState(0);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<PayInItem | null>(null);
@@ -449,8 +450,8 @@ export default function PayInList() {
     setListError(null);
     const endpoint =
       resolvedRole === "admin"
-        ? "/api/admin/transactions?type=PAYIN&limit=10"
-        : "/api/agent/transactions?type=PAYIN&limit=10";
+        ? `/api/admin/transactions?type=PAYIN&limit=10&page=${page}`
+        : `/api/agent/transactions?type=PAYIN&limit=10&page=${page}`;
     try {
       const res = await fetch(endpoint, { credentials: "include" });
       if (res.status === 401) {
@@ -461,18 +462,20 @@ export default function PayInList() {
       const data = (await res.json()) as { ok?: boolean; items?: PayInItem[]; error?: string };
       if (!res.ok || !data.ok || !data.items) {
         setItems([]);
+        setTotalOrders(0);
         setListError(data.error ?? "Could not load transactions.");
         return;
       }
       setListError(null);
       setItems(data.items);
+      setTotalOrders((data as any).total ?? data.items.length);
     } catch {
       setItems([]);
       setListError("Network error.");
     } finally {
       setListLoading(false);
     }
-  }, [resolvedRole]);
+  }, [resolvedRole, page]);
 
   useEffect(() => {
     if (resolvedRole === "company") return;
@@ -547,7 +550,6 @@ export default function PayInList() {
   }
 
   const baseData = items;
-  const totalOrders = baseData.length;
 
   const counts: Partial<Record<PayInStatus | "ALL", number>> = {
     ALL: baseData.length,
@@ -920,7 +922,7 @@ export default function PayInList() {
 
       {/* Pagination */}
       <Pagination
-        total={filtered.length}
+        total={totalOrders}
         page={page}
         pageSize={PAGE_SIZE}
         onPageChange={setPage}
