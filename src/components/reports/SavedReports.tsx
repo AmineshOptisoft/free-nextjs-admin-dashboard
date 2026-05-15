@@ -1,8 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
-import { PieChartIcon } from "@/icons";
-import { IoDocumentText } from "react-icons/io5";
+import { ReportsIcon } from "@/icons/nav-icons";
 
 type ReportType = "payin" | "payout" | "dispute" | "settlement";
 
@@ -175,7 +174,7 @@ export default function SavedReports() {
     <div className="flex flex-col gap-4">
       {/* Page header */}
       <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-        <IoDocumentText className="w-6 h-6" />
+        <ReportsIcon />
         <h1 className="text-xl font-bold">Reports</h1>
       </div>
       {/* Report Management card */}

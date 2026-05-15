@@ -7,7 +7,7 @@ import { Modal } from "../ui/modal";
 import PendingExpireCountdown from "../ui/PendingExpireCountdown";
 import { compressImageDataUrlIfLarge } from "@/lib/compress-image-data-url";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
-import { PiContactlessPaymentFill } from "react-icons/pi";
+import { PayInIcon } from "@/icons/nav-icons";
 import CompanyPayInView from "./CompanyPayInView";
 
 const PAGE_SIZE = 5;
@@ -684,7 +684,7 @@ export default function PayInList() {
       {/* Page header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <PiContactlessPaymentFill className="w-6 h-6" />
+          <PayInIcon />
           <h1 className="text-xl font-bold">Pay In</h1>
         </div>
       {!listLoading && !listError && (

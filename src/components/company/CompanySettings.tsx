@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { SettingsIcon } from "@/icons/nav-icons";
 
 type CompanyMe = {
   id: string;
@@ -84,11 +85,14 @@ export default function CompanySettings() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
+      <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+        <SettingsIcon />
+        <div>
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Settings</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Payment link, QR, and company identifiers. Share the link or QR with customers to collect payments.
         </p>
+        </div>
       </div>
 
       {!loading && !loadError && company && (

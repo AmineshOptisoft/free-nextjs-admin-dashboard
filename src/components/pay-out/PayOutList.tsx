@@ -9,7 +9,7 @@ import PendingExpireCountdown from "../ui/PendingExpireCountdown";
 import { Modal } from "../ui/modal";
 import { compressImageDataUrlIfLarge } from "@/lib/compress-image-data-url";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
-import { PiContactlessPaymentFill } from "react-icons/pi";
+import { PayOutIcon } from "@/icons/nav-icons";
 
 const PAGE_SIZE = 5;
 
@@ -767,7 +767,7 @@ function CompanyPayOutView() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <PiContactlessPaymentFill className="w-6 h-6 rotate-180" />
+          <PayOutIcon />
           <h1 className="text-xl font-bold">PayOut Management</h1>
         </div>
         <button
@@ -1232,7 +1232,7 @@ export default function PayOutList() {
       {/* Page header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <PiContactlessPaymentFill className="w-6 h-6 rotate-180" />
+          <PayOutIcon />
           <h1 className="text-xl font-bold">Pay Out</h1>
         </div>
         {!listLoading && !listError && (

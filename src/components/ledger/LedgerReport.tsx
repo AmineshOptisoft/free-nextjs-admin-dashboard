@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
 import DateRangePicker, { type DateRange } from "../dashboard/DateRangePicker";
-import TableIcon from "../../icons/table.svg";
+import { LedgerIcon } from "@/icons/nav-icons";
 interface LedgerEntry {
   date: string;
   debit: number;
@@ -104,7 +104,7 @@ export default function LedgerReport() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <TableIcon className="w-6 h-6" />
+          <LedgerIcon />
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Ledger Report</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">

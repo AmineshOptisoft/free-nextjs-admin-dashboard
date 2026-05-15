@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import type { PayMethodFinancial } from "@/lib/transactions-pay-method-financials";
 import CreateUserModal, { type PaymentMethodEditPayload } from "./CreateUserModal";
 import Pagination from "../ui/Pagination";
-import { UserIcon } from "@/icons";
+import { PaymentMethodIcon } from "@/icons/nav-icons";
 
 const PAGE_SIZE = 6;
 
@@ -562,7 +562,7 @@ export default function UsersList() {
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-          <UserIcon className="w-6 h-6" />
+          <PaymentMethodIcon />
           <div>
             <h1 className="text-lg font-bold">Payment Method</h1>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Rows in pay_methods for this agent</p>

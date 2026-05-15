@@ -3,6 +3,15 @@ import React, { useCallback, useEffect, useMemo, useState, useRef, useLayoutEffe
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
+import {
+  CommissionSettlementCsvModal,
+  InterledgerEntryModal,
+  ManualDepositModal,
+  ManualPayInInlinePanel,
+  SecurityDepositModal,
+  SettlementModal,
+} from "@/components/dashboard/AdminDashboardActionForms";
+import { AdminDashboardIcon } from "@/icons/nav-icons";
 
 /* ── Types ── */
 interface VendorRow {
@@ -285,6 +294,131 @@ function vendorRowCsvCell(row: VendorRow, key: StatsColKey): string {
   return String(v ?? "");
 }
 
+type SortDir = "asc" | "desc";
+
+const COLUMN_HEADER_TITLES: Partial<Record<StatsColKey, string>> = {
+  credit:
+    "Extra PayIn headroom beyond the security pool: allowed exposure even when deposit-backed room is used up.",
+  payInCommission: "Pay-in commission % (agent)",
+  payOutCommission: "Pay-out commission % (agent)",
+  referralCommission: "Referral commission % (agent)",
+};
+
+const COLUMNS_WITH_INFO_ICON = new Set<StatsColKey>([
+  "manualPayIn",
+  "approvedPayIn",
+  "net",
+  "payInCommission",
+  "payOutCommission",
+  "referralCommission",
+]);
+
+function compareVendorRows(a: VendorRow, b: VendorRow, key: StatsColKey, dir: SortDir): number {
+  let cmp =
+    key === "vendor"
+      ? a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true })
+      : (a[key as keyof VendorRow] as number) - (b[key as keyof VendorRow] as number);
+  if (cmp === 0) {
+    cmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true });
+  }
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function ColInfoIcon() {
+  return (
+    <span className="inline-flex h-3 w-3 cursor-help items-center justify-center rounded-full bg-gray-300 text-[8px] font-bold dark:bg-gray-600">
+      i
+    </span>
+  );
+}
+
+function columnHeaderLabel(key: StatsColKey): React.ReactNode {
+  const col = FIN_STATS_COLUMNS.find((c) => c.key === key);
+  if (!col) return null;
+  if (COLUMNS_WITH_INFO_ICON.has(key)) {
+    return (
+      <>
+        {col.label}
+        &nbsp;
+        <ColInfoIcon />
+      </>
+    );
+  }
+  return col.label;
+}
+
+function SortChevrons({ active, dir }: { active: boolean; dir: SortDir }) {
+  const idle = "text-gray-300 dark:text-gray-600";
+  const on = "text-brand-500 dark:text-brand-400";
+  return (
+    <span className="inline-flex shrink-0 flex-col leading-none" aria-hidden>
+      <svg
+        className={`-mb-0.5 h-2 w-2 ${active && dir === "asc" ? on : idle}`}
+        viewBox="0 0 12 12"
+        fill="currentColor"
+      >
+        <path d="M6 3 10 8H2z" />
+      </svg>
+      <svg
+        className={`h-2 w-2 ${active && dir === "desc" ? on : idle}`}
+        viewBox="0 0 12 12"
+        fill="currentColor"
+      >
+        <path d="M6 9 2 4h8z" />
+      </svg>
+    </span>
+  );
+}
+
+function SortableHeader({
+  colKey,
+  className,
+  children,
+  title,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  colKey: StatsColKey;
+  className: string;
+  children: React.ReactNode;
+  title?: string;
+  sortKey: StatsColKey | null;
+  sortDir: SortDir;
+  onSort: (key: StatsColKey) => void;
+}) {
+  if (colKey === "actions") {
+    return (
+      <th className={className} scope="col">
+        {children}
+      </th>
+    );
+  }
+
+  const active = sortKey === colKey;
+  const ariaSort = active ? (sortDir === "asc" ? "ascending" : "descending") : "none";
+
+  return (
+    <th
+      className={className}
+      scope="col"
+      aria-sort={ariaSort}
+      title={title}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(colKey)}
+        className={`-mx-0.5 inline-flex max-w-full items-center gap-1 rounded px-0.5 text-left transition-colors hover:text-gray-800 dark:hover:text-gray-100 ${
+          active ? "text-brand-600 dark:text-brand-400" : ""
+        }`}
+      >
+        <span className="truncate">{children}</span>
+        <SortChevrons active={active} dir={sortDir} />
+      </button>
+    </th>
+  );
+}
+
 /* ── Tooltip wrapper ── */
 function Tip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -314,6 +448,10 @@ export default function AdminDashboard() {
   /** Per vendor row: which action slot (0 View, 1 Remove) is hovered — same slide + label animation as table toolbar */
   const [vendorRowHoveredAction, setVendorRowHoveredAction] = useState<{ rowId: string; slot: 0 | 1 } | null>(null);
   const [removeConfirmVendorId, setRemoveConfirmVendorId] = useState<string | null>(null);
+  const [openTopModal, setOpenTopModal] = useState<
+    "interledger" | "security-deposit" | "settlement" | "commission-csv" | "manual-deposit" | null
+  >(null);
+  const [manualPayInPanelOpen, setManualPayInPanelOpen] = useState(false);
 
   const tableToolbarRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -324,6 +462,8 @@ export default function AdminDashboard() {
   const [rowActivityFilter, setRowActivityFilter] = useState<"all" | "active" | "inactive">("all");
   const [colVisible, setColVisible] = useState<Record<StatsColKey, boolean>>(() => defaultColBoolMap(true));
   const [colHighlight, setColHighlight] = useState<Record<StatsColKey, boolean>>(() => defaultColBoolMap(false));
+  const [sortKey, setSortKey] = useState<StatsColKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -453,8 +593,18 @@ export default function AdminDashboard() {
     setRemoveConfirmVendorId(null);
   };
 
-  const topActions = [
+  type TopActionId =
+    | "interledger"
+    | "security-deposit"
+    | "settlement"
+    | "export"
+    | "manual-payin"
+    | "commission-csv"
+    | "manual-deposit";
+
+  const topActions: { id: TopActionId; label: string; icon: React.ReactNode }[] = [
     {
+      id: "interledger",
       label: "Add Interledger Entry",
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -463,6 +613,7 @@ export default function AdminDashboard() {
       ),
     },
     {
+      id: "security-deposit",
       label: "Add Security Deposit",
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -472,6 +623,7 @@ export default function AdminDashboard() {
       ),
     },
     {
+      id: "settlement",
       label: "Add Settlement",
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -481,6 +633,7 @@ export default function AdminDashboard() {
       ),
     },
     {
+      id: "export",
       label: "Export Data",
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -489,6 +642,7 @@ export default function AdminDashboard() {
       ),
     },
     {
+      id: "manual-payin",
       label: "Manual PayIn (CSV)",
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -498,6 +652,7 @@ export default function AdminDashboard() {
       ),
     },
     {
+      id: "commission-csv",
       label: "Commission Settlement (CSV)",
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -508,6 +663,7 @@ export default function AdminDashboard() {
       ),
     },
     {
+      id: "manual-deposit",
       label: "Manual Deposit",
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -516,7 +672,12 @@ export default function AdminDashboard() {
         </svg>
       ),
     },
-  ] as const;
+  ];
+
+  const subadminOptions = useMemo(
+    () => rows.map((r) => ({ id: r.id, name: r.name })),
+    [rows],
+  );
 
   const filtered = useMemo(() => {
     let list = rows.filter(
@@ -526,6 +687,23 @@ export default function AdminDashboard() {
     if (rowActivityFilter === "inactive") list = list.filter((r) => isInactiveVendorRow(r));
     return list;
   }, [rows, search, rowActivityFilter]);
+
+  const handleSort = useCallback((key: StatsColKey) => {
+    if (key === "actions") return;
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return key;
+      }
+      setSortDir("asc");
+      return key;
+    });
+  }, []);
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return filtered;
+    return [...filtered].sort((a, b) => compareVendorRows(a, b, sortKey, sortDir));
+  }, [filtered, sortKey, sortDir]);
 
   const exportFinancialCsv = useCallback(
     (opts: { visibleColumnsOnly: boolean }) => {
@@ -546,6 +724,27 @@ export default function AdminDashboard() {
     [filtered, colVisible],
   );
 
+  const handleTopAction = useCallback(
+    (id: TopActionId) => {
+      if (id === "export") {
+        exportFinancialCsv({ visibleColumnsOnly: false });
+        return;
+      }
+      if (id === "manual-payin") {
+        setOpenTopModal(null);
+        setManualPayInPanelOpen((open) => !open);
+        return;
+      }
+      setManualPayInPanelOpen(false);
+      if (id === "interledger") setOpenTopModal("interledger");
+      else if (id === "security-deposit") setOpenTopModal("security-deposit");
+      else if (id === "settlement") setOpenTopModal("settlement");
+      else if (id === "commission-csv") setOpenTopModal("commission-csv");
+      else if (id === "manual-deposit") setOpenTopModal("manual-deposit");
+    },
+    [exportFinancialCsv],
+  );
+
   const hoveredLabelSpacePx =
     hoveredToolbarIndex === null ? 0 : getActionLabelSpace(topActions[hoveredToolbarIndex].label);
   const hoveredTableActionSpacePx =
@@ -563,11 +762,7 @@ export default function AdminDashboard() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2">
-            {/* Pie chart icon */}
-            <svg className="w-5 h-5 text-gray-800 dark:text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M11 2a10 10 0 1 0 10 10h-10z" />
-              <path d="M13 2.05A10 10 0 0 1 21.95 11H13z" opacity="0.5" />
-            </svg>
+            <AdminDashboardIcon className="h-5 w-5 text-gray-800 dark:text-white" />
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Admin Dashboard</h1>
           </div>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 ml-7">
@@ -593,26 +788,14 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   aria-label={action.label}
-                  className="relative z-10 flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-300"
+                  className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-300 ${
+                    action.id === "manual-payin" && manualPayInPanelOpen
+                      ? "bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"
+                      : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  }`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (idx === 3) exportFinancialCsv({ visibleColumnsOnly: false });
-                    else if (idx === 4) {
-                      downloadCsv(`manual-payin-template-${csvExportTimestamp()}.csv`, [
-                        ["order_id", "amount", "client_name", "client_upi", "utr", "remarks"],
-                      ]);
-                    } else if (idx === 5) {
-                      downloadCsv(`commission-settlement-template-${csvExportTimestamp()}.csv`, [
-                        [
-                          "vendor_id",
-                          "vendor_name",
-                          "settlement_amount",
-                          "period_from_YYYY-MM-DD",
-                          "period_to_YYYY-MM-DD",
-                          "remarks",
-                        ],
-                      ]);
-                    }
+                    handleTopAction(action.id);
                   }}
                 >
                   {action.icon}
@@ -804,54 +987,30 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {manualPayInPanelOpen && (
+          <ManualPayInInlinePanel onClose={() => setManualPayInPanelOpen(false)} />
+        )}
+
         {/* Table (horizontal scroll) */}
         <div className="overflow-x-auto">
           <table className="w-full text-xs" style={{ minWidth: "2000px" }}>
             <thead>
               <tr className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-gray-800">
-                <th className={`${colHdr} sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 min-w-[140px]${xh("vendor")}${xv("vendor")}`}>Vendor</th>
-                <th className={`${colHdr}${xh("security")}${xv("security")}`}>Security</th>
-                <th className={`${colHdr}${xh("manualPayIn")}${xv("manualPayIn")}`}>
-                  Manual PayIn&nbsp;
-                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
-                </th>
-                <th className={`${colHdr}${xh("approvedPayIn")}${xv("approvedPayIn")}`}>
-                  Approved PayIn&nbsp;
-                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
-                </th>
-                <th className={`${colHdr}${xh("discounted")}${xv("discounted")}`}>Discounted</th>
-                <th className={`${colHdr}${xh("netPayIn")}${xv("netPayIn")}`}>Net PayIn</th>
-                <th className={`${colHdr}${xh("payout")}${xv("payout")}`}>Payout</th>
-                <th className={`${colHdr}${xh("unsettlePayout")}${xv("unsettlePayout")}`}>Unsettle Payout</th>
-                <th className={`${colHdr}${xh("settlement")}${xv("settlement")}`}>Settlement</th>
-                <th className={`${colHdr}${xh("net")}${xv("net")}`}>
-                  Net&nbsp;
-                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
-                </th>
-                <th className={`${colHdr}${xh("running")}${xv("running")}`}>Running</th>
-                <th className={`${colHdr}${xh("runningUnsettled")}${xv("runningUnsettled")}`}>Running Unsettled</th>
-                <th
-                  className={`${colHdr}${xh("credit")}${xv("credit")}`}
-                  title="Extra PayIn headroom beyond the security pool: allowed exposure even when deposit-backed room is used up."
-                >
-                  Credit
-                </th>
-                <th className={`${colHdr}${xh("finalBalance")}${xv("finalBalance")}`}>Final Balance</th>
-                <th className={`${colHdr}${xh("remainingBalance")}${xv("remainingBalance")}`}>Remaining Balance</th>
-                <th className={`${colHdr}${xh("prevBalance")}${xv("prevBalance")}`}>Previous Balance</th>
-                <th className={`${colHdr}${xh("payInCommission")}${xv("payInCommission")}`} title="Pay-in commission % (agent)">
-                  PayIn %&nbsp;
-                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
-                </th>
-                <th className={`${colHdr}${xh("payOutCommission")}${xv("payOutCommission")}`} title="Pay-out commission % (agent)">
-                  PayOut %&nbsp;
-                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
-                </th>
-                <th className={`${colHdr}${xh("referralCommission")}${xv("referralCommission")}`} title="Referral commission % (agent)">
-                  Referral %&nbsp;
-                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600 text-[8px] font-bold cursor-help">i</span>
-                </th>
-                <th className={`${colHdr} ${colActions}${xh("actions")}${xv("actions")}`}>Actions</th>
+                {FIN_STATS_COLUMNS.map((col) => (
+                  <SortableHeader
+                    key={col.key}
+                    colKey={col.key}
+                    className={`${colHdr}${
+                      col.key === "vendor" ? " sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 min-w-[140px]" : ""
+                    }${col.key === "actions" ? ` ${colActions}` : ""}${xh(col.key)}${xv(col.key)}`}
+                    title={COLUMN_HEADER_TITLES[col.key]}
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  >
+                    {columnHeaderLabel(col.key)}
+                  </SortableHeader>
+                ))}
               </tr>
 
               {showTotalsRow && (
@@ -891,7 +1050,7 @@ export default function AdminDashboard() {
             </thead>
 
             <tbody>
-              {filtered.map((row) => {
+              {sortedRows.map((row) => {
                 const rowHover = vendorRowHoveredAction?.rowId === row.id ? vendorRowHoveredAction : null;
                 const vendorRowHoveredSpacePx =
                   rowHover == null ? 0 : getActionLabelSpace(rowHover.slot === 0 ? "View" : "Remove");
@@ -1006,7 +1165,7 @@ export default function AdminDashboard() {
                 );
               })}
 
-              {filtered.length === 0 && (
+              {sortedRows.length === 0 && (
                 <tr>
                   <td colSpan={Math.max(1, visibleColCount)} className="py-12 text-center text-sm text-gray-400">No vendors found.</td>
                 </tr>
@@ -1023,6 +1182,31 @@ export default function AdminDashboard() {
           </p>
         </div>
       </div>
+
+      <InterledgerEntryModal
+        isOpen={openTopModal === "interledger"}
+        onClose={() => setOpenTopModal(null)}
+        subadmins={subadminOptions}
+      />
+      <SecurityDepositModal
+        isOpen={openTopModal === "security-deposit"}
+        onClose={() => setOpenTopModal(null)}
+        subadmins={subadminOptions}
+      />
+      <SettlementModal
+        isOpen={openTopModal === "settlement"}
+        onClose={() => setOpenTopModal(null)}
+        subadmins={subadminOptions}
+      />
+      <CommissionSettlementCsvModal
+        isOpen={openTopModal === "commission-csv"}
+        onClose={() => setOpenTopModal(null)}
+      />
+      <ManualDepositModal
+        isOpen={openTopModal === "manual-deposit"}
+        onClose={() => setOpenTopModal(null)}
+        subadmins={subadminOptions}
+      />
 
       {removeConfirmVendorId !== null && (
         <div

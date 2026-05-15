@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
-import { ListIcon } from "@/icons";
+import { SettlementLogIcon } from "@/icons/nav-icons";
 
 interface SettlementRecord {
   settlementDate: string;
@@ -33,7 +33,7 @@ export default function SettlementLog() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-        <ListIcon className="w-6 h-6" />
+        <SettlementLogIcon />
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Settlement Logs</h1>
       </div>
 
