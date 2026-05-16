@@ -11,6 +11,7 @@ import { compressImageDataUrlIfLarge } from "@/lib/compress-image-data-url";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 import { PiContactlessPaymentFill } from "react-icons/pi";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
+import { useAuth } from "@/context/AuthContext";
 import { PayOutIcon } from "@/icons/nav-icons";
 
 const PAGE_SIZE = 5;
@@ -731,6 +732,12 @@ function CompanyPayOutView() {
   const [items, setItems] = useState<CompanyPayoutItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab]);
 
   const companyTabs: { label: string; value: CompanyPayOutTab }[] = [
     { label: "All", value: "ALL" },
@@ -770,6 +777,11 @@ function CompanyPayOutView() {
   }, [loadCompanyPayouts]);
 
   useTransactionRealtimeRefresh({ types: ["PAYOUT"], onRefresh: () => void loadCompanyPayouts() });
+
+  const paginatedItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [items, page]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -823,7 +835,7 @@ function CompanyPayOutView() {
           )}
           {!loading &&
             !error &&
-            items.map((it) => (
+            paginatedItems.map((it) => (
               <CompanyTxnAccordionCard
                 key={it.id}
                 variant="PAYOUT"
@@ -844,6 +856,19 @@ function CompanyPayOutView() {
               />
             ))}
         </div>
+        {items.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1 py-3 mt-2 border-t border-gray-100 dark:border-gray-800">
+            <p className="text-xs text-gray-400 shrink-0">
+              Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, items.length)} of {items.length} entries
+            </p>
+            <Pagination
+              total={items.length}
+              page={page}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+            />
+          </div>
+        )}
       </div>
 
       <CompanyPayOutRequestModal
@@ -877,8 +902,9 @@ export default function PayOutList() {
   const [modalError, setModalError] = useState<string | null>(null);
   const [modalProofDataUrl, setModalProofDataUrl] = useState<string | null>(null);
   const [modalProofName, setModalProofName] = useState("");
+  const { user, loading: authLoading } = useAuth();
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
-  const [resolvedRole, setResolvedRole] = useState<"admin" | "agent" | "company">(panelRole);
+  const resolvedRole = (authLoading ? null : user?.role) || panelRole;
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [activeTab, setActiveTab] = useState<PayOutStatus | "ALL">("ALL");
@@ -891,32 +917,13 @@ export default function PayOutList() {
   const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
   const [payoutAgentApproveDelayMins, setPayoutAgentApproveDelayMins] = useState(10);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { ok?: boolean; role?: "admin" | "agent" | "company" };
-        if (!mounted || !data.ok || !data.role) return;
-        setResolvedRole(data.role);
-        localStorage.setItem("tepay_role", data.role);
-      } catch {
-        // keep fallback
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   const loadPayOuts = useCallback(async () => {
     setListLoading(true);
     setListError(null);
     const endpoint =
       resolvedRole === "admin"
-        ? "/api/admin/transactions?type=PAYOUT&limit=10"
-        : "/api/agent/transactions?type=PAYOUT&limit=10";
+        ? "/api/admin/transactions?type=PAYOUT"
+        : "/api/agent/transactions?type=PAYOUT";
     try {
       const res = await fetch(endpoint, { credentials: "include" });
       if (res.status === 401) {
@@ -949,9 +956,10 @@ export default function PayOutList() {
   }, [resolvedRole]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (resolvedRole === "company") return;
     void loadPayOuts();
-  }, [resolvedRole, loadPayOuts]);
+  }, [resolvedRole, loadPayOuts, authLoading]);
 
   useTransactionRealtimeRefresh({
     types: ["PAYOUT"],

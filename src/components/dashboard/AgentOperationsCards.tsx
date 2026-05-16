@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 type OpsCard = {
   title: string;
@@ -204,8 +205,10 @@ function OpsMetricCard({ title, value, subText, icon }: OpsCard) {
 
 export default function AgentOperationsCards() {
   const [ops, setOps] = useState<typeof FALLBACK>(FALLBACK);
+  const { loading: authLoading } = useAuth();
   useEffect(() => {
     let mounted = true;
+    if (authLoading) return;
     (async () => {
       try {
         const res = await fetch("/api/agent/dashboard", { credentials: "include" });
@@ -219,7 +222,7 @@ export default function AgentOperationsCards() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authLoading]);
 
   const cards = useMemo(() => buildCards(ops), [ops]);
 

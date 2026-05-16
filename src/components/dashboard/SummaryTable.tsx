@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import {
   Table,
   TableBody,
@@ -34,8 +35,10 @@ export default function SummaryTable() {
   const [payins, setPayins] = useState<Tx[]>([]);
   const [payouts, setPayouts] = useState<Tx[]>([]);
 
+  const { loading: authLoading } = useAuth();
   useEffect(() => {
     let mounted = true;
+    if (authLoading) return;
     (async () => {
       try {
         const [inRes, outRes] = await Promise.all([
@@ -54,7 +57,7 @@ export default function SummaryTable() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authLoading]);
 
   const summaryData: SummaryRow[] = useMemo(() => {
     const now = new Date();

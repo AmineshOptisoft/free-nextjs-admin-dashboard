@@ -4,6 +4,7 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { jsonStringOrNumberField } from "@/lib/auth-body";
 import { pool } from "@/lib/db";
 import { requireAdminSession } from "@/lib/require-admin-api";
+import { emitUserStatusUpdate } from "@/lib/realtime/broadcast-user";
 
 const AGENT_STATUSES = new Set(["active", "deactivated", "pending", "blocked"]);
 
@@ -201,9 +202,10 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
      FROM \`agents\` WHERE \`id\` = ? LIMIT 1`,
     [id],
   );
-  const row = rows[0];
-  if (!row) {
-    return NextResponse.json({ ok: true as const, id: String(id) });
+  if (row) {
+    if (typeof body.status === "string") {
+      emitUserStatusUpdate(id, "agent", body.status);
+    }
   }
 
   return NextResponse.json({ ok: true as const, agent: mapPublic(row) });

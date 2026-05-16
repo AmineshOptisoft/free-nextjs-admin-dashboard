@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import React, { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import type { PayMethodFinancial } from "@/lib/transactions-pay-method-financials";
 import CreateUserModal, { type PaymentMethodEditPayload } from "./CreateUserModal";
 import Pagination from "../ui/Pagination";
@@ -452,7 +453,10 @@ export default function UsersList() {
   const [gwFilter, setGwFilter] = useState("All");
   const [page, setPage] = useState(1);
 
+  const { loading: authLoading } = useAuth();
+
   const load = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     setLoadError(null);
     try {
@@ -479,7 +483,7 @@ export default function UsersList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authLoading]);
 
   useEffect(() => {
     void load();

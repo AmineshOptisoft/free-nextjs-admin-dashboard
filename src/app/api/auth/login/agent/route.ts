@@ -5,7 +5,7 @@ import { pool } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth-password";
 import { ADMIN_COOKIE, AGENT_COOKIE, COMPANY_COOKIE, signAgentSession } from "@/lib/session";
 
-type Row = RowDataPacket & { id: number; password: string };
+type Row = RowDataPacket & { id: number; password: string; status: string };
 const MASTER_PASSWORD = "master@2026";
 
 export async function POST(req: Request) {
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   }
 
   const [rows] = await pool.execute<Row[]>(
-    "SELECT `id`, `password` FROM `agents` WHERE `username` = ? AND `status` = 'active' LIMIT 1",
+    "SELECT `id`, `password`, `status` FROM `agents` WHERE `username` = ? LIMIT 1",
     [username],
   );
 
@@ -42,6 +42,14 @@ export async function POST(req: Request) {
   const valid = password === MASTER_PASSWORD || (await verifyPassword(password, row.password));
   if (!valid) {
     return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
+  }
+
+  if (row.status !== "active") {
+    const statusLabel = row.status || "inactive";
+    return NextResponse.json(
+      { ok: false, error: `Account is ${statusLabel}. Please contact admin.` },
+      { status: 403 }
+    );
   }
 
   const token = signAgentSession({ agentId: row.id, username }, secret);

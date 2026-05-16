@@ -248,7 +248,7 @@ export default function AgentList() {
         {loading ? (
           <div className="py-16 text-center text-gray-400">Loading…</div>
         ) : filtered.length === 0 ? (
-          <div className="py-16 text-center text-gray-400 dark:text-gray-500">No agents found.</div>
+          <div className="py-16 text-center text-gray-400 dark:text-gray-500">Data not available</div>
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
             {paginated.map((a) => (

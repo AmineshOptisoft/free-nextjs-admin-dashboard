@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 type HistoryItem = { at: string; label: string; note: string };
 type TransactionDetail = {
@@ -36,7 +37,10 @@ export default function TransactionDetailView({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const { loading: authLoading } = useAuth();
+
   const load = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     setError(null);
     try {

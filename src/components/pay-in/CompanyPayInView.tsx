@@ -1,8 +1,10 @@
 "use client";
 import React, { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 import CompanyTxnAccordionCard from "../company/CompanyTxnAccordionCard";
 import { Modal } from "../ui/modal";
+import Pagination from "../ui/Pagination";
 import { PayInIcon } from "@/icons/nav-icons";
 
 type CompanyPayIn = {
@@ -112,6 +114,12 @@ export default function CompanyPayInView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [tab]);
 
   const tabs: { label: string; value: TabValue }[] = [
     { label: "All", value: "ALL" },
@@ -123,7 +131,10 @@ export default function CompanyPayInView() {
     { label: "Expired", value: "EXPIRED" },
   ];
 
+  const { loading: authLoading } = useAuth();
+
   const load = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     setError(null);
     try {
@@ -142,13 +153,18 @@ export default function CompanyPayInView() {
     } finally {
       setLoading(false);
     }
-  }, [tab]);
+  }, [tab, authLoading]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useTransactionRealtimeRefresh({ types: ["PAYIN"], onRefresh: () => void load() });
+
+  const paginatedItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [items, page]);
 
   async function submitProof(id: string) {
     const utr = window.prompt("Enter UTR code");
@@ -203,7 +219,7 @@ export default function CompanyPayInView() {
       )}
 
       <div className="space-y-3">
-        {items.map((it) => (
+        {paginatedItems.map((it) => (
           <CompanyTxnAccordionCard
             key={it.id}
             variant="PAYIN"
@@ -220,20 +236,23 @@ export default function CompanyPayInView() {
             assignedToLabel={it.assignedToLabel ?? "—"}
             remarks={it.remarks ?? ""}
             expiresAtIso={it.expiresAtIso}
-            // footer={
-            //   it.status === "PENDING" || it.status === "RE_ASSIGNED" ? (
-            //     <button
-            //       type="button"
-            //       onClick={() => void submitProof(it.id)}
-            //       className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-            //     >
-            //       Submit UTR/Proof
-            //     </button>
-            //   ) : undefined
-            // }
           />
         ))}
       </div>
+
+      {items.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1 py-2">
+          <p className="text-xs text-gray-400 shrink-0">
+            Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, items.length)} of {items.length} entries
+          </p>
+          <Pagination
+            total={items.length}
+            page={page}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
+        </div>
+      )}
 
       <NewPayInRequestModal isOpen={requestOpen} onClose={() => setRequestOpen(false)} onSubmitted={() => void load()} />
     </div>

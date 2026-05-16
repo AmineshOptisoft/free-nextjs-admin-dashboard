@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 import {
   CommissionSettlementCsvModal,
@@ -437,6 +438,7 @@ function Tip({ label, children }: { label: string; children: React.ReactNode }) 
 
 /* ── Component ── */
 export default function AdminDashboard() {
+  const { loading: authLoading } = useAuth();
   const router = useRouter();
   const [rows, setRows] = useState<VendorRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -465,6 +467,7 @@ export default function AdminDashboard() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const load = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     setLoadError(null);
     try {
@@ -487,7 +490,7 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authLoading]);
 
   useEffect(() => {
     void load();
@@ -674,7 +677,7 @@ export default function AdminDashboard() {
   ];
 
   const subadminOptions = useMemo(
-    () => rows.map((r) => ({ id: r.id, name: r.name })),
+    () => rows.map((r) => ({ id: r.id, name: r.name, security: r.security, credit: r.credit })),
     [rows],
   );
 

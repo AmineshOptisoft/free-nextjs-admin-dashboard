@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { ListIcon } from "@/icons";
 import { Modal } from "../ui/modal";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
@@ -51,6 +52,7 @@ function todayInputDate(): string {
 }
 
 export default function SettlementLog() {
+  const { loading: authLoading } = useAuth();
   const [tab, setTab] = useState<PartyType>("AGENT");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -74,6 +76,7 @@ export default function SettlementLog() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const loadParties = useCallback(async () => {
+    if (authLoading) return;
     try {
       const [ar, cr] = await Promise.all([
         fetch("/api/agents", { credentials: "include" }),
@@ -103,9 +106,10 @@ export default function SettlementLog() {
     } catch {
       /* optional */
     }
-  }, []);
+  }, [authLoading]);
 
   const loadSettlements = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     setLoadError(null);
     try {
@@ -128,15 +132,15 @@ export default function SettlementLog() {
     } finally {
       setLoading(false);
     }
-  }, [tab, from, to, statusFilter]);
+  }, [tab, from, to, statusFilter, authLoading]);
 
   useEffect(() => {
-    void loadParties();
-  }, [loadParties]);
+    if (!authLoading) void loadParties();
+  }, [loadParties, authLoading]);
 
   useEffect(() => {
-    void loadSettlements();
-  }, [loadSettlements]);
+    if (!authLoading) void loadSettlements();
+  }, [loadSettlements, authLoading]);
 
   const partyOptions = tab === "AGENT" ? agents : companies;
   const partyFieldLabel = tab === "AGENT" ? "Subadmin" : "Company";

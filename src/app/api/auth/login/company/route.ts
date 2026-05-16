@@ -44,10 +44,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
   }
 
-  if (row.status !== "ACTIVE") {
-    const statusLabel = row.status || "UNKNOWN";
+  if (row.status?.toUpperCase() !== "ACTIVE") {
     return NextResponse.json(
-      { ok: false, error: `Account is ${statusLabel}. Please contact admin to activate company.` },
+      { ok: false, error: "Account is deactivated. Please contact admin." },
       { status: 403 },
     );
   }

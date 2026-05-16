@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 import Pagination from "../ui/Pagination";
 import LogoImagePicker from "./LogoImagePicker";
@@ -105,9 +106,12 @@ export default function CompanyDetail({ id }: { id: string }) {
     [id],
   );
 
+  const { loading: authLoading } = useAuth();
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      if (authLoading) return;
       setLoadError(null);
       setApiCompany(null);
       if (!id || id === "undefined") {
@@ -140,6 +144,7 @@ export default function CompanyDetail({ id }: { id: string }) {
   useEffect(() => {
     let cancelled = false;
     async function loadTx() {
+      if (authLoading) return;
       if (!id || id === "undefined") {
         setTxLoading(false);
         setTransactions([]);

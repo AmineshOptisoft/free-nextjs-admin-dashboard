@@ -47,21 +47,29 @@ export default function TransactionStatusDistributionTable({
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {rows.map((row, idx) => (
-              <TableRow key={`${row.status}-${idx}`} className="hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payInCount}</TableCell>
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payInAmount}</TableCell>
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payOutCount}</TableCell>
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payOutAmount}</TableCell>
-                <TableCell className="px-5 py-3 text-sm">
-                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyle(row.status)}`}>
-                    {row.status}
-                  </span>
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell className="px-5 py-6 text-center text-sm text-gray-400" colSpan={7}>
+                  Data not available
                 </TableCell>
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalCount}</TableCell>
-                <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalAmount}</TableCell>
               </TableRow>
-            ))}
+            ) : (
+              rows.map((row, idx) => (
+                <TableRow key={`${row.status}-${idx}`} className="hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payInCount}</TableCell>
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payInAmount}</TableCell>
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payOutCount}</TableCell>
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.payOutAmount}</TableCell>
+                  <TableCell className="px-5 py-3 text-sm">
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyle(row.status)}`}>
+                      {row.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalCount}</TableCell>
+                  <TableCell className="px-5 py-3 text-sm text-gray-700 dark:text-gray-200">{row.totalAmount}</TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>

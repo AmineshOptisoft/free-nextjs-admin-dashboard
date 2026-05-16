@@ -10,6 +10,7 @@ import { csvExportTimestamp, downloadCsv } from "@/lib/csv-download";
 import { PayInIcon } from "@/icons/nav-icons";
 import CompanyPayInView from "./CompanyPayInView";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
+import { useAuth } from "@/context/AuthContext";
 
 const PAGE_SIZE = 10;
 
@@ -396,31 +397,13 @@ const STATUS_FILTER_OPTIONS = ["All", "PENDING", "APPROVED", "EXPIRED", "RECEIPT
 type ActionType = "approve" | "reject" | "cancel";
 
 export default function PayInList() {
+  const { user, loading: authLoading } = useAuth();
   const [panelRole] = useState<"admin" | "agent" | "company">(() => {
     if (typeof window === "undefined") return "admin";
     const role = localStorage.getItem("tepay_role");
     return role === "agent" || role === "company" ? role : "admin";
   });
-  const [resolvedRole, setResolvedRole] = useState<"admin" | "agent" | "company">(panelRole);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { ok?: boolean; role?: "admin" | "agent" | "company" };
-        if (!mounted || !data.ok || !data.role) return;
-        setResolvedRole(data.role);
-        localStorage.setItem("tepay_role", data.role);
-      } catch {
-        // fallback to localStorage role
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const resolvedRole = (authLoading ? null : user?.role) || panelRole;
 
   const [activeTab, setActiveTab] = useState<PayInStatus | "ALL">("ALL");
   const [showFilter, setShowFilter] = useState(false);
@@ -450,8 +433,8 @@ export default function PayInList() {
     setListError(null);
     const endpoint =
       resolvedRole === "admin"
-        ? `/api/admin/transactions?type=PAYIN&limit=10&page=${page}`
-        : `/api/agent/transactions?type=PAYIN&limit=10&page=${page}`;
+        ? `/api/admin/transactions?type=PAYIN`
+        : `/api/agent/transactions?type=PAYIN`;
     try {
       const res = await fetch(endpoint, { credentials: "include" });
       if (res.status === 401) {
@@ -475,12 +458,13 @@ export default function PayInList() {
     } finally {
       setListLoading(false);
     }
-  }, [resolvedRole, page]);
+  }, [resolvedRole]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (resolvedRole === "company") return;
     void loadPayIns();
-  }, [resolvedRole, loadPayIns]);
+  }, [resolvedRole, loadPayIns, authLoading]);
 
   useTransactionRealtimeRefresh({
     types: ["PAYIN"],
@@ -922,7 +906,7 @@ export default function PayInList() {
 
       {/* Pagination */}
       <Pagination
-        total={totalOrders}
+        total={filtered.length}
         page={page}
         pageSize={PAGE_SIZE}
         onPageChange={setPage}

@@ -2,9 +2,11 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { getTransactionSocket } from "@/lib/realtime/socket-client";
-import { TRANSACTION_UPDATE_EVENT, type TransactionRealtimePayload } from "@/lib/realtime/types";
+import { TRANSACTION_UPDATE_EVENT, USER_UPDATE_EVENT, type TransactionRealtimePayload, type UserRealtimePayload } from "@/lib/realtime/types";
+import { useAuth } from "./AuthContext";
 
-type Listener = (payload: TransactionRealtimePayload) => void;
+type ListenerPayload = { type: "transaction"; data: TransactionRealtimePayload } | { type: "user"; data: UserRealtimePayload };
+type Listener = (payload: ListenerPayload) => void;
 
 type RealtimeContextValue = {
   connected: boolean;
@@ -14,6 +16,7 @@ type RealtimeContextValue = {
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
 
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
   const [connected, setConnected] = useState(false);
   const listenersRef = useRef(new Set<Listener>());
 
@@ -25,6 +28,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (authLoading || !user) return;
+
     let mounted = true;
     let socket = getTransactionSocket();
 
@@ -37,43 +42,43 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     const onUpdate = (payload: TransactionRealtimePayload) => {
       for (const fn of listenersRef.current) {
         try {
-          fn(payload);
+          fn({ type: "transaction", data: payload });
+        } catch (e) {
+          console.error("[realtime] listener error", e);
+        }
+      }
+    };
+    const onUserUpdate = (payload: UserRealtimePayload) => {
+      for (const fn of listenersRef.current) {
+        try {
+          fn({ type: "user", data: payload });
         } catch (e) {
           console.error("[realtime] listener error", e);
         }
       }
     };
 
-    const setup = async () => {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (!mounted || !res.ok) return;
-        const data = (await res.json()) as { ok?: boolean };
-        if (!data.ok) return;
-
-        socket = getTransactionSocket();
-        socket.off("connect", onConnect);
-        socket.off("disconnect", onDisconnect);
-        socket.off(TRANSACTION_UPDATE_EVENT, onUpdate);
-        socket.on("connect", onConnect);
-        socket.on("disconnect", onDisconnect);
-        socket.on(TRANSACTION_UPDATE_EVENT, onUpdate);
-        if (!socket.connected) socket.connect();
-        else setConnected(true);
-      } catch {
-        // not signed in or network error
-      }
-    };
-
-    void setup();
+    socket = getTransactionSocket();
+    socket.off("connect", onConnect);
+    socket.off("disconnect", onDisconnect);
+    socket.off(TRANSACTION_UPDATE_EVENT, onUpdate);
+    socket.off(USER_UPDATE_EVENT, onUserUpdate);
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on(TRANSACTION_UPDATE_EVENT, onUpdate);
+    socket.on(USER_UPDATE_EVENT, onUserUpdate);
+    
+    if (!socket.connected) socket.connect();
+    else setConnected(true);
 
     return () => {
       mounted = false;
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off(TRANSACTION_UPDATE_EVENT, onUpdate);
+      socket.off(USER_UPDATE_EVENT, onUserUpdate);
     };
-  }, []);
+  }, [user, authLoading]);
 
   return (
     <RealtimeContext.Provider value={{ connected, subscribe }}>{children}</RealtimeContext.Provider>

@@ -15,6 +15,7 @@ import { GrTransaction } from "react-icons/gr";
 import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
 import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
 import { TransactionReportIcon } from "@/icons/nav-icons";
+import { useAuth } from "@/context/AuthContext";
 
 type Tx = {
   id: string;
@@ -26,7 +27,7 @@ type Tx = {
   assignedToLabel?: string;
 };
 
-
+type ApiResponse = { ok?: boolean; payins?: Tx[]; payouts?: Tx[]; error?: string };
 
 function inr(v: number): string {
   return `₹${Math.round(v).toLocaleString("en-IN")}`;
@@ -59,64 +60,56 @@ function aggregateByStatus(payIns: Tx[], payOuts: Tx[]): TransactionStatusDistri
   }));
 }
 
-type ApiResponse = { ok?: boolean; payins?: Tx[]; payouts?: Tx[]; error?: string };
-type MeResponse = { ok?: boolean; role?: "admin" | "agent" | "company" };
-
 export default function TransactionReport() {
+  const { user } = useAuth();
   const [payIns, setPayIns] = useState<Tx[]>([]);
   const [payOuts, setPayOuts] = useState<Tx[]>([]);
-  const [role, setRole] = useState<"admin" | "agent" | "company">("admin");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | null>(() => ({
     from: new Date(daysAgoInputDate(30) + "T00:00:00"),
     to: new Date(todayInputDate() + "T00:00:00"),
   }));
+  const { loading: authLoading } = useAuth();
+
+  const role = user?.role || "admin";
 
   useEffect(() => {
     let mounted = true;
+    if (authLoading) return;
     (async () => {
       setLoading(true);
       setError(null);
       try {
-        const meRes = await fetch("/api/auth/me", { credentials: "include" });
-        const me = (await meRes.json()) as MeResponse;
-        const currentRole: "admin" | "agent" | "company" = me.ok && me.role ? me.role : "admin";
-        if (!mounted) return;
-        setRole(currentRole);
-
-        if (currentRole === "admin") {
+        if (role === "admin") {
           const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
           const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
           const res = await fetch(appendDateRangeToUrl("/api/admin/transaction-report?limit=5000", from, to), {
             credentials: "include",
           });
           const data = (await res.json()) as ApiResponse;
+          if (!mounted) return;
           if (!res.ok || !data.ok) {
             setError(data.error ?? "Could not load report data.");
+            setLoading(false);
             return;
           }
           setPayIns(data.payins ?? []);
           setPayOuts(data.payouts ?? []);
-        } else {
+        } else if (role === "company") {
           const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
           const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
-          const piUrl = appendDateRangeToUrl("/api/company/payins?limit=10", from, to);
-          const poUrl = appendDateRangeToUrl("/api/company/payouts?limit=10", from, to);
           const [piRes, poRes] = await Promise.all([
-            fetch(piUrl, { credentials: "include" }),
-            fetch(poUrl, { credentials: "include" }),
+            fetch(appendDateRangeToUrl("/api/company/payins?limit=5000", from, to), { credentials: "include" }),
+            fetch(appendDateRangeToUrl("/api/company/payouts?limit=5000", from, to), { credentials: "include" }),
           ]);
-          const pi = (await piRes.json()) as ApiResponse;
-          const po = (await poRes.json()) as ApiResponse;
-          if (!piRes.ok || !poRes.ok || !pi.ok || !po.ok) {
-            setError(pi.error ?? po.error ?? "Could not load report data.");
-            return;
-          }
+          const pi = (await piRes.json()) as { ok?: boolean; payins?: Tx[] };
+          const po = (await poRes.json()) as { ok?: boolean; payouts?: Tx[] };
+          if (!mounted) return;
           setPayIns(pi.payins ?? []);
           setPayOuts(po.payouts ?? []);
         }
-      } catch {
+      } catch (err) {
         if (mounted) setError("Network error.");
       } finally {
         if (mounted) setLoading(false);
@@ -125,7 +118,7 @@ export default function TransactionReport() {
     return () => {
       mounted = false;
     };
-  }, [dateRange]);
+  }, [dateRange, role, authLoading]);
 
   const totals = useMemo(() => {
     const all = [...payIns, ...payOuts];
@@ -243,16 +236,17 @@ export default function TransactionReport() {
       <div className="flex items-center gap-2 text-gray-900 dark:text-white">
         <TransactionReportIcon />
         <h1 className="text-xl font-bold">Transaction Report</h1>
+        <div className="w-full sm:w-1/2 md:w-1/3 lg:w-1/4 ml-auto flex items-center justify-end">
+          <DateRangePicker
+            value={dateRange}
+            onChange={(r) => setDateRange(r)}
+          />
+        </div>
       </div>
-      <p className="text-xs text-purple-600 dark:text-purple-400">
+      {/* <p className="text-xs text-purple-600 dark:text-purple-400">
         {role === "admin" ? "Live admin-wide data" : "Live company-only data"}
-      </p>
-      <div className="w-full sm:w-1/2 md:w-1/3 lg:w-1/4 ml-auto flex items-center justify-end">
-        <DateRangePicker
-          value={dateRange}
-          onChange={(r) => setDateRange(r)}
-        />
-      </div>
+      </p> */}
+
       {loading && <div className="text-sm text-gray-500">Loading report data...</div>}
       {error && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{error}</div>}
       <TransactionSummaryCards cards={summaryCards} />

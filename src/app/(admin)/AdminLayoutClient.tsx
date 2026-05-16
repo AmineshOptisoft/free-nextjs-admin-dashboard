@@ -6,6 +6,7 @@ import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
 import Backdrop from "@/layout/Backdrop";
 import React from "react";
+import RealtimeNotifications from "@/components/realtime/RealtimeNotifications";
 
 export default function AdminLayoutClient({ children }: { children: React.ReactNode }) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
@@ -18,6 +19,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
 
   return (
     <RealtimeProvider>
+      <RealtimeNotifications />
       <div className="min-h-screen overflow-x-hidden">
         <AppSidebar />
         <Backdrop />

@@ -282,7 +282,10 @@ function InfoTip({ text }: { text: string }) {
   );
 }
 
+import { useAuth } from "@/context/AuthContext";
+
 export default function CompaniesList() {
+  const { loading: authLoading } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -290,10 +293,6 @@ export default function CompaniesList() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // const [companies, setCompanies] = useState<Company[]>(() => mockCompanies.map((c) => ({ ...c })));
-  // const [statuses, setStatuses] = useState<Record<string, Company["status"]>>(() =>
-  //   Object.fromEntries(mockCompanies.map((c) => [c.id, c.status]))
-  // );
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
   const [removeSubmitting, setRemoveSubmitting] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | null>(() => ({
@@ -312,6 +311,7 @@ export default function CompaniesList() {
   }, [removeConfirmId]);
 
   const load = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     setLoadError(null);
     try {
@@ -344,7 +344,7 @@ export default function CompaniesList() {
     } finally {
       setLoading(false);
     }
-  }, [dateRange]);
+  }, [dateRange, authLoading]);
 
   useEffect(() => {
     void load();
@@ -513,7 +513,7 @@ export default function CompaniesList() {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-5 py-14 text-center text-gray-400 dark:text-gray-500">
-                    No companies found.
+                    Data not available
                   </td>
                 </tr>
               ) : (

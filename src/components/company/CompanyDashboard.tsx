@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
+import Pagination from "../ui/Pagination";
 import { CompanyDashboardIcon } from "@/icons/nav-icons";
 
 type SummaryCard = { title: string; value: string; sub: string };
@@ -75,6 +77,12 @@ export default function CompanyDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
 
   useEffect(() => {
     const onRefresh = () => setRefreshTick((t) => t + 1);
@@ -82,8 +90,11 @@ export default function CompanyDashboard() {
     return () => window.removeEventListener("tepay:company-dashboard-refresh", onRefresh);
   }, []);
 
+  const { loading: authLoading } = useAuth();
+
   useEffect(() => {
     let mounted = true;
+    if (authLoading) return;
     (async () => {
       setLoading(true);
       setError(null);
@@ -134,7 +145,7 @@ export default function CompanyDashboard() {
     return () => {
       mounted = false;
     };
-  }, [refreshTick]);
+  }, [refreshTick, authLoading]);
 
   const liveCards = useMemo(() => {
     if (!payIns.length && !payOuts.length) return cards;
@@ -202,6 +213,11 @@ export default function CompanyDashboard() {
     );
   }, [recentRows, searchQuery]);
 
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, page]);
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
@@ -249,14 +265,14 @@ export default function CompanyDashboard() {
               </TableRow>
             </TableHeader>
             <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {filteredRows.length === 0 ? (
+              {paginatedRows.length === 0 ? (
                 <TableRow>
                   <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                     No transactions to show.
                   </td>
                 </TableRow>
               ) : (
-                filteredRows.map((row) => (
+                paginatedRows.map((row) => (
                   <TableRow key={`${row.type}-${row.id}`} className="hover:bg-gray-50/60 dark:hover:bg-white/2">
                     <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.transactionId}</TableCell>
                     <TableCell className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.date}</TableCell>
@@ -287,6 +303,19 @@ export default function CompanyDashboard() {
             </TableBody>
           </Table>
         </div>
+        {filteredRows.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-white/[0.02]">
+            <p className="text-xs text-gray-400 shrink-0">
+              Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, filteredRows.length)} of {filteredRows.length} entries
+            </p>
+            <Pagination
+              total={filteredRows.length}
+              page={page}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

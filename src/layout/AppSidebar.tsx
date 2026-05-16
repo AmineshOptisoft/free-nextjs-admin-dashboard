@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { useAuth } from "../context/AuthContext";
 import { ChevronDownIcon, HorizontaLDots } from "../icons/index";
 import {
   NavAdminDashboardIcon,
@@ -54,6 +55,7 @@ const adminSections: NavSection[] = [
       { icon: <NavDisputesIcon />,           name: "Disputes",           path: "/dispute" },
       { icon: <NavSettlementLogIcon />,      name: "Settlement Log",     path: "/settlement-log" },
       { icon: <NavLedgerIcon />,             name: "Ledger",             path: "/ledger" },
+      { icon: <NavLedgerIcon />,             name: "Interledger History", path: "/interledger-history" },
       { icon: <NavNotificationsIcon />,      name: "Notifications",      path: "/notifications" },
     ],
   },
@@ -144,41 +146,27 @@ const PANEL_THEME: Record<PanelType, { borderBgText: string; iconBg: string; act
 /* ── Component ──────────────────────────────────────────────── */
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
+  const { user } = useAuth();
   const pathname = usePathname();
 
   /* Panel switcher */
   const [panel, setPanel] = useState<PanelType>("admin");
-  const [lockedRole, setLockedRole] = useState<PanelType | null>(null);
   const [panelDropOpen, setPanelDropOpen] = useState(false);
   const panelDropRef = useRef<HTMLDivElement>(null);
 
-  /* Load saved panel from localStorage */
-  useEffect(() => {
-    const saved = localStorage.getItem("tepay_panel") as PanelType | null;
-    if (saved === "admin" || saved === "agent" || saved === "company") setPanel(saved);
-  }, []);
+  const lockedRole = user?.role || null;
 
-  /* Lock panel from current login role if available */
+  /* Sync panel with auth role */
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { ok?: boolean; role?: PanelType };
-        if (!mounted || !data.ok || !data.role) return;
-        setLockedRole(data.role);
-        setPanel(data.role);
-        localStorage.setItem("tepay_panel", data.role);
-        localStorage.setItem("tepay_role", data.role);
-      } catch {
-        // keep previous behavior on failures
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    if (lockedRole) {
+      setPanel(lockedRole);
+      localStorage.setItem("tepay_panel", lockedRole);
+      localStorage.setItem("tepay_role", lockedRole);
+    } else {
+      const saved = localStorage.getItem("tepay_panel") as PanelType | null;
+      if (saved === "admin" || saved === "agent" || saved === "company") setPanel(saved);
+    }
+  }, [lockedRole]);
 
   /* Save panel choice */
   const switchPanel = (p: PanelType) => {

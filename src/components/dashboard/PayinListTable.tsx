@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import {
   Table,
   TableBody,
@@ -38,8 +39,10 @@ export default function PayinListTable() {
   const [rows, setRows] = useState<PayinRow[]>(tableData);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const { loading: authLoading } = useAuth();
   useEffect(() => {
     let mounted = true;
+    if (authLoading) return;
     (async () => {
       try {
         const res = await fetch("/api/agent/staff", { credentials: "include" });
@@ -87,7 +90,7 @@ export default function PayinListTable() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authLoading]);
 
   const filtered = useMemo(
     () =>

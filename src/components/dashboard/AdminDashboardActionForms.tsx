@@ -3,7 +3,21 @@
 import React, { useRef, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 
-export type SubadminOption = { id: string; name: string };
+export type SubadminOption = { id: string; name: string; security?: number; credit?: number };
+
+function AgentBalanceInfo({ agent }: { agent?: SubadminOption }) {
+  if (!agent) return null;
+  return (
+    <div className="mb-2 flex gap-3 text-[11px] font-medium">
+      <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+        Current Deposit: ₹{agent.security?.toLocaleString("en-IN") ?? 0}
+      </span>
+      <span className="rounded-md bg-purple-50 px-2 py-1 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
+        Credit Limit: ₹{agent.credit?.toLocaleString("en-IN") ?? 0}
+      </span>
+    </div>
+  );
+}
 
 const fieldInput =
   "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:placeholder:text-gray-500";
@@ -240,6 +254,8 @@ export function InterledgerEntryModal({
   const [destType, setDestType] = useState<"security" | "settlement">("security");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
     setTransferDate(todayInputDate());
@@ -249,11 +265,47 @@ export function InterledgerEntryModal({
     setDestType("security");
     setAmount("");
     setNotes("");
+    setError(null);
   };
 
   const handleClose = () => {
     reset();
     onClose();
+  };
+
+  const handleSubmit = async () => {
+    if (!sourceId || !destId || !amount) {
+      setError("Please fill all required fields.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/interledger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transferDate,
+          sourceId,
+          destId,
+          sourceType,
+          destType,
+          amount,
+          notes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data.error || "Failed to execute transfer.");
+        setBusy(false);
+        return;
+      }
+      handleClose();
+      // Optional: you can trigger a refresh function here if passed in props
+    } catch (err) {
+      setError("Network error occurred.");
+      setBusy(false);
+    }
   };
 
   return (
@@ -264,6 +316,12 @@ export function InterledgerEntryModal({
           account types (Security ⇄ Settlement). The source account will be debited and destination account will be
           credited.
         </div>
+
+        {error && (
+          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-900/40">
+            {error}
+          </div>
+        )}
 
         <div>
           <label className={fieldLabel}>Transfer Date</label>
@@ -323,6 +381,7 @@ export function InterledgerEntryModal({
 
         <div>
           <label className={fieldLabel}>Transfer Amount</label>
+          <AgentBalanceInfo agent={subadmins.find(s => s.id === sourceId)} />
           <input
             type="text"
             inputMode="decimal"
@@ -345,7 +404,7 @@ export function InterledgerEntryModal({
           />
         </div>
       </FormShell>
-      <ModalFooter onCancel={handleClose} submitLabel="Execute Transfer" onSubmit={handleClose} />
+      <ModalFooter onCancel={handleClose} submitLabel={busy ? "Processing..." : "Execute Transfer"} onSubmit={handleSubmit} />
     </Modal>
   );
 }
@@ -362,17 +421,51 @@ export function SecurityDepositModal({
   const [subadminId, setSubadminId] = useState("");
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleClose = () => {
     setSubadminId("");
     setAmount("");
     setRemarks("");
+    setError(null);
     onClose();
+  };
+
+  const handleSubmit = async () => {
+    if (!subadminId || !amount) {
+      setError("Please select a subadmin and enter an amount.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/security-deposit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subadminId, amount, remarks }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data.error || "Failed to add security deposit.");
+        setBusy(false);
+        return;
+      }
+      handleClose();
+    } catch (err) {
+      setError("Network error occurred.");
+      setBusy(false);
+    }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} className="max-w-lg p-6 lg:p-8">
       <FormShell title="Add Security Deposit">
+        {error && (
+          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-900/40">
+            {error}
+          </div>
+        )}
         <div>
           <label className={fieldLabel}>Subadmin</label>
           <SubadminSelect
@@ -384,6 +477,7 @@ export function SecurityDepositModal({
         </div>
         <div>
           <label className={fieldLabel}>Amount</label>
+          <AgentBalanceInfo agent={subadmins.find(s => s.id === subadminId)} />
           <input
             type="text"
             inputMode="decimal"
@@ -407,7 +501,7 @@ export function SecurityDepositModal({
           />
         </div>
       </FormShell>
-      <ModalFooter onCancel={handleClose} submitLabel="Submit Deposit" onSubmit={handleClose} />
+      <ModalFooter onCancel={handleClose} submitLabel={busy ? "Processing..." : "Submit Deposit"} onSubmit={handleSubmit} />
     </Modal>
   );
 }
@@ -459,6 +553,7 @@ export function SettlementModal({
         </div>
         <div>
           <label className={fieldLabel}>Amount</label>
+          <AgentBalanceInfo agent={subadmins.find(s => s.id === subadminId)} />
           <input
             type="text"
             inputMode="decimal"

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { ArrowUpIcon, ArrowDownIcon } from "@/icons";
 
 interface MetricCardProps {
@@ -60,6 +61,7 @@ function MetricCard({ title, value, subValue, change, color, icon }: MetricCardP
 }
 
 export default function DashboardMetrics() {
+  const { loading: authLoading } = useAuth();
   const [data, setData] = useState<{
     total_payin_amount: number;
     success_payin_amount: number;
@@ -72,6 +74,7 @@ export default function DashboardMetrics() {
 
   useEffect(() => {
     let mounted = true;
+    if (authLoading) return;
     (async () => {
       try {
         const res = await fetch("/api/agent/dashboard", { credentials: "include" });
@@ -85,7 +88,7 @@ export default function DashboardMetrics() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authLoading]);
 
   const totalPayIn = data?.total_payin_amount ?? 0;
   const successPayIn = data?.success_payin_amount ?? 0;

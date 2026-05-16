@@ -2,23 +2,17 @@
 
 import { useEffect, useRef } from "react";
 import { useRealtime } from "@/context/RealtimeContext";
+import { useAuth, UserSession } from "@/context/AuthContext";
 import type { TransactionRealtimePayload } from "@/lib/realtime/types";
 
-type MeResponse = {
-  ok?: boolean;
-  role?: "admin" | "agent" | "company";
-  agentId?: number;
-  companyId?: number;
-};
-
-function shouldRefresh(payload: TransactionRealtimePayload, me: MeResponse | null): boolean {
-  if (!me?.ok || !me.role) return false;
-  if (me.role === "admin") return true;
-  if (me.role === "agent") {
-    return payload.assignedAgentId != null && payload.assignedAgentId === me.agentId;
+function shouldRefresh(payload: TransactionRealtimePayload, user: UserSession | null): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (user.role === "agent") {
+    return payload.assignedAgentId != null && String(payload.assignedAgentId) === user.id;
   }
-  if (me.role === "company") {
-    return payload.companyId != null && payload.companyId === me.companyId;
+  if (user.role === "company") {
+    return payload.companyId != null && String(payload.companyId) === user.id;
   }
   return false;
 }
@@ -31,44 +25,19 @@ export function useTransactionRealtimeRefresh(opts: {
   onRefresh: () => void;
 }) {
   const { subscribe } = useRealtime();
+  const { user } = useAuth();
   const onRefreshRef = useRef(opts.onRefresh);
   onRefreshRef.current = opts.onRefresh;
-  const meRef = useRef<MeResponse | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (!res.ok || !mounted) return;
-        meRef.current = (await res.json()) as MeResponse;
-      } catch {
-        meRef.current = null;
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     return subscribe((payload) => {
-      if (opts.types && !opts.types.includes(payload.type)) return;
+      if (payload.type !== "transaction") return;
+      const data = payload.data;
+      if (opts.types && !opts.types.includes(data.type)) return;
 
-      const run = async () => {
-        if (!meRef.current?.ok) {
-          try {
-            const res = await fetch("/api/auth/me", { credentials: "include" });
-            if (res.ok) meRef.current = (await res.json()) as MeResponse;
-          } catch {
-            /* ignore */
-          }
-        }
-        if (!shouldRefresh(payload, meRef.current)) return;
+      if (shouldRefresh(data, user)) {
         onRefreshRef.current();
-      };
-
-      void run();
+      }
     });
-  }, [subscribe, opts.types]);
+  }, [subscribe, opts.types, user]);
 }

@@ -2,6 +2,7 @@
 import dynamic from "next/dynamic";
 import { ApexOptions } from "apexcharts";
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -22,8 +23,10 @@ export default function TransactionVolumeChart() {
   const [period, setPeriod] = useState<Period>("30 Days");
   const [payins, setPayins] = useState<Array<{ status: string; createdAtIso?: string }>>([]);
 
+  const { loading: authLoading } = useAuth();
   useEffect(() => {
     let mounted = true;
+    if (authLoading) return;
     (async () => {
       try {
         const res = await fetch("/api/agent/transactions?type=PAYIN&limit=10", { credentials: "include" });
@@ -37,7 +40,7 @@ export default function TransactionVolumeChart() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authLoading]);
 
   const d = useMemo(() => {
     const days = period === "7 Days" ? 7 : period === "30 Days" ? 30 : 90;

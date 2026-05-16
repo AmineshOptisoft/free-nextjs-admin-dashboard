@@ -1,8 +1,10 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 import EditAgentModal from "./EditAgentModal";
 import ResetAgentPasswordModal from "./ResetAgentPasswordModal";
+import CreateUserModal, { PaymentMethodEditPayload } from "../users/CreateUserModal";
 import Pagination from "../ui/Pagination";
 import type { Agent, AgentDetailApi } from "./types";
 import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
@@ -160,6 +162,14 @@ type PayMethodStaffApi = {
   last_seen_label: string;
   tags: string[];
   assigned_to: string;
+  upi_id?: string | null;
+  bank_name?: string | null;
+  account_no?: string | null;
+  ifsc_code?: string | null;
+  branch_name?: string | null;
+  account_holder_name?: string | null;
+  pay_in_limit?: number;
+  pay_out_limit?: number;
   financial?: {
     totalPayIn: number;
     totalPayOut: number;
@@ -169,6 +179,31 @@ type PayMethodStaffApi = {
     failedPayOut: number;
   };
 };
+
+function payMethodStaffApiToEditPayload(s: PayMethodStaffApi): PaymentMethodEditPayload {
+  const isBank = s.gateway === "Bank Transfer Only";
+  return {
+    id: s.id,
+    fullname: s.fullname,
+    email: s.email ?? "",
+    phone: s.phone ?? "",
+    role: s.role_label ?? "",
+    username: s.username,
+    enablePayIn: s.pay_in_enabled,
+    enablePayOut: s.pay_out_enabled,
+    opType: s.operation_type,
+    gateway: s.gateway,
+    upiId: s.upi_id ?? "",
+    accountHolderName: !isBank ? (s.account_holder_name ?? "") : "",
+    bankAccountHolder: isBank ? (s.account_holder_name ?? "") : "",
+    bankName: s.bank_name ?? "",
+    accountNo: s.account_no ?? "",
+    ifscCode: s.ifsc_code ?? "",
+    branchName: s.branch_name ?? "",
+    payInLimit: s.pay_in_limit ?? 0,
+    payOutLimit: s.pay_out_limit ?? 0,
+  };
+}
 
 const ACT_PAGE_SIZE = 5;
 
@@ -305,7 +340,7 @@ function AgentPayMethodFinancialOverview({ data }: { data: NonNullable<PayMethod
 }
 
 /** Payment-method card (matches agent `/users` list). */
-function AgentPayMethodCard({ pm, onDelete, onTogglePayIn, onTogglePayOut }: { pm: PayMethodStaffApi; onDelete?: (id: string) => Promise<void> | void; onTogglePayIn?: (pm: PayMethodStaffApi) => Promise<void> | void; onTogglePayOut?: (pm: PayMethodStaffApi) => Promise<void> | void; }) {
+function AgentPayMethodCard({ pm, onDelete, onEdit, onTogglePayIn, onTogglePayOut }: { pm: PayMethodStaffApi; onDelete?: (id: string) => Promise<void> | void; onEdit?: (pm: PayMethodStaffApi) => void; onTogglePayIn?: (pm: PayMethodStaffApi) => Promise<void> | void; onTogglePayOut?: (pm: PayMethodStaffApi) => Promise<void> | void; }) {
   const [finOpen, setFinOpen] = useState(false);
   const fin = pm.financial ?? {
     totalPayIn: 0,
@@ -368,10 +403,10 @@ function AgentPayMethodCard({ pm, onDelete, onTogglePayIn, onTogglePayOut }: { p
         <div className="flex gap-2 mb-3">
           <button
             type="button"
-            onClick={() => onTogglePayIn && onTogglePayIn(pm)}
+            onClick={() => onEdit && onEdit(pm)}
             className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            {pm.pay_in_enabled ? "Disable Pay-In" : "Enable Pay-In"}
+            Edit
           </button>
           <button
             type="button"
@@ -384,7 +419,8 @@ function AgentPayMethodCard({ pm, onDelete, onTogglePayIn, onTogglePayOut }: { p
 
         <div className="grid grid-cols-2 gap-2">
           <div
-            className={`flex items-center justify-between rounded-xl px-3 py-2 ${pm.pay_in_enabled ? "bg-green-50 dark:bg-green-900/10" : "bg-gray-50 dark:bg-gray-800"
+            onClick={() => onTogglePayIn && onTogglePayIn(pm)}
+            className={`flex items-center justify-between rounded-xl px-3 py-2 cursor-pointer transition-colors ${pm.pay_in_enabled ? "bg-green-50 dark:bg-green-900/10 hover:bg-green-100 dark:hover:bg-green-900/20" : "bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
           >
             <div className="flex items-center gap-1.5 min-w-0">
@@ -396,7 +432,8 @@ function AgentPayMethodCard({ pm, onDelete, onTogglePayIn, onTogglePayOut }: { p
             <PayMethodToggle enabled={pm.pay_in_enabled} color="green" />
           </div>
           <div
-            className={`flex items-center justify-between rounded-xl px-3 py-2 ${pm.pay_out_enabled ? "bg-purple-50 dark:bg-purple-900/10" : "bg-red-50 dark:bg-red-900/10"
+            onClick={() => onTogglePayOut && onTogglePayOut(pm)}
+            className={`flex items-center justify-between rounded-xl px-3 py-2 cursor-pointer transition-colors ${pm.pay_out_enabled ? "bg-purple-50 dark:bg-purple-900/10 hover:bg-purple-100 dark:hover:bg-purple-900/20" : "bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20"
               }`}
           >
             <div className="flex items-center gap-1.5 min-w-0">
@@ -449,6 +486,8 @@ export default function AgentDetail({ id }: { id: string }) {
   const [editOpen, setEditOpen] = useState(false);
   const [toggleBusy, setToggleBusy] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethodEditPayload | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [activeTab, setActiveTab] = useState<"accounts" | "stats">("stats");
   const [actPage, setActPage] = useState(1);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -468,7 +507,10 @@ export default function AgentDetail({ id }: { id: string }) {
     setActPage(1);
   }, [id, dateRangeTx]);
 
+  const { loading: authLoading } = useAuth();
+
   const load = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     setLoadError(null);
     setNotFound(false);
@@ -495,7 +537,11 @@ export default function AgentDetail({ id }: { id: string }) {
         fetch(appendDateRangeToUrl(`/api/admin/agents/${id}/transactions`, txFrom, txTo), {
           credentials: "include",
         }),
-        fetch(appendDateRangeToUrl(`/api/admin/agents/${id}/pay-methods`, pmFrom, pmTo), { credentials: "include" }),
+        fetch(appendDateRangeToUrl(`/api/admin/agents/${id}/pay-methods`, pmFrom, pmTo) + `&_t=${Date.now()}`, { 
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Pragma": "no-cache", "Cache-Control": "no-cache" }
+        }),
       ]);
 
       if (agentRes.status === 401) {
@@ -809,8 +855,8 @@ export default function AgentDetail({ id }: { id: string }) {
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-6 py-3.5 text-sm font-semibold transition-colors ${activeTab === tab
-                    ? "border-b-2 border-blue-500 text-blue-500"
-                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                  ? "border-b-2 border-blue-500 text-blue-500"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                   }`}
               >
                 {tab === "accounts" ? "Payment Accounts" : "Transaction Stats"}
@@ -822,8 +868,17 @@ export default function AgentDetail({ id }: { id: string }) {
           {activeTab === "stats" && (
             <div className="p-5 flex flex-col gap-5">
               {/* Section heading */}
-              <h2 className="text-base font-bold text-gray-800 dark:text-white">Transaction Statistics</h2>
 
+              <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-end sm:justify-between  w-full ">
+                <h2 className="text-base font-bold text-gray-800 dark:text-white">Transaction Statistics</h2>
+                <div className="w-50">
+                  <DateRangePicker
+                    value={dateRangeTx}
+                    onChange={(r) => setDateRangeTx(r)}
+                    fullWidth
+                  />
+                </div>
+              </div>
               {txError && (
                 <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
                   {txError}
@@ -899,14 +954,7 @@ export default function AgentDetail({ id }: { id: string }) {
 
               {/* Recent Activity */}
               <div id="recent-activity" className="scroll-mt-24">
-                <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-end sm:justify-between">
-                  <h3 className="text-sm font-bold text-gray-800 dark:text-white">Recent Activity</h3>
-                  <DateRangePicker
-                    value={dateRangeTx}
-                    onChange={(r) => setDateRangeTx(r)}
-                    fullWidth
-                  />
-                </div>
+
                 <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[560px] text-sm">
@@ -1018,7 +1066,7 @@ export default function AgentDetail({ id }: { id: string }) {
                   </svg>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">No payment accounts yet</p>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-500 max-w-sm mx-auto">
-                  The agent will add the payment method from their panel — all linked methods will be displayed here.
+                    The agent will add the payment method from their panel — all linked methods will be displayed here.
                   </p>
                 </div>
               ) : null}
@@ -1061,21 +1109,81 @@ export default function AgentDetail({ id }: { id: string }) {
                             setAccountsError("Network error.");
                           }
                         }}
+                        onEdit={(pmRow) => {
+                          setEditPaymentMethod(payMethodStaffApiToEditPayload(pmRow));
+                          setShowCreateModal(true);
+                        }}
                         onTogglePayIn={async (pmRow) => {
+                          const originalState = pmRow.pay_in_enabled;
+                          
+                          // Optimistic update
+                          setPayMethods(prev => prev.map(p => 
+                            p.id === pmRow.id ? { ...p, pay_in_enabled: !originalState } : p
+                          ));
+                          
                           try {
                             const res = await fetch(`/api/admin/agents/${id}/pay-methods/${pmRow.id}`, {
                               method: "PATCH",
                               credentials: "include",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ pay_in_enabled: !pmRow.pay_in_enabled }),
+                              body: JSON.stringify({ pay_in_enabled: !originalState }),
                             });
                             const d = await res.json().catch(() => ({}));
                             if (!res.ok || !d.ok) {
+                              // Revert on error
+                              setPayMethods(prev => prev.map(p => 
+                                p.id === pmRow.id ? { ...p, pay_in_enabled: originalState } : p
+                              ));
                               setAccountsError(d.error ?? "Could not update account.");
                               return;
                             }
-                            await load();
+                            if (d.payment_method) {
+                              setPayMethods(prev => prev.map(p => 
+                                p.id === pmRow.id ? d.payment_method : p
+                              ));
+                            }
                           } catch {
+                            // Revert on error
+                            setPayMethods(prev => prev.map(p => 
+                              p.id === pmRow.id ? { ...p, pay_in_enabled: originalState } : p
+                            ));
+                            setAccountsError("Network error.");
+                          }
+                        }}
+                        onTogglePayOut={async (pmRow) => {
+                          const originalState = pmRow.pay_out_enabled;
+                          
+                          // Optimistic update
+                          setPayMethods(prev => prev.map(p => 
+                            p.id === pmRow.id ? { ...p, pay_out_enabled: !originalState } : p
+                          ));
+                          
+                          try {
+                            const res = await fetch(`/api/admin/agents/${id}/pay-methods/${pmRow.id}`, {
+                              method: "PATCH",
+                              credentials: "include",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ pay_out_enabled: !originalState }),
+                            });
+                            const d = await res.json().catch(() => ({}));
+                            if (!res.ok || !d.ok) {
+                              // Revert on error
+                              setPayMethods(prev => prev.map(p => 
+                                p.id === pmRow.id ? { ...p, pay_out_enabled: originalState } : p
+                              ));
+                              setAccountsError(d.error ?? "Could not update account.");
+                              return;
+                            }
+                            if (d.payment_method) {
+                              setPayMethods(prev => prev.map(p => 
+                                p.id === pmRow.id ? d.payment_method : p
+                              ));
+                            }
+                          } catch {
+                            // Revert on error
+                            setPayMethods(prev => prev.map(p => 
+                              p.id === pmRow.id ? { ...p, pay_out_enabled: originalState } : p
+                            ));
                             setAccountsError("Network error.");
                           }
                         }}
@@ -1107,6 +1215,18 @@ export default function AgentDetail({ id }: { id: string }) {
           onSaved={() => {
             void load();
           }}
+        />
+      )}
+
+      {showCreateModal && (
+        <CreateUserModal
+          editPaymentMethod={editPaymentMethod}
+          adminAgentId={id}
+          onClose={() => {
+            setShowCreateModal(false);
+            setEditPaymentMethod(null);
+          }}
+          onSuccess={() => void load()}
         />
       )}
     </div>

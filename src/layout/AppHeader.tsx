@@ -4,16 +4,19 @@ import NotificationDropdown from "@/components/header/NotificationDropdown";
 import UserDropdown from "@/components/header/UserDropdown";
 import { useSidebar } from "@/context/SidebarContext";
 import { useRealtime } from "@/context/RealtimeContext";
+import { useAuth } from "@/context/AuthContext";
 import Image from "next/image";
 import Link from "next/link";
-import React, { useState ,useEffect,useRef} from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 const AppHeader: React.FC = () => {
+  const { user } = useAuth();
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
-  const [homePath, setHomePath] = useState("/");
   const { connected: liveConnected } = useRealtime();
-
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
+
+  const role = user?.role || "admin";
+  const homePath = role === "agent" ? "/agent-dashboard" : role === "company" ? "/company-dashboard" : "/";
 
   const handleToggle = () => {
     if (window.innerWidth >= 1024) {
@@ -40,25 +43,6 @@ const AppHeader: React.FC = () => {
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (!res.ok || !mounted) return;
-        const data = (await res.json()) as { ok?: boolean; role?: string };
-        if (!data.ok || !data.role) return;
-        if (data.role === "agent") setHomePath("/agent-dashboard");
-        else if (data.role === "company") setHomePath("/company-dashboard");
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      mounted = false;
     };
   }, []);
 

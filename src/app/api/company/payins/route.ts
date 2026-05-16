@@ -7,6 +7,7 @@ import { tryAssignPayInTransaction, deleteNotAssignedPayIn, PAYIN_NO_ELIGIBLE_AG
 import { companyPaymentsBlockMessage, isCompanyAcceptingPayments } from "@/lib/party-status";
 import { parseDateRangeFromSearchParams, sqlCreatedAtRange } from "@/lib/date-range";
 import { requireCompanySession } from "@/lib/require-company-api";
+import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 import { expireOpenRequestsPastDeadline, sqlExpiresAtFromNow } from "@/lib/request-expiry";
 
 type TxRow = RowDataPacket & {
@@ -189,6 +190,8 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
+  
+  emitTransactionRealtime(insertId, "create");
 
   return NextResponse.json({
     ok: true as const,

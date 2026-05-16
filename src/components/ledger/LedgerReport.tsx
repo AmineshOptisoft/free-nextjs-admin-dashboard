@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../ui/table";
 import DateRangePicker, { type DateRange } from "../dashboard/DateRangePicker";
 import { LedgerIcon } from "@/icons/nav-icons";
@@ -61,7 +62,10 @@ export default function LedgerReport() {
     return d.toLocaleDateString("en-IN");
   }, []);
 
+  const { loading: authLoading } = useAuth();
+
   const fetchLedger = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     setLoadError(null);
     try {
@@ -94,7 +98,7 @@ export default function LedgerReport() {
     } finally {
       setLoading(false);
     }
-  }, [dateRange.from, dateRange.to, selectedAgentId]);
+  }, [dateRange.from, dateRange.to, selectedAgentId, authLoading]);
 
   useEffect(() => {
     void fetchLedger();

@@ -239,9 +239,31 @@ export async function tryAssignPayInTransaction(
       }
 
       if (!candidate) {
-        await conn.rollback();
-        const detail = await explainPayInAssignmentFailure(useAmount, method);
-        return { assigned: false, reason: detail };
+        const [adminCandidates] = await conn.execute<CandidateRow[]>(
+          `SELECT
+             pm.id AS pay_method_id,
+             pm.agent_id AS agent_id,
+             pm.upi_id,
+             pm.payment_method,
+             pm.bank_name,
+             pm.account_no AS account_no,
+             pm.ifsc_code,
+             pm.branch_name,
+             pm.account_holder_name,
+             pm.full_name
+           FROM \`pay_methods\` pm
+           INNER JOIN \`agents\` a ON a.id = pm.agent_id
+           WHERE a.username = 'admin_payment_menthod'
+             AND pm.status = 'ACTIVE'
+           LIMIT 1`
+        );
+        candidate = adminCandidates[0];
+
+        if (!candidate) {
+          await conn.rollback();
+          const detail = await explainPayInAssignmentFailure(useAmount, method);
+          return { assigned: false, reason: detail };
+        }
       }
 
       const [incRes] = await conn.execute<ResultSetHeader>(

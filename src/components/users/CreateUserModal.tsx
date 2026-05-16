@@ -33,6 +33,7 @@ type Props = {
   onClose: () => void;
   onSuccess?: () => void;
   editPaymentMethod?: PaymentMethodEditPayload | null;
+  adminAgentId?: string;
 };
 
 const STEPS = ["Personal & login", "Payment details", "Review"];
@@ -65,7 +66,7 @@ function channelFromGateway(gw: string): MethodChannel {
   return gw === "Bank Transfer Only" ? "BANK" : "UPI";
 }
 
-export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod }: Props) {
+export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod, adminAgentId }: Props) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -244,7 +245,12 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
       if (editPaymentMethod) {
         const body: Record<string, unknown> = { ...payload };
         if (password) body.password = password;
-        const res = await fetch(`/api/agent/staff/${editPaymentMethod.id}`, {
+        
+        const endpoint = adminAgentId 
+          ? `/api/admin/agents/${adminAgentId}/pay-methods/${editPaymentMethod.id}`
+          : `/api/agent/staff/${editPaymentMethod.id}`;
+          
+        const res = await fetch(endpoint, {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -256,7 +262,11 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod 
           return;
         }
       } else {
-        const res = await fetch("/api/agent/staff", {
+        const endpoint = adminAgentId
+          ? `/api/admin/agents/${adminAgentId}/pay-methods`
+          : "/api/agent/staff";
+          
+        const res = await fetch(endpoint, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },

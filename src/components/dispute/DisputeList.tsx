@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
 import Pagination from "../ui/Pagination";
 import { DisputesIcon } from "@/icons/nav-icons";
@@ -10,8 +11,8 @@ import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRef
 const PAGE_SIZE = 5;
 
 type DisputeStatus = "PENDING" | "RESOLVED" | "EXPIRED" | "OTHER";
-type PaymentStatus  = "PAYIN_APPROVED" | "PAYIN_PENDING" | "PAYOUT_APPROVED" | "PAYOUT_PENDING" | "FAILED";
-type DisputeReason  = string;
+type PaymentStatus = "PAYIN_APPROVED" | "PAYIN_PENDING" | "PAYOUT_APPROVED" | "PAYOUT_PENDING" | "FAILED";
+type DisputeReason = string;
 
 interface DisputeItem {
   id: string;
@@ -48,19 +49,19 @@ const disputeStatusStyle: Record<DisputeStatus, string> = {
 };
 
 const paymentStatusStyle: Record<PaymentStatus, string> = {
-  PAYIN_APPROVED:  "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  PAYIN_PENDING:   "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
+  PAYIN_APPROVED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+  PAYIN_PENDING: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
   PAYOUT_APPROVED: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400",
-  PAYOUT_PENDING:  "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
-  FAILED:          "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
+  PAYOUT_PENDING: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
+  FAILED: "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
 };
 
 const paymentStatusLabel: Record<PaymentStatus, string> = {
-  PAYIN_APPROVED:  "PAYIN APPROVED",
-  PAYIN_PENDING:   "PAYIN PENDING",
+  PAYIN_APPROVED: "PAYIN APPROVED",
+  PAYIN_PENDING: "PAYIN PENDING",
   PAYOUT_APPROVED: "PAYOUT APPROVED",
-  PAYOUT_PENDING:  "PAYOUT PENDING",
-  FAILED:          "FAILED",
+  PAYOUT_PENDING: "PAYOUT PENDING",
+  FAILED: "FAILED",
 };
 
 const disputeStatusLabel: Record<DisputeStatus, string> = {
@@ -128,15 +129,15 @@ function DisputeCard({ item, onReload }: { item: DisputeItem; onReload: () => vo
     <>
       {/* Row 1 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4 mb-4">
-        <DetailField label="Order ID"      value={item.orderId} />
-        <DetailField label="Company Name"  value={item.companyName} />
+        <DetailField label="Order ID" value={item.orderId} />
+        <DetailField label="Company Name" value={item.companyName} />
         <DetailField label="SubAdmin Name" value={item.subAdminName} />
       </div>
       {/* Row 2 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4 mb-4">
         <DetailField label="Client Name" value={item.clientName} />
-        <DetailField label="Client UPI"  value={item.clientUpi} />
-        <DetailField label="UTR Code"    value={item.utrCode} />
+        <DetailField label="Client UPI" value={item.clientUpi} />
+        <DetailField label="UTR Code" value={item.utrCode} />
       </div>
       {/* Row 3 — Assigned UPI full width */}
       <div className="mb-0">
@@ -152,21 +153,20 @@ function DisputeCard({ item, onReload }: { item: DisputeItem; onReload: () => vo
         {item.reason}
       </p>
       <div className="flex items-center gap-2 shrink-0">
-        <button className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+        {/* <button className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
           Media
         </button>
         <button className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
           Chats
-        </button>
+        </button> */}
         <button
           type="button"
           disabled={!canResolve || busy}
           onClick={() => void patchDisputeState("RESOLVED")}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors shadow-sm ${
-            canResolve
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors shadow-sm ${canResolve
               ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100"
               : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-          }`}
+            }`}
         >
           Resolve
         </button>
@@ -174,11 +174,10 @@ function DisputeCard({ item, onReload }: { item: DisputeItem; onReload: () => vo
           type="button"
           disabled={!canResolve || busy}
           onClick={() => void patchDisputeState("OTHER")}
-          className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
-            canResolve
+          className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${canResolve
               ? "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
               : "border-gray-200 dark:border-gray-700 text-gray-400 cursor-not-allowed"
-          }`}
+            }`}
         >
           Other
         </button>
@@ -239,17 +238,20 @@ export default function DisputeList() {
   const [items, setItems] = useState<DisputeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeTab, setActiveTab]       = useState<DisputeStatus | "ALL">("ALL");
-  const [showFilter, setShowFilter]     = useState(false);
-  const [search, setSearch]             = useState("");
-  const [amount, setAmount]             = useState("");
+  const [activeTab, setActiveTab] = useState<DisputeStatus | "ALL">("ALL");
+  const [showFilter, setShowFilter] = useState(false);
+  const [search, setSearch] = useState("");
+  const [amount, setAmount] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
-  const [dateRange, setDateRange]       = useState<DateRange | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   // Pagination
   const [page, setPage] = useState(1);
 
+  const { loading: authLoading } = useAuth();
+
   const loadDisputes = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     setLoadError(null);
     try {
@@ -273,7 +275,7 @@ export default function DisputeList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authLoading]);
 
   useEffect(() => {
     void loadDisputes();
@@ -478,11 +480,10 @@ export default function DisputeList() {
             const isActive = activeTab === tab.value;
             return (
               <button key={tab.value} onClick={() => { setActiveTab(tab.value); setPage(1); }}
-                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                  isActive
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${isActive
                     ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
                     : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                }`}
+                  }`}
               >
                 {tab.label}
                 {count !== undefined && count > 0 && !isActive && (
@@ -495,11 +496,10 @@ export default function DisputeList() {
           })}
         </div>
         <button onClick={() => setShowFilter((v) => !v)}
-          className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors ${
-            showFilter
+          className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors ${showFilter
               ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
               : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
+            }`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
