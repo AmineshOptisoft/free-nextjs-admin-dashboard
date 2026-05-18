@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 import CompanyTxnAccordionCard from "../company/CompanyTxnAccordionCard";
@@ -138,8 +138,7 @@ export default function CompanyPayInView() {
     setLoading(true);
     setError(null);
     try {
-      const query = tab === "ALL" ? "" : `?status=${encodeURIComponent(tab)}`;
-      const res = await fetch(`/api/company/payins${query}`, { credentials: "include" });
+      const res = await fetch(`/api/company/payins`, { credentials: "include" });
       const data = (await res.json()) as { ok?: boolean; payins?: CompanyPayIn[]; error?: string };
       if (!res.ok || !data.ok || !data.payins) {
         setError(data.error ?? "Could not load payins");
@@ -161,10 +160,30 @@ export default function CompanyPayInView() {
 
   useTransactionRealtimeRefresh({ types: ["PAYIN"], onRefresh: () => void load() });
 
+  const counts = useMemo(() => {
+    return {
+      ALL: items.length,
+      NOT_ASSIGNED: items.filter((d) => d.status === "NOT_ASSIGNED").length,
+      PENDING: items.filter((d) => d.status === "PENDING").length,
+      PAID: items.filter((d) => d.status === "PAID" || d.status === "RECEIPT_PENDING").length,
+      APPROVED: items.filter((d) => d.status.includes("APPROVED")).length,
+      REJECTED: items.filter((d) => d.status === "REJECTED" || d.status === "DECLINED" || d.status === "REVOKED").length,
+      EXPIRED: items.filter((d) => d.status === "EXPIRED").length,
+    };
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    if (tab === "ALL") return items;
+    if (tab === "REJECTED") return items.filter((d) => d.status === "REJECTED" || d.status === "DECLINED" || d.status === "REVOKED");
+    if (tab === "APPROVED") return items.filter((d) => d.status.includes("APPROVED"));
+    if (tab === "PAID") return items.filter((d) => d.status === "PAID" || d.status === "RECEIPT_PENDING");
+    return items.filter((d) => d.status === tab);
+  }, [items, tab]);
+
   const paginatedItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return items.slice(start, start + PAGE_SIZE);
-  }, [items, page]);
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, page]);
 
   async function submitProof(id: string) {
     const utr = window.prompt("Enter UTR code");
@@ -196,26 +215,35 @@ export default function CompanyPayInView() {
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap">
-        {tabs.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value)}
-            className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              tab === t.value
-                ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+        {tabs.map((t) => {
+          const count = counts[t.value as keyof typeof counts];
+          const isActive = tab === t.value;
+          return (
+            <button
+              key={t.value}
+              onClick={() => setTab(t.value)}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                isActive
+                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                  : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              }`}
+            >
+              {t.label}
+              {count !== undefined && count > 0 && !isActive && (
+                <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-100 dark:bg-gray-700 px-1.5 text-[10px] font-bold text-gray-600 dark:text-gray-300">
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {loading && <div className="rounded-xl border border-gray-100 px-3 py-5 text-sm text-gray-500">Loading payins...</div>}
       {error && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">{error}</div>}
 
-      {!loading && !error && items.length === 0 && (
-        <div className="rounded-xl border border-gray-100 px-3 py-8 text-sm text-gray-400">No PayIn requests found.</div>
+      {!loading && !error && filteredItems.length === 0 && (
+        <div className="rounded-xl border border-gray-100 px-3 py-8 text-sm text-gray-400">No PayIn requests found in this tab.</div>
       )}
 
       <div className="space-y-3">
@@ -240,13 +268,13 @@ export default function CompanyPayInView() {
         ))}
       </div>
 
-      {items.length > 0 && (
+      {filteredItems.length > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1 py-2">
           <p className="text-xs text-gray-400 shrink-0">
-            Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, items.length)} of {items.length} entries
+            Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, filteredItems.length)} of {filteredItems.length} entries
           </p>
           <Pagination
-            total={items.length}
+            total={filteredItems.length}
             page={page}
             pageSize={PAGE_SIZE}
             onPageChange={setPage}

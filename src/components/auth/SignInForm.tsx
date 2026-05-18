@@ -7,6 +7,7 @@ import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useState } from "react";
+import RedirectIfAuthenticated from "./RedirectIfAuthenticated";
 
 export type SignInRole = "admin" | "agent" | "company";
 
@@ -83,8 +84,8 @@ export default function SignInForm({ role, backHref = "/signin" }: Props) {
         setError(data.error ?? "Sign in failed.");
         return;
       }
-      router.push(successPath[role]);
-      router.refresh();
+      localStorage.setItem("auth_role", role);
+      window.location.href = successPath[role];
     } catch {
       setError("Network error. Try again.");
     } finally {
@@ -94,6 +95,7 @@ export default function SignInForm({ role, backHref = "/signin" }: Props) {
 
   return (
     <div className="flex flex-col flex-1 lg:w-1/2 w-full">
+      <RedirectIfAuthenticated />
       <div className="w-full max-w-md sm:pt-10 mx-auto mb-5">
         <Link
           href={backHref}

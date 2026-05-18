@@ -1,6 +1,8 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import flatpickr from "flatpickr";
+
 
 export interface DateRange {
   from: Date;
@@ -80,6 +82,80 @@ function computePanelPosition(trigger: HTMLElement, align: "left" | "right") {
   return { top, left };
 }
 
+interface FlatpickrInputProps {
+  value: string;
+  minDate?: string;
+  maxDate?: string;
+  onChange: (val: string) => void;
+}
+
+function FlatpickrInput({ value, minDate, maxDate, onChange }: FlatpickrInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const fpRef = useRef<flatpickr.Instance | null>(null);
+
+  useEffect(() => {
+    if (!inputRef.current) return;
+    fpRef.current = flatpickr(inputRef.current, {
+      dateFormat: "Y-m-d",
+      defaultDate: value,
+      minDate: minDate || undefined,
+      maxDate: maxDate || undefined,
+      clickOpens: true,
+      prevArrow:
+        '<svg class="stroke-current" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.5 15L7.5 10L12.5 5" stroke="" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      nextArrow:
+        '<svg class="stroke-current" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.5 15L12.5 10L7.5 5" stroke="" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      onOpen: (selectedDates, dateStr, instance) => {
+        if (instance.calendarContainer) {
+          instance.calendarContainer.style.zIndex = "100000";
+        }
+      },
+      onChange: (selectedDates, dateStr) => {
+        onChange(dateStr);
+      },
+    });
+
+    return () => {
+      if (fpRef.current) {
+        fpRef.current.destroy();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!fpRef.current) return;
+    if (value && value !== fpRef.current.input.value) {
+      fpRef.current.setDate(value, false);
+    }
+  }, [value]);
+
+  useEffect(() => {
+    if (!fpRef.current) return;
+    fpRef.current.set("minDate", minDate || undefined);
+  }, [minDate]);
+
+  useEffect(() => {
+    if (!fpRef.current) return;
+    fpRef.current.set("maxDate", maxDate || undefined);
+  }, [maxDate]);
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder="YYYY-MM-DD"
+        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-9 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 cursor-pointer"
+      />
+      <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 dark:text-gray-500">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
 export default function DateRangePicker({ value, onChange, fullWidth = false }: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"presets" | "range">("presets");
@@ -120,6 +196,7 @@ export default function DateRangePicker({ value, onChange, fullWidth = false }: 
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
       if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      if ((target as HTMLElement)?.closest?.(".flatpickr-calendar")) return;
       setOpen(false);
     };
     document.addEventListener("mousedown", handler);
@@ -228,24 +305,20 @@ export default function DateRangePicker({ value, onChange, fullWidth = false }: 
               <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 From
               </label>
-              <input
-                type="date"
+              <FlatpickrInput
                 value={rangeFrom}
-                max={rangeTo}
-                onChange={(e) => setRangeFrom(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                maxDate={rangeTo}
+                onChange={(val) => setRangeFrom(val)}
               />
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 To
               </label>
-              <input
-                type="date"
+              <FlatpickrInput
                 value={rangeTo}
-                min={rangeFrom}
-                onChange={(e) => setRangeTo(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                minDate={rangeFrom}
+                onChange={(val) => setRangeTo(val)}
               />
             </div>
             {rangeFrom && rangeTo && (

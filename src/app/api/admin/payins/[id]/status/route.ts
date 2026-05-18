@@ -40,7 +40,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   } catch {
     return NextResponse.json({ ok: false, error: "Invalid body" }, { status: 400 });
   }
-  const toStatus = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
+  let toStatus = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
   const utrCode = typeof body.utr_code === "string" ? body.utr_code.trim() : "";
   const paymentImage = typeof body.payment_image === "string" ? body.payment_image.trim() : "";
   if (!toStatus) {
@@ -86,6 +86,10 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
       return NextResponse.json({ ok: false, error: DISPUTE_BLOCKS_ACTION_MSG }, { status: 409 });
     }
 
+    if (tx.status === "EXPIRED" && toStatus === "APPROVED_BY_ADMIN") {
+      toStatus = "EXPIRED_APPROVED_BY_ADMIN";
+    }
+
     if (!canAdminVerifyPayIn(tx.status, toStatus)) {
       await conn.rollback();
       return NextResponse.json(
@@ -96,7 +100,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
 
     const existingProof = String(tx.payment_image ?? "").trim().length > 0;
     const proofToStore = paymentImage || (existingProof ? String(tx.payment_image ?? "").trim() : "");
-    if (toStatus === "APPROVED_BY_ADMIN" && !proofToStore) {
+    if ((toStatus === "APPROVED_BY_ADMIN" || toStatus === "EXPIRED_APPROVED_BY_ADMIN") && !proofToStore) {
       await conn.rollback();
       return NextResponse.json(
         { ok: false, error: "Upload proof (screenshot) or ensure payer proof exists before approving." },

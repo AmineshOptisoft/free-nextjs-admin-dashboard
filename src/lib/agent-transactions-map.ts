@@ -5,9 +5,10 @@ export type AgentPayInListItem = {
   id: string;
   ref: string;
   amount: number;
-  status: "PENDING" | "APPROVED" | "EXPIRED" | "RECEIPT_PENDING" | "UNASSIGNED" | "PROCESSING";
+  status: "PENDING" | "APPROVED" | "EXPIRED" | "RECEIPT_PENDING" | "UNASSIGNED" | "PROCESSING" | "EXPIRED_APPROVED_BY_ADMIN" | "EXPIRED_APPROVED_BY_AGENT" | "DECLINED";
   orderId: string;
   clientName: string;
+  clientId?: string;
   clientUpi: string;
   assignedUpi: string;
   createdOn: string;
@@ -24,6 +25,10 @@ export type AgentPayInListItem = {
   paymentProof?: string | null;
   utrCode?: string;
   disputeRaised?: boolean;
+  /** Present when an agent is linked to this payin (admin list / filters). */
+  assignedAgentId?: string | null;
+  /** Raw DB status before UI mapping - used to gate actions accurately. */
+  rawStatus?: string;
 };
 
 /** Mirrors PayOutList `PayOutItem` UI shape */
@@ -39,9 +44,12 @@ export type AgentPayOutListItem = {
     | "PROCESSING"
     | "EXPIRED"
     | "APPROVED"
-    | "DECLINED";
+    | "DECLINED"
+    | "EXPIRED_APPROVED_BY_ADMIN"
+    | "EXPIRED_APPROVED_BY_AGENT";
   orderId: string;
   clientName: string;
+  clientId?: string;
   clientUpi: string;
   bankName: string;
   accountNo: string;
@@ -70,6 +78,7 @@ export type TxRow = RowDataPacket & {
   status: string;
   type: string;
   client_name: string | null;
+  client_id?: string | null;
   client_upi: string | null;
   assigned_upi: string | null;
   user_upi: string | null;
@@ -130,15 +139,16 @@ export function mapDbStatusToPayInUi(status: string): AgentPayInListItem["status
     case "APPROVED_BY_ADMIN":
       return "APPROVED";
     case "EXPIRED_APPROVED_BY_ADMIN":
+      return "EXPIRED_APPROVED_BY_ADMIN";
     case "EXPIRED_APPROVED_BY_AGENT":
-      return "APPROVED";
+      return "EXPIRED_APPROVED_BY_AGENT";
     case "EXPIRED":
       return "EXPIRED";
     case "RE_ASSIGNED":
       return "PROCESSING";
     case "REJECTED":
     case "REVOKED":
-      return "EXPIRED";
+      return "DECLINED";
     default:
       return "PROCESSING";
   }
@@ -157,8 +167,9 @@ export function mapDbStatusToPayOutUi(status: string): AgentPayOutListItem["stat
     case "APPROVED_BY_ADMIN":
       return "APPROVED";
     case "EXPIRED_APPROVED_BY_ADMIN":
+      return "EXPIRED_APPROVED_BY_ADMIN";
     case "EXPIRED_APPROVED_BY_AGENT":
-      return "APPROVED";
+      return "EXPIRED_APPROVED_BY_AGENT";
     case "EXPIRED":
       return "EXPIRED";
     case "RE_ASSIGNED":
@@ -183,6 +194,7 @@ export function rowToPayInItem(r: TxRow): AgentPayInListItem {
     status: ui,
     orderId: r.order_id,
     clientName: (r.client_name ?? "").trim() || "—",
+    clientId: (r.client_id ?? "").trim() || undefined,
     clientUpi: (r.client_upi ?? r.user_upi ?? "").trim() || "—",
     assignedUpi,
     createdOn: formatDt(r.created_at),
@@ -197,6 +209,8 @@ export function rowToPayInItem(r: TxRow): AgentPayInListItem {
     utrCode: utr || undefined,
     disputeRaised: Number(r.dispute_raised ?? 0) === 1,
     expiresAtIso: toIso(r.expires_at),
+    assignedAgentId: r.assigned_agent_id ? String(r.assigned_agent_id) : null,
+    rawStatus: String(r.status ?? "").trim().toUpperCase(),
   };
 }
 
@@ -215,6 +229,7 @@ export function rowToPayOutItem(r: TxRow, listRole: "admin" | "agent" = "agent")
     status: ui,
     orderId: r.order_id,
     clientName: (r.client_name ?? "").trim() || "—",
+    clientId: (r.client_id ?? "").trim() || undefined,
     clientUpi: (r.client_upi ?? r.user_upi ?? "").trim() || "—",
     bankName: (r.bank_name ?? "").trim() || "—",
     accountNo: (r.bank_account_number ?? "").trim() || "—",

@@ -8,7 +8,7 @@ import { expireOpenRequestsPastDeadline } from "@/lib/request-expiry";
 
 const SELECT_PAYIN = `
   \`id\`, \`random_code\`, \`order_id\`, \`amount\`, \`status\`, \`type\`,
-  \`client_name\`, \`client_upi\`, \`assigned_upi\`, \`user_upi\`,
+  \`client_name\`, \`client_id\`, \`client_upi\`, \`assigned_upi\`, \`user_upi\`,
   \`utr_code\`, \`payment_image\`, \`user_note\`,
   \`created_at\`, \`assigned_date\`, \`assigned_agent_id\`,
   \`bank_name\`, \`bank_account_number\`, \`ifsc_code\`, \`dispute_raised\`, \`expires_at\`

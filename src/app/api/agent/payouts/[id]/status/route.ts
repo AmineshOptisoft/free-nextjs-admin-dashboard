@@ -42,7 +42,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   } catch {
     return NextResponse.json({ ok: false, error: "Invalid body" }, { status: 400 });
   }
-  const toStatus = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
+  let toStatus = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
   const paymentImage = typeof body.payment_image === "string" ? body.payment_image.trim() : "";
   if (!toStatus) {
     return NextResponse.json({ ok: false, error: "status is required" }, { status: 400 });
@@ -87,6 +87,10 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
       return NextResponse.json({ ok: false, error: DISPUTE_BLOCKS_ACTION_MSG }, { status: 409 });
     }
 
+    if (tx.status === "EXPIRED" && toStatus === "APPROVED_BY_AGENT") {
+      toStatus = "EXPIRED_APPROVED_BY_AGENT";
+    }
+
     if (!canAgentTransition(tx.status, toStatus)) {
       await conn.rollback();
       return NextResponse.json(
@@ -110,7 +114,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
 
     const existingProof = String(tx.payment_image ?? "").trim().length > 0;
     const proofToStore = paymentImage || (existingProof ? String(tx.payment_image ?? "").trim() : "");
-    if (toStatus === "APPROVED_BY_AGENT" && !proofToStore) {
+    if ((toStatus === "APPROVED_BY_AGENT" || toStatus === "EXPIRED_APPROVED_BY_AGENT") && !proofToStore) {
       await conn.rollback();
       return NextResponse.json(
         { ok: false, error: "Upload proof (screenshot) before approving this payout." },

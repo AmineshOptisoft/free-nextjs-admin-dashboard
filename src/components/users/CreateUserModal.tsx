@@ -36,7 +36,7 @@ type Props = {
   adminAgentId?: string;
 };
 
-const STEPS = ["Personal & login", "Payment details", "Review"];
+const STEPS = ["Payment method details", "Review"];
 
 const ROLES = ["Peer User", "Vendor", "Merchant", "Sub Admin", "Admin"];
 const OP_TYPES = ["PayIn & PayOut", "PayIn Only", "PayOut Only"];
@@ -170,12 +170,8 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
 
   function validateLimits(): string | null {
     const pinRaw = payInLimitInput.trim().replace(/,/g, "");
-    const poutRaw = payOutLimitInput.trim().replace(/,/g, "");
     if (!pinRaw || !Number.isFinite(Number.parseFloat(pinRaw)) || Number.parseFloat(pinRaw) <= 0) {
-      return "Pay In daily limit is required and must be greater than 0.";
-    }
-    if (!poutRaw || !Number.isFinite(Number.parseFloat(poutRaw)) || Number.parseFloat(poutRaw) <= 0) {
-      return "Pay Out daily limit is required and must be greater than 0.";
+      return "Daily limit is required and must be greater than 0.";
     }
     return null;
   }
@@ -183,14 +179,7 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
   function goNext() {
     setErr(null);
     if (step === 0) {
-      const e = validateStep0();
-      if (e) {
-        setErr(e);
-        return;
-      }
-    }
-    if (step === 1) {
-      const e = validateStep1() ?? validateLimits();
+      const e = validateStep0() ?? validateStep1() ?? validateLimits();
       if (e) {
         setErr(e);
         return;
@@ -216,9 +205,8 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
       methodChannel === "UPI" ? upiAccountName.trim() || null : bankAccountHolder.trim();
 
     const pinRaw = payInLimitInput.trim().replace(/,/g, "");
-    const poutRaw = payOutLimitInput.trim().replace(/,/g, "");
     const pay_in_limit = Number.parseFloat(pinRaw);
-    const pay_out_limit = Number.parseFloat(poutRaw);
+    const pay_out_limit = pay_in_limit;
 
     setSaving(true);
     try {
@@ -348,89 +336,15 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   }
-                  title="Personal information"
+                  title="Basic information"
                 />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Full name</label>
-                    <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                      placeholder="Enter full name" className={inputCls()} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                      placeholder="example@domain.com" className={inputCls()} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Phone</label>
-                    <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Phone number" className={inputCls()} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Label / role</label>
-                    <div className="relative">
-                      <select value={role} onChange={(e) => setRole(e.target.value)} className={selectCls}>
-                        {ROLES.map((r) => <option key={r}>{r}</option>)}
-                      </select>
-                      <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
+                <div className="max-w-md">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Username</label>
+                  <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Enter username" className={inputCls(!!username)} />
                 </div>
               </div>
 
-              <div>
-                <SectionHeading
-                  icon={
-                    <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                    </svg>
-                  }
-                  title="Login for this payment method"
-                />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Username</label>
-                    <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-                      className={inputCls(!!username)} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                      Password {editPaymentMethod ? "(optional — leave blank to keep)" : "(optional)"}
-                    </label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                      placeholder={editPaymentMethod ? "Leave blank to keep" : "Optional"}
-                      autoComplete="new-password"
-                      className={inputCls(!!password)} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enable Pay In</label>
-                    <label className="flex items-center gap-2.5 cursor-pointer group">
-                      <input type="checkbox" checked={enablePayIn} onChange={(e) => setEnablePayIn(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 accent-blue-500 cursor-pointer" />
-                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200">
-                        {enablePayIn ? "Yes" : "No"}
-                      </span>
-                    </label>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enable Pay Out</label>
-                    <label className="flex items-center gap-2.5 cursor-pointer group">
-                      <input type="checkbox" checked={enablePayOut} onChange={(e) => setEnablePayOut(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 accent-blue-500 cursor-pointer" />
-                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200">
-                        {enablePayOut ? "Yes" : "No"}
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 1 && (
-            <div className="space-y-7">
               <div>
                 <SectionHeading
                   icon={
@@ -441,15 +355,65 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
                   }
                   title="Operation type"
                 />
-                <div className="max-w-md">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">How this method is used</label>
-                  <div className="relative">
-                    <select value={opType} onChange={(e) => setOpType(e.target.value)} className={selectCls}>
-                      {OP_TYPES.map((o) => <option key={o}>{o}</option>)}
-                    </select>
-                    <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                <div className="max-w-md space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">How this method is used</label>
+                    <div className="relative">
+                      <select value={opType} onChange={(e) => {
+                        const val = e.target.value;
+                        setOpType(val);
+                        if (val === "PayIn & PayOut") {
+                          setEnablePayIn(true);
+                          setEnablePayOut(true);
+                        } else if (val === "PayIn Only") {
+                          setEnablePayIn(true);
+                          setEnablePayOut(false);
+                        } else if (val === "PayOut Only") {
+                          setEnablePayIn(false);
+                          setEnablePayOut(true);
+                        }
+                      }} className={selectCls}>
+                        {OP_TYPES.map((o) => <option key={o}>{o}</option>)}
+                      </select>
+                      <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enable Pay In</label>
+                      <label className="flex items-center gap-2.5 cursor-pointer group">
+                        <input type="checkbox" checked={enablePayIn} onChange={(e) => {
+                          const val = e.target.checked;
+                          setEnablePayIn(val);
+                          if (val && enablePayOut) setOpType("PayIn & PayOut");
+                          else if (val && !enablePayOut) setOpType("PayIn Only");
+                          else if (!val && enablePayOut) setOpType("PayOut Only");
+                        }}
+                          className="w-4 h-4 rounded border-gray-300 accent-blue-500 cursor-pointer" />
+                        <span className="text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200">
+                          {enablePayIn ? "Yes" : "No"}
+                        </span>
+                      </label>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enable Pay Out</label>
+                      <label className="flex items-center gap-2.5 cursor-pointer group">
+                        <input type="checkbox" checked={enablePayOut} onChange={(e) => {
+                          const val = e.target.checked;
+                          setEnablePayOut(val);
+                          if (enablePayIn && val) setOpType("PayIn & PayOut");
+                          else if (enablePayIn && !val) setOpType("PayIn Only");
+                          else if (!enablePayIn && val) setOpType("PayOut Only");
+                        }}
+                          className="w-4 h-4 rounded border-gray-300 accent-blue-500 cursor-pointer" />
+                        <span className="text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200">
+                          {enablePayOut ? "Yes" : "No"}
+                        </span>
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -498,40 +462,24 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   }
-                  title="Same-day limits (INR)"
+                  title="Same-day limit (INR)"
                 />
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                  Both limits are <span className="font-semibold">required</span>. Enter the maximum same-day Pay In and Pay Out totals (INR) for this method — the system enforces these caps.
+                  Enter the maximum same-day total (INR) for this method — the system enforces this cap.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                      Pay In limit (INR) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={payInLimitInput}
-                      onChange={(e) => setPayInLimitInput(e.target.value)}
-                      placeholder="e.g. 100000"
-                      className={inputCls(!!payInLimitInput.trim())}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                      Pay Out limit (INR) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={payOutLimitInput}
-                      onChange={(e) => setPayOutLimitInput(e.target.value)}
-                      placeholder="e.g. 50000"
-                      className={inputCls(!!payOutLimitInput.trim())}
-                      required
-                    />
-                  </div>
+                <div className="max-w-md">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Daily limit (INR) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={payInLimitInput}
+                    onChange={(e) => setPayInLimitInput(e.target.value)}
+                    placeholder="e.g. 100000"
+                    className={inputCls(!!payInLimitInput.trim())}
+                    required
+                  />
                 </div>
               </div>
 
@@ -600,7 +548,7 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
             </div>
           )}
 
-          {step === 2 && (
+          {step === 1 && (
             <div className="space-y-5">
               <SectionHeading
                 icon={
@@ -612,16 +560,11 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
               />
               <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 overflow-hidden">
                 {[
-                  { label: "Full name", value: fullName || "—" },
-                  { label: "Email", value: email || "—" },
-                  { label: "Phone", value: phone || "—" },
-                  { label: "Label / role", value: role },
                   { label: "Username", value: username || "—" },
                   { label: "Enable Pay In", value: enablePayIn ? "Yes" : "No" },
                   { label: "Enable Pay Out", value: enablePayOut ? "Yes" : "No" },
                   { label: "Operation type", value: opType },
-                  { label: "Pay In limit (INR)", value: payInLimitInput.trim() || "—" },
-                  { label: "Pay Out limit (INR)", value: payOutLimitInput.trim() || "—" },
+                  { label: "Daily limit (INR)", value: payInLimitInput.trim() || "—" },
                   { label: "Method", value: methodChannel === "UPI" ? "UPI" : "Bank transfer" },
                   ...(methodChannel === "UPI"
                     ? [

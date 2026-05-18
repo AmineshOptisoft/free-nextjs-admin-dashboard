@@ -412,7 +412,7 @@ function SortableHeader({
         className={`-mx-0.5 inline-flex max-w-full items-center gap-1 rounded px-0.5 text-left transition-colors hover:text-gray-800 dark:hover:text-gray-100 ${active ? "text-brand-600 dark:text-brand-400" : ""
           }`}
       >
-        <span className="truncate">{children}</span>
+        <span className="!w-fit ">{children}</span>
         <SortChevrons active={active} dir={sortDir} />
       </button>
     </th>
@@ -483,7 +483,7 @@ export default function AdminDashboard() {
         setRows([]);
         return;
       }
-      setRows(data.rows.map((r) => ({ ...r })));
+      setRows(data.rows.map((r) => ({ ...r, manualPayIn: 0 })));
     } catch {
       setLoadError("Network error.");
       setRows([]);
@@ -542,8 +542,26 @@ export default function AdminDashboard() {
     );
   }, [rows]);
 
-  const saveRowCredit = (id: string, next: number) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, credit: next } : r)));
+  const saveRowCredit = async (id: string, next: number) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id === id) {
+          const remainingBalance = next - r.finalBalance;
+          return { ...r, credit: next, remainingBalance };
+        }
+        return r;
+      }),
+    );
+
+    try {
+      await fetch(`/api/agents/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credit_limit: next }),
+      });
+    } catch (e) {
+      console.error("Failed to update credit limit", e);
+    }
   };
   const getActionLabelSpace = (label: string) =>
     Math.max(72, Math.min(220, label.length * 7 + 24));
@@ -791,8 +809,8 @@ export default function AdminDashboard() {
                   type="button"
                   aria-label={action.label}
                   className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-300 ${action.id === "manual-payin" && manualPayInPanelOpen
-                      ? "bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"
-                      : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    ? "bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"
+                    : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
                     }`}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1019,7 +1037,7 @@ export default function AdminDashboard() {
                   <SortableHeader
                     key={col.key}
                     colKey={col.key}
-                    className={`${colHdr}${col.key === "vendor" ? " sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 min-w-[140px]" : ""
+                    className={`${colHdr}${col.key === "vendor" ? " sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 min-w-[200px]" : ""
                       }${col.key === "actions" ? ` ${colActions}` : ""}${xh(col.key)}${xv(col.key)}`}
                     title={COLUMN_HEADER_TITLES[col.key]}
                     sortKey={sortKey}
@@ -1055,7 +1073,7 @@ export default function AdminDashboard() {
                       <span className="text-orange-500 font-semibold text-[10px]">{(totals.runningUnsettled * 0.87).toFixed(0)}</span>
                     </div>
                   </td>
-                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("credit")}${xv("credit")}`}>{(totals.credit / 1000000).toFixed(0)}M</td>
+                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("credit")}${xv("credit")}`}>{totals.credit.toLocaleString("en-IN")}</td>
                   <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("finalBalance")}${xv("finalBalance")}`}>{totals.finalBalance.toLocaleString("en-IN")}</td>
                   <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("remainingBalance")}${xv("remainingBalance")}`}>{totals.remainingBalance.toLocaleString("en-IN")}</td>
                   <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{totals.prevBalance}</td>
@@ -1071,7 +1089,7 @@ export default function AdminDashboard() {
               {sortedRows.map((row) => {
                 const rowHover = vendorRowHoveredAction?.rowId === row.id ? vendorRowHoveredAction : null;
                 const vendorRowHoveredSpacePx =
-                  rowHover == null ? 0 : getActionLabelSpace(rowHover.slot === 0 ? "View" : "Remove");
+                  rowHover == null ? 0 : getActionLabelSpace(rowHover.slot === 0 ? "View" : "Block");
 
                 return (
                   <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-blue-50/30 dark:hover:bg-white/[0.015] transition-colors">
@@ -1147,7 +1165,7 @@ export default function AdminDashboard() {
                             </svg>
                           </button>
                           <span
-                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] opacity-100 translate-x-0`}
+                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${rowHover !== null && rowHover.slot === 0 ? "opacity-100 translate-x-0 scale-100" : "opacity-0 translate-x-1 scale-95"}`}
                           >
                             View
                           </span>
@@ -1159,7 +1177,7 @@ export default function AdminDashboard() {
                         >
                           <button
                             type="button"
-                            aria-label="Remove"
+                            aria-label="Block"
                             className="relative z-10 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-300"
                             onClick={(e) => {
                               e.preventDefault();
@@ -1172,9 +1190,9 @@ export default function AdminDashboard() {
                             </svg>
                           </button>
                           <span
-                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] opacity-100 translate-x-0`}
+                            className={`pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 z-20 w-fit whitespace-nowrap rounded-md border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 px-2 py-1 text-[11px] font-medium text-gray-600 dark:text-gray-200 shadow-sm text-right transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${rowHover !== null && rowHover.slot === 1 ? "opacity-100 translate-x-0 scale-100" : "opacity-0 translate-x-1 scale-95"}`}
                           >
-                            Remove
+                            Block
                           </span>
                         </div>
                       </div>
@@ -1241,10 +1259,10 @@ export default function AdminDashboard() {
           />
           <div className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-900">
             <h3 id="remove-vendor-title" className="text-lg font-semibold text-gray-900 dark:text-white">
-              Remove vendor?
+              Block vendor?
             </h3>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              This will remove{" "}
+              This will block{" "}
               <span className="font-semibold text-gray-900 dark:text-gray-100">
                 {rows.find((r) => r.id === removeConfirmVendorId)?.name ?? "this vendor"}
               </span>{" "}
@@ -1263,7 +1281,7 @@ export default function AdminDashboard() {
                 onClick={confirmRemoveVendor}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
               >
-                Remove
+                Block
               </button>
             </div>
           </div>

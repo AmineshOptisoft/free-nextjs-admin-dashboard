@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const [result] = await pool.execute<ResultSetHeader>(
+    const [result] = await pool.query<ResultSetHeader>(
       `UPDATE \`agents\` SET \`security_deposit\` = \`security_deposit\` + ? WHERE \`id\` = ?`,
       [amountVal, subadminId]
     );

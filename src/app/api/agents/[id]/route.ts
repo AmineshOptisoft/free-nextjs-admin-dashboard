@@ -202,6 +202,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
      FROM \`agents\` WHERE \`id\` = ? LIMIT 1`,
     [id],
   );
+  const row = rows[0];
   if (row) {
     if (typeof body.status === "string") {
       emitUserStatusUpdate(id, "agent", body.status);

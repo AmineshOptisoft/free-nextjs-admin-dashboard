@@ -16,7 +16,7 @@ const PAGE_SIZE = 10;
 
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 
-type PayInStatus = "PENDING" | "APPROVED" | "EXPIRED" | "RECEIPT_PENDING" | "UNASSIGNED" | "PROCESSING";
+type PayInStatus = "PENDING" | "APPROVED" | "EXPIRED" | "RECEIPT_PENDING" | "UNASSIGNED" | "PROCESSING" | "EXPIRED_APPROVED_BY_ADMIN" | "EXPIRED_APPROVED_BY_AGENT" | "DECLINED";
 
 type PayInItem = AgentPayInListItem;
 
@@ -25,8 +25,11 @@ const STATUS_TABS: { label: string; value: PayInStatus | "ALL" }[] = [
   { label: "Pending", value: "PENDING" },
   { label: "Approved", value: "APPROVED" },
   { label: "Expired", value: "EXPIRED" },
+  { label: "Declined", value: "DECLINED" },
   { label: "Reciept Pending", value: "RECEIPT_PENDING" },
   { label: "Unassigned", value: "UNASSIGNED" },
+  { label: "Exp. Approved (Admin)", value: "EXPIRED_APPROVED_BY_ADMIN" },
+  { label: "Exp. Approved (Agent)", value: "EXPIRED_APPROVED_BY_AGENT" },
 ];
 
 const statusStyle: Record<PayInStatus, string> = {
@@ -36,13 +39,19 @@ const statusStyle: Record<PayInStatus, string> = {
   RECEIPT_PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
   UNASSIGNED: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
   PROCESSING: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
+  DECLINED: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
+  EXPIRED_APPROVED_BY_ADMIN: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
+  EXPIRED_APPROVED_BY_AGENT: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
 };
 
-const showApprove = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING";
-const showReject = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING" || s === "RECEIPT_PENDING";
+const isActionableExpired = (item: PayInItem) =>
+  item.status === "EXPIRED" && item.rawStatus !== "REJECTED" && item.rawStatus !== "REVOKED";
+const showApprove = (item: PayInItem) =>
+  (item.status === "PENDING" || item.status === "PROCESSING" || isActionableExpired(item)) && !!item.assignedAgentId;
+const showReject = (item: PayInItem) => (item.status === "PENDING" || item.status === "PROCESSING" || item.status === "RECEIPT_PENDING" || item.status === "EXPIRED") && !!item.assignedAgentId;
 /** Revoke / unassign — not offered for receipt-pending (reject only there). */
-const showCancel = (s: PayInStatus) => s === "PENDING" || s === "PROCESSING";
-const showActionButtons = (s: PayInStatus) => showApprove(s) || showReject(s) || showCancel(s);
+const showCancel = (item: PayInItem) => (item.status === "PENDING" || item.status === "PROCESSING" || item.status === "EXPIRED") && !!item.assignedAgentId;
+const showActionButtons = (item: PayInItem) => showApprove(item) || showReject(item) || showCancel(item);
 
 function showPayInExpireCountdown(item: PayInItem): boolean {
   if (!item.expiresAtIso) return false;
@@ -259,18 +268,18 @@ function PayInCard({
 
       {/* right-side action buttons */}
       <div className="flex items-center gap-2 shrink-0">
-        {!item.disputeRaised && showApprove(item.status) && (
+        {!item.disputeRaised && showApprove(item) && (
           <ApproveButton onClick={() => onOpenAction(item, "approve")} disabled={busy} />
         )}
-        {!item.disputeRaised && showReject(item.status) && showCancel(item.status) ? (
+        {!item.disputeRaised && showReject(item) && showCancel(item) ? (
           <DeclineMenu
             disabled={busy}
             onReject={() => onOpenAction(item, "reject")}
             onRevoke={() => onOpenAction(item, "cancel")}
           />
-        ) : !item.disputeRaised && showReject(item.status) ? (
+        ) : !item.disputeRaised && showReject(item) ? (
           <RejectButton onClick={() => onOpenAction(item, "reject")} disabled={busy} />
-        ) : !item.disputeRaised && showCancel(item.status) ? (
+        ) : !item.disputeRaised && showCancel(item) ? (
           <button
             type="button"
             disabled={busy}
@@ -280,7 +289,7 @@ function PayInCard({
             Revoke
           </button>
         ) : null}
-        {isAdmin && onDispute && !item.disputeRaised && showActionButtons(item.status) && (
+        {isAdmin && onDispute && !item.disputeRaised && showActionButtons(item) && (
           <button
             type="button"
             disabled={busy}
@@ -325,9 +334,10 @@ function PayInCard({
 
       {/* ── DESKTOP: always-visible primary detail rows ── */}
       <div className="hidden lg:block border-t border-gray-100 dark:border-gray-800 px-5 py-4">
-        {/* Row 1: ORDER ID · CLIENT NAME · CLIENT UPI */}
-        <div className="grid grid-cols-3 gap-x-8 gap-y-1 mb-4">
+        {/* Row 1: ORDER ID · CLIENT ID · CLIENT NAME · CLIENT UPI */}
+        <div className="grid grid-cols-4 gap-x-8 gap-y-1 mb-4">
           <DetailField label="Order ID" value={item.orderId} />
+          <DetailField label="Client ID" value={item.clientId || "—"} />
           <DetailField label="Client Name" value={item.clientName} />
           <DetailField label="Client UPI" value={item.clientUpi} />
         </div>
@@ -369,6 +379,7 @@ function PayInCard({
         <div className="lg:hidden border-t border-gray-100 dark:border-gray-800 px-4 py-4">
           <div className="grid grid-cols-1 gap-4 mb-4">
             <DetailField label="Order ID" value={item.orderId} />
+            <DetailField label="Client ID" value={item.clientId || "—"} />
             <DetailField label="Client Name" value={item.clientName} />
             <DetailField label="Client UPI" value={item.clientUpi} />
           </div>
@@ -398,11 +409,13 @@ type ActionType = "approve" | "reject" | "cancel";
 
 export default function PayInList() {
   const { user, loading: authLoading } = useAuth();
-  const [panelRole] = useState<"admin" | "agent" | "company">(() => {
-    if (typeof window === "undefined") return "admin";
+  const [panelRole, setPanelRole] = useState<"admin" | "agent" | "company">("admin");
+  useEffect(() => {
     const role = localStorage.getItem("tepay_role");
-    return role === "agent" || role === "company" ? role : "admin";
-  });
+    if (role === "agent" || role === "company") {
+      setPanelRole(role);
+    }
+  }, []);
   const resolvedRole = (authLoading ? null : user?.role) || panelRole;
 
   const [activeTab, setActiveTab] = useState<PayInStatus | "ALL">("ALL");
@@ -540,9 +553,12 @@ export default function PayInList() {
     PENDING: baseData.filter((d) => d.status === "PENDING").length,
     APPROVED: baseData.filter((d) => d.status === "APPROVED").length,
     EXPIRED: baseData.filter((d) => d.status === "EXPIRED").length,
+    DECLINED: baseData.filter((d) => d.status === "DECLINED").length,
     RECEIPT_PENDING: baseData.filter((d) => d.status === "RECEIPT_PENDING").length,
     UNASSIGNED: baseData.filter((d) => d.status === "UNASSIGNED").length,
     PROCESSING: baseData.filter((d) => d.status === "PROCESSING").length,
+    EXPIRED_APPROVED_BY_ADMIN: baseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_ADMIN").length,
+    EXPIRED_APPROVED_BY_AGENT: baseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_AGENT").length,
   };
 
   const filtered = baseData.filter((d) => {
@@ -684,7 +700,7 @@ export default function PayInList() {
           <PayInIcon />
           <h1 className="text-xl font-bold">Pay In</h1>
         </div>
-      {!listLoading && !listError && (
+        {!listLoading && !listError && (
           <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
             {resolvedRole === "admin"
               ? "Live: all PayIn requests for admin actions (max 500)."
@@ -849,11 +865,10 @@ export default function PayInList() {
               <button
                 key={tab.value}
                 onClick={() => { setActiveTab(tab.value); setPage(1); }}
-                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                    : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                }`}
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${isActive
+                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  }`}
               >
                 {tab.label}
                 {count !== undefined && count > 0 && !isActive && (
@@ -869,11 +884,10 @@ export default function PayInList() {
         {/* Filter toggle icon */}
         <button
           onClick={() => setShowFilter((v) => !v)}
-          className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors ${
-            showFilter
-              ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
+          className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors ${showFilter
+            ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+            }`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -952,16 +966,48 @@ export default function PayInList() {
                     className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
                   />
                 </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    Payment proof (screenshot) {!selectedItem?.hasReceipt && <span className="text-red-500">*</span>}
-                  </label>
-                  <input type="file" accept="image/*" className="text-sm text-gray-600 dark:text-gray-300" onChange={handleModalProofFile} />
-                  {modalProofName && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {modalProofName}</p>
-                  )}
-                  {selectedItem?.hasReceipt && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">A proof is already on file; upload a new file to replace it.</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Payment proof (screenshot) {!selectedItem?.hasReceipt && <span className="text-red-500">*</span>}
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleModalProofFile}
+                        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                      />
+                      <div className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 px-6 py-6 text-center transition-all group-hover:bg-gray-50 dark:border-gray-700/75 dark:bg-gray-800/30 dark:group-hover:bg-gray-800/60">
+                        {modalProofDataUrl ? (
+                          <div className="flex flex-col items-center gap-3">
+                            <img src={modalProofDataUrl} alt="Preview" className="h-24 w-auto rounded object-contain shadow-sm ring-1 ring-gray-900/10 dark:ring-white/10" />
+                            <span className="text-xs font-medium text-brand-500 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 px-2 py-1 rounded">Change image</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-gray-500 dark:text-gray-400">
+                            <div className="rounded-full bg-white p-3 shadow-sm ring-1 ring-gray-900/5 dark:bg-gray-800 dark:ring-white/10 mb-1">
+                              <svg className="h-6 w-6 text-brand-500 dark:text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                              </svg>
+                            </div>
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                              Click to upload <span className="font-normal text-gray-500 dark:text-gray-400">or drag and drop</span>
+                            </p>
+                            <p className="text-[11px]">SVG, PNG, JPG or GIF (max. 5MB)</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {selectedItem?.hasReceipt && !modalProofDataUrl && (
+                    <div className="flex items-center gap-2 rounded-lg bg-blue-50/80 px-3 py-2.5 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+                      <svg className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      A proof is already on file. Upload a new file to replace it.
+                    </div>
                   )}
                 </div>
               </>

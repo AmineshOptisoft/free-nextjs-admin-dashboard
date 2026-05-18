@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     await conn.beginTransaction();
 
     // Insert interledger entry
-    await conn.execute<ResultSetHeader>(
+    await conn.query(
       `INSERT INTO \`interledger_entries\` (
         \`transfer_date\`, \`source_agent_id\`, \`dest_agent_id\`, 
         \`source_type\`, \`dest_type\`, \`amount\`, \`remark\`, \`created_by\`
@@ -44,12 +44,12 @@ export async function POST(req: Request) {
 
     // Update Source (Debit)
     if (sourceType === "security") {
-      await conn.execute(
+      await conn.query(
         `UPDATE \`agents\` SET \`security_deposit\` = \`security_deposit\` - ? WHERE \`id\` = ?`,
         [amountVal, sourceId]
       );
     } else {
-      await conn.execute(
+      await conn.query(
         `UPDATE \`agents\` 
          SET \`previous_balance\` = \`previous_balance\` - ?,
              \`running_balance\` = \`previous_balance\` + \`net_pay_in\` - \`net_pay_out\`
@@ -60,12 +60,12 @@ export async function POST(req: Request) {
 
     // Update Dest (Credit)
     if (destType === "security") {
-      await conn.execute(
+      await conn.query(
         `UPDATE \`agents\` SET \`security_deposit\` = \`security_deposit\` + ? WHERE \`id\` = ?`,
         [amountVal, destId]
       );
     } else {
-      await conn.execute(
+      await conn.query(
         `UPDATE \`agents\` 
          SET \`previous_balance\` = \`previous_balance\` + ?,
              \`running_balance\` = \`previous_balance\` + \`net_pay_in\` - \`net_pay_out\`

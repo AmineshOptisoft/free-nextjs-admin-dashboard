@@ -45,9 +45,8 @@ async function findEligiblePayOutMethodId(
        WHERE \`id\` = ? AND \`agent_id\` = ?
          AND UPPER(TRIM(\`status\`)) = 'ACTIVE'
          AND \`enable_pay_out\` = 1
-         AND (\`pay_out_limit\` <= 0 OR (\`today_total_pay_out_amount\` + ?) <= \`pay_out_limit\`)
        LIMIT 1`,
-      [preferredPayMethodId, agentId, amount],
+      [preferredPayMethodId, agentId],
     );
     return rows[0]?.id ?? null;
   }
@@ -57,10 +56,9 @@ async function findEligiblePayOutMethodId(
      WHERE \`agent_id\` = ?
        AND UPPER(TRIM(\`status\`)) = 'ACTIVE'
        AND \`enable_pay_out\` = 1
-       AND (\`pay_out_limit\` <= 0 OR (\`today_total_pay_out_amount\` + ?) <= \`pay_out_limit\`)
      ORDER BY \`id\` ASC
      LIMIT 1`,
-    [agentId, amount],
+    [agentId],
   );
   return rows[0]?.id ?? null;
 }
@@ -157,14 +155,13 @@ export async function POST(req: Request, context: { params: { id: string } | Pro
       const [inc] = await conn.execute<ResultSetHeader>(
         `UPDATE \`pay_methods\`
          SET \`today_total_pay_out_amount\` = \`today_total_pay_out_amount\` + ?
-         WHERE \`id\` = ? AND \`agent_id\` = ? AND UPPER(TRIM(\`status\`)) = 'ACTIVE' AND \`enable_pay_out\` = 1
-           AND (\`pay_out_limit\` <= 0 OR (\`today_total_pay_out_amount\` + ?) <= \`pay_out_limit\`)`,
-        [amt, resolvedPayMethodId, agentId, amt],
+         WHERE \`id\` = ? AND \`agent_id\` = ? AND UPPER(TRIM(\`status\`)) = 'ACTIVE' AND \`enable_pay_out\` = 1`,
+        [amt, resolvedPayMethodId, agentId],
       );
       if (inc.affectedRows === 0) {
         await conn.rollback();
         return NextResponse.json(
-          { ok: false, error: "Pay-out line became unavailable (limit or status). Retry or pick another agent." },
+          { ok: false, error: "Pay-out line became unavailable (status). Retry or pick another agent." },
           { status: 409 },
         );
       }

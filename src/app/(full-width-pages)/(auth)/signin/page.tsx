@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Metadata } from "next";
+import RedirectIfAuthenticated from "@/components/auth/RedirectIfAuthenticated";
 
 export const metadata: Metadata = {
   title: "Sign in | Tepay",
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 export default function SignInHubPage() {
   return (
     <div className="flex flex-col flex-1 lg:w-1/2 w-full">
+      <RedirectIfAuthenticated />
       <div className="w-full max-w-md sm:pt-10 mx-auto mb-5">
         <Link
           href="/"

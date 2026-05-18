@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import type { AgentPayOutListItem } from "@/lib/agent-transactions-map";
 import CompanyTxnAccordionCard from "../company/CompanyTxnAccordionCard";
 import DateRangePicker, { DateRange } from "../dashboard/DateRangePicker";
@@ -26,7 +26,9 @@ type PayOutStatus =
   | "PROCESSING"
   | "EXPIRED"
   | "APPROVED"
-  | "DECLINED";
+  | "DECLINED"
+  | "EXPIRED_APPROVED_BY_ADMIN"
+  | "EXPIRED_APPROVED_BY_AGENT";
 
 type PayOutItem = AgentPayOutListItem;
 type CompanyPayoutItem = {
@@ -58,6 +60,8 @@ const STATUS_TABS: { label: string; value: PayOutStatus | "ALL" }[] = [
   { label: "Expired", value: "EXPIRED" },
   { label: "Approved", value: "APPROVED" },
   { label: "Declined", value: "DECLINED" },
+  { label: "Exp. Approved (Admin)", value: "EXPIRED_APPROVED_BY_ADMIN" },
+  { label: "Exp. Approved (Agent)", value: "EXPIRED_APPROVED_BY_AGENT" },
 ];
 
 const STATUS_FILTER_OPTIONS = [
@@ -70,6 +74,8 @@ const STATUS_FILTER_OPTIONS = [
   "EXPIRED",
   "APPROVED",
   "DECLINED",
+  "EXPIRED_APPROVED_BY_ADMIN",
+  "EXPIRED_APPROVED_BY_AGENT",
 ];
 
 const statusStyle: Record<PayOutStatus, string> = {
@@ -81,18 +87,27 @@ const statusStyle: Record<PayOutStatus, string> = {
   EXPIRED: "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400",
   APPROVED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   DECLINED: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
+  EXPIRED_APPROVED_BY_ADMIN: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
+  EXPIRED_APPROVED_BY_AGENT: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
 };
 
 const showAssign = (item: PayOutItem) =>
-  item.status === "CREATED" ||
-  item.status === "UNASSIGNED" ||
-  (item.status === "PENDING" && !item.assignedAgentId);
-const showApprove = (s: PayOutStatus) => s === "PROCESSING";
+  !item.assignedAgentId &&
+  (item.status === "CREATED" ||
+    item.status === "UNASSIGNED" ||
+    item.status === "PENDING" ||
+    item.status === "EXPIRED");
+
+const showApprove = (item: PayOutItem) => 
+  (item.status === "PROCESSING" || item.status === "PENDING" || item.status === "EXPIRED") && !!item.assignedAgentId;
+
 /** Agent: DB stays PENDING after admin assign; approve after proof or from processing. */
-const showApproveAgent = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING";
-const showReject = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING";
-const showCancel = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING";
-const showActions = (s: PayOutStatus) => showApprove(s) || showReject(s) || showCancel(s);
+const showApproveAgent = (item: PayOutItem) => 
+  (item.status === "PENDING" || item.status === "PROCESSING" || item.status === "EXPIRED") && !!item.assignedAgentId;
+
+const showReject = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING" || s === "EXPIRED";
+const showCancel = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING" || s === "EXPIRED";
+const showActions = (item: PayOutItem) => showApprove(item) || showReject(item.status) || showCancel(item.status);
 
 function showPayOutExpireCountdown(item: PayOutItem): boolean {
   if (!item.expiresAtIso) return false;
@@ -105,8 +120,8 @@ function showPayOutExpireCountdown(item: PayOutItem): boolean {
   );
 }
 
-function canOpenApproveModal(role: "admin" | "agent", status: PayOutStatus): boolean {
-  return role === "agent" ? showApproveAgent(status) : showApprove(status);
+function canOpenApproveModal(role: "admin" | "agent", item: PayOutItem): boolean {
+  return role === "agent" ? showApproveAgent(item) : showApprove(item);
 }
 
 function formatApproveDelayRemain(assignedAtIso: string, delayMinutes: number): string {
@@ -326,7 +341,7 @@ function PayOutCard({
   }, [isAgent, agentApproveDelayMinutes, item.id, item.status, item.assignedAtIso]);
 
   void delayTick;
-  const baseApprove = isAgent ? showApproveAgent(item.status) : showApprove(item.status);
+  const baseApprove = isAgent ? showApproveAgent(item) : showApprove(item);
   const approveUnlocked =
     !isAgent || agentApproveDelayMinutes == null
       ? true
@@ -433,9 +448,10 @@ function PayOutCard({
 
       {/* ── DESKTOP: always-visible detail rows ── */}
       <div className="hidden lg:block border-t border-gray-100 dark:border-gray-800 px-5 py-4">
-        {/* Row 1: ORDER ID · CLIENT NAME · CLIENT UPI */}
-        <div className="grid grid-cols-3 gap-x-8 mb-4">
+        {/* Row 1: ORDER ID · CLIENT ID · CLIENT NAME · CLIENT UPI */}
+        <div className="grid grid-cols-4 gap-x-8 mb-4">
           <DetailField label="Order ID" value={item.orderId} />
+          <DetailField label="Client ID" value={item.clientId || "—"} />
           <DetailField label="Client Name" value={item.clientName} />
           <DetailField label="Client UPI" value={item.clientUpi} />
         </div>
@@ -465,6 +481,7 @@ function PayOutCard({
       {mobileOpen && (
         <div className="lg:hidden border-t border-gray-100 dark:border-gray-800 px-4 py-4 grid grid-cols-1 gap-4">
           <DetailField label="Order ID" value={item.orderId} />
+          <DetailField label="Client ID" value={item.clientId || "—"} />
           <DetailField label="Client Name" value={item.clientName} />
           <DetailField label="Client UPI" value={item.clientUpi} />
           <DetailField label="Bank Name" value={item.bankName} />
@@ -753,8 +770,7 @@ function CompanyPayOutView() {
       setLoading(true);
       setError(null);
       try {
-        const query = tab === "ALL" ? "" : `?status=${encodeURIComponent(tab)}`;
-        const res = await fetch(`/api/company/payouts${query}`, { credentials: "include" });
+        const res = await fetch(`/api/company/payouts`, { credentials: "include" });
         const data = (await res.json()) as { ok?: boolean; payouts?: CompanyPayoutItem[]; error?: string };
         if (!res.ok || !data.ok || !data.payouts) {
           setError(data.error ?? "Could not load payouts");
@@ -778,10 +794,28 @@ function CompanyPayOutView() {
 
   useTransactionRealtimeRefresh({ types: ["PAYOUT"], onRefresh: () => void loadCompanyPayouts() });
 
+  const counts = useMemo(() => {
+    return {
+      ALL: items.length,
+      APPROVED: items.filter((d) => d.status.includes("APPROVED")).length,
+      PENDING: items.filter((d) => d.status === "PENDING" || d.status === "CREATED").length,
+      UNASSIGNED: items.filter((d) => d.status === "UNASSIGNED").length,
+      REJECTED: items.filter((d) => d.status === "REJECTED" || d.status === "DECLINED" || d.status === "REVOKED").length,
+    };
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    if (activeTab === "ALL") return items;
+    if (activeTab === "APPROVED") return items.filter((d) => d.status.includes("APPROVED"));
+    if (activeTab === "REJECTED") return items.filter((d) => d.status === "REJECTED" || d.status === "DECLINED" || d.status === "REVOKED");
+    if (activeTab === "PENDING") return items.filter((d) => d.status === "PENDING" || d.status === "CREATED");
+    return items.filter((d) => d.status === activeTab);
+  }, [items, activeTab]);
+
   const paginatedItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return items.slice(start, start + PAGE_SIZE);
-  }, [items, page]);
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, page]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -804,18 +838,28 @@ function CompanyPayOutView() {
       <div className="rounded-2xl border border-gray-200 bg-white p-3.5 dark:border-gray-800 dark:bg-white/3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 flex-wrap">
-            {companyTabs.map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => setActiveTab(tab.value)}
-                className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${activeTab === tab.value
-                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                    : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            {companyTabs.map((tab) => {
+              const count = counts[tab.value as keyof typeof counts];
+              const isActive = activeTab === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  onClick={() => setActiveTab(tab.value)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    isActive
+                      ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                      : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+                >
+                  {tab.label}
+                  {count !== undefined && count > 0 && !isActive && (
+                    <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-100 dark:bg-gray-700 px-1.5 text-[10px] font-bold text-gray-600 dark:text-gray-300">
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           <button className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -828,9 +872,9 @@ function CompanyPayOutView() {
         <div className="mt-4 space-y-3">
           {loading && <div className="rounded-xl border border-gray-100 px-3 py-5 text-sm text-gray-500">Loading payouts...</div>}
           {error && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">{error}</div>}
-          {!loading && !error && items.length === 0 && (
+          {!loading && !error && filteredItems.length === 0 && (
             <div className="flex h-[180px] items-start justify-center rounded-xl border border-gray-100 pt-10 text-sm text-gray-400 dark:border-gray-800 dark:text-gray-500">
-              No PAYOUT requests found yet.
+              No PAYOUT requests found in this tab.
             </div>
           )}
           {!loading &&
@@ -856,13 +900,13 @@ function CompanyPayOutView() {
               />
             ))}
         </div>
-        {items.length > 0 && (
+        {filteredItems.length > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1 py-3 mt-2 border-t border-gray-100 dark:border-gray-800">
             <p className="text-xs text-gray-400 shrink-0">
-              Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, items.length)} of {items.length} entries
+              Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, filteredItems.length)} of {filteredItems.length} entries
             </p>
             <Pagination
-              total={items.length}
+              total={filteredItems.length}
               page={page}
               pageSize={PAGE_SIZE}
               onPageChange={setPage}
@@ -887,11 +931,13 @@ function CompanyPayOutView() {
 }
 
 export default function PayOutList() {
-  const [panelRole] = useState<"admin" | "agent" | "company">(() => {
-    if (typeof window === "undefined") return "admin";
+  const [panelRole, setPanelRole] = useState<"admin" | "agent" | "company">("admin");
+  useEffect(() => {
     const role = localStorage.getItem("tepay_role");
-    return role === "agent" || role === "company" ? role : "admin";
-  });
+    if (role === "agent" || role === "company") {
+      setPanelRole(role);
+    }
+  }, []);
 
   const [items, setItems] = useState<PayOutItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -1080,10 +1126,6 @@ export default function PayOutList() {
     reader.readAsDataURL(f);
   }
 
-  if (resolvedRole === "company") {
-    return <CompanyPayOutView />;
-  }
-
   const baseData = items;
   const totalOrders = baseData.length;
 
@@ -1097,6 +1139,8 @@ export default function PayOutList() {
     EXPIRED: baseData.filter((d) => d.status === "EXPIRED").length,
     APPROVED: baseData.filter((d) => d.status === "APPROVED").length,
     DECLINED: baseData.filter((d) => d.status === "DECLINED").length,
+    EXPIRED_APPROVED_BY_ADMIN: baseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_ADMIN").length,
+    EXPIRED_APPROVED_BY_AGENT: baseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_AGENT").length,
   };
 
   const statusTabsVisible =
@@ -1179,7 +1223,7 @@ export default function PayOutList() {
     setActionBusyId(item.id);
     setModalError(null);
     try {
-      if (action === "approve" && !canOpenApproveModal(resolvedRole === "agent" ? "agent" : "admin", item.status)) {
+      if (action === "approve" && !canOpenApproveModal(resolvedRole === "agent" ? "agent" : "admin", item)) {
         setModalError("Approve only after assignment/processing stage.");
         return;
       }
@@ -1251,6 +1295,10 @@ export default function PayOutList() {
     } finally {
       setActionBusyId(null);
     }
+  }
+
+  if (resolvedRole === "company") {
+    return <CompanyPayOutView />;
   }
 
   return (
@@ -1506,20 +1554,50 @@ export default function PayOutList() {
               </div>
             )}
             {modalAction === "approve" && (
-              <>
+              <div className="space-y-3">
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                     Payment proof (screenshot) {!selectedItem?.hasReceipt && <span className="text-red-500">*</span>}
                   </label>
-                  <input type="file" accept="image/*" className="text-sm text-gray-600 dark:text-gray-300" onChange={handleModalProofFile} />
-                  {modalProofName && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {modalProofName}</p>
-                  )}
-                  {selectedItem?.hasReceipt && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">A proof is already on file; upload a new file to replace it.</p>
-                  )}
+                  <div className="relative group">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleModalProofFile}
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    />
+                    <div className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 px-6 py-6 text-center transition-all group-hover:bg-gray-50 dark:border-gray-700/75 dark:bg-gray-800/30 dark:group-hover:bg-gray-800/60">
+                      {modalProofDataUrl ? (
+                        <div className="flex flex-col items-center gap-3">
+                          <img src={modalProofDataUrl} alt="Preview" className="h-24 w-auto rounded object-contain shadow-sm ring-1 ring-gray-900/10 dark:ring-white/10" />
+                          <span className="text-xs font-medium text-brand-500 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 px-2 py-1 rounded">Change image</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-gray-500 dark:text-gray-400">
+                          <div className="rounded-full bg-white p-3 shadow-sm ring-1 ring-gray-900/5 dark:bg-gray-800 dark:ring-white/10 mb-1">
+                            <svg className="h-6 w-6 text-brand-500 dark:text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                          </div>
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                            Click to upload <span className="font-normal text-gray-500 dark:text-gray-400">or drag and drop</span>
+                          </p>
+                          <p className="text-[11px]">SVG, PNG, JPG or GIF (max. 5MB)</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </>
+                
+                {selectedItem?.hasReceipt && !modalProofDataUrl && (
+                  <div className="flex items-center gap-2 rounded-lg bg-blue-50/80 px-3 py-2.5 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+                    <svg className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    A proof is already on file. Upload a new file to replace it.
+                  </div>
+                )}
+              </div>
             )}
             {modalAction === "reject" && (
               <p className="text-sm text-gray-600 dark:text-gray-300">Reject this PayOut request?</p>

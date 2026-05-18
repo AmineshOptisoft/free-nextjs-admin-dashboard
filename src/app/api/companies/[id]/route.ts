@@ -201,13 +201,14 @@ export async function PATCH(
      FROM \`companies\` WHERE \`id\` = ? LIMIT 1`,
     [id],
   );
+  const row = rows[0];
   if (row) {
     if (typeof body.status === "string") {
       emitUserStatusUpdate(id, "company", body.status);
     }
   }
 
-  return NextResponse.json({ ok: true as const, company: mapPublic(row) });
+  return NextResponse.json({ ok: true as const, company: row ? mapPublic(row) : null });
 }
 
 export async function DELETE(

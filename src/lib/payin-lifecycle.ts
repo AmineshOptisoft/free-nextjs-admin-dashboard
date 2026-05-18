@@ -1,18 +1,21 @@
-const ASSIGNABLE = new Set(["NOT_ASSIGNED", "RE_ASSIGNED", "PENDING"]);
+const ASSIGNABLE = new Set(["NOT_ASSIGNED", "RE_ASSIGNED", "PENDING", "EXPIRED"]);
 const PROOF_ALLOWED = new Set(["PENDING", "RE_ASSIGNED"]);
 
 const AGENT_ALLOWED_FROM: Record<string, Set<string>> = {
-  APPROVED_BY_AGENT: new Set(["PAID", "PENDING", "RE_ASSIGNED", ""]),
-  REJECTED: new Set(["PAID", "PENDING", "RE_ASSIGNED"]),
+  APPROVED_BY_AGENT: new Set(["PAID", "PENDING", "RE_ASSIGNED", "EXPIRED", ""]),
+  EXPIRED_APPROVED_BY_AGENT: new Set(["EXPIRED"]),
+  REJECTED: new Set(["PAID", "PENDING", "RE_ASSIGNED", "EXPIRED"]),
+  REVOKED: new Set(["PAID", "PENDING", "RE_ASSIGNED", "EXPIRED"]),
   EXPIRED: new Set(["PAID", "PENDING", "RE_ASSIGNED"]),
-  RE_ASSIGNED: new Set(["PENDING", "PAID"]),
+  RE_ASSIGNED: new Set(["PENDING", "PAID", "EXPIRED"]),
 };
 
 const ADMIN_ALLOWED_FROM: Record<string, Set<string>> = {
-  APPROVED_BY_ADMIN: new Set(["PAID", "PENDING", "RE_ASSIGNED"]),
-  REJECTED: new Set(["PAID", "PENDING", "RE_ASSIGNED"]),
+  APPROVED_BY_ADMIN: new Set(["PAID", "PENDING", "RE_ASSIGNED", "EXPIRED"]),
+  EXPIRED_APPROVED_BY_ADMIN: new Set(["EXPIRED"]),
+  REJECTED: new Set(["PAID", "PENDING", "RE_ASSIGNED", "EXPIRED"]),
   EXPIRED: new Set(["PAID", "PENDING", "RE_ASSIGNED"]),
-  RE_ASSIGNED: new Set(["PENDING", "PAID"]),
+  RE_ASSIGNED: new Set(["PENDING", "PAID", "EXPIRED"]),
 };
 
 export function canAssignPayIn(status: string): boolean {

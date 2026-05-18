@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../context/NotificationContext";
 import { ChevronDownIcon, HorizontaLDots } from "../icons/index";
 import {
   NavAdminDashboardIcon,
@@ -143,6 +144,24 @@ const PANEL_THEME: Record<PanelType, { borderBgText: string; iconBg: string; act
   },
 };
 
+/* ── Notification Badge ─────────────────────────────────────── */
+function NotificationBadge({ compact }: { compact?: boolean }) {
+  const { unreadCount } = useNotifications();
+  if (unreadCount === 0) return null;
+  if (compact) {
+    return (
+      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-bold text-white">
+        {unreadCount > 99 ? "99+" : unreadCount}
+      </span>
+    );
+  }
+  return (
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+      {unreadCount > 99 ? "99+" : unreadCount}
+    </span>
+  );
+}
+
 /* ── Component ──────────────────────────────────────────────── */
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
@@ -276,7 +295,15 @@ const AppSidebar: React.FC = () => {
                   {nav.icon}
                 </span>
                 {(isExpanded || isHovered || isMobileOpen) && (
-                  <span className="menu-item-text">{nav.name}</span>
+                  <span className="menu-item-text flex items-center gap-2">
+                    {nav.name}
+                    {nav.path === "/notifications" && (
+                      <NotificationBadge />
+                    )}
+                  </span>
+                )}
+                {!isExpanded && !isHovered && !isMobileOpen && nav.path === "/notifications" && (
+                  <NotificationBadge compact />
                 )}
               </Link>
             )

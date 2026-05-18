@@ -19,9 +19,10 @@ type TxRow = RowDataPacket & {
 
 const ADMIN_ALLOWED_FROM: Record<string, Set<string>> = {
   APPROVED_BY_ADMIN: new Set(["PAID", "PENDING", "RE_ASSIGNED", "EXPIRED"]),
-  REJECTED: new Set(["PAID", "PENDING", "RE_ASSIGNED"]),
-  RE_ASSIGNED: new Set(["PAID", "PENDING"]),
-  REVOKED: new Set(["PAID", "PENDING", "RE_ASSIGNED"]),
+  EXPIRED_APPROVED_BY_ADMIN: new Set(["EXPIRED"]),
+  REJECTED: new Set(["PAID", "PENDING", "RE_ASSIGNED", "EXPIRED"]),
+  RE_ASSIGNED: new Set(["PAID", "PENDING", "EXPIRED"]),
+  REVOKED: new Set(["PAID", "PENDING", "RE_ASSIGNED", "EXPIRED"]),
 };
 
 function canAdminTransitionPayout(from: string, to: string): boolean {
@@ -52,7 +53,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   } catch {
     return NextResponse.json({ ok: false, error: "Invalid body" }, { status: 400 });
   }
-  const toStatus = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
+  let toStatus = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
   const paymentImage = typeof body.payment_image === "string" ? body.payment_image.trim() : "";
   if (!toStatus) {
     return NextResponse.json({ ok: false, error: "status is required" }, { status: 400 });
@@ -97,6 +98,10 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
       return NextResponse.json({ ok: false, error: DISPUTE_BLOCKS_ACTION_MSG }, { status: 409 });
     }
 
+    if (tx.status === "EXPIRED" && toStatus === "APPROVED_BY_ADMIN") {
+      toStatus = "EXPIRED_APPROVED_BY_ADMIN";
+    }
+
     if (!canAdminTransitionPayout(tx.status, toStatus)) {
       await conn.rollback();
       return NextResponse.json(
@@ -107,7 +112,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
 
     const existingProof = String(tx.payment_image ?? "").trim().length > 0;
     const proofToStore = paymentImage || (existingProof ? String(tx.payment_image ?? "").trim() : "");
-    if (toStatus === "APPROVED_BY_ADMIN" && !proofToStore) {
+    if ((toStatus === "APPROVED_BY_ADMIN" || toStatus === "EXPIRED_APPROVED_BY_ADMIN") && !proofToStore) {
       await conn.rollback();
       return NextResponse.json(
         { ok: false, error: "Upload proof (screenshot) before approving this payout." },

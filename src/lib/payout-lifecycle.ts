@@ -1,4 +1,4 @@
-const ASSIGNABLE = new Set(["NOT_ASSIGNED", "RE_ASSIGNED", "PENDING"]);
+const ASSIGNABLE = new Set(["NOT_ASSIGNED", "RE_ASSIGNED", "PENDING", "EXPIRED"]);
 const COMPANY_EDITABLE = new Set(["NOT_ASSIGNED", "PENDING"]);
 
 /** Company can modify/delete payout only while still pending/unassigned. */
@@ -15,8 +15,9 @@ const AGENT_ALLOWED_FROM: Record<string, Set<string>> = {
   PAID: new Set(["PENDING", "RE_ASSIGNED"]),
   /** Agent may approve from PENDING right after admin assignment, or after PAID (proof path). */
   APPROVED_BY_AGENT: new Set(["PENDING", "PAID", "EXPIRED"]),
-  REJECTED: new Set(["PENDING", "PAID", "RE_ASSIGNED"]),
-  REVOKED: new Set(["PENDING", "PAID", "RE_ASSIGNED"]),
+  EXPIRED_APPROVED_BY_AGENT: new Set(["EXPIRED"]),
+  REJECTED: new Set(["PENDING", "PAID", "RE_ASSIGNED", "EXPIRED"]),
+  REVOKED: new Set(["PENDING", "PAID", "RE_ASSIGNED", "EXPIRED"]),
   RE_ASSIGNED: new Set(["PENDING", "PAID"]),
 };
 
