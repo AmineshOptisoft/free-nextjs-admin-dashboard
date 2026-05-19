@@ -51,8 +51,7 @@ export async function POST(req: Request) {
     } else {
       await conn.query(
         `UPDATE \`agents\` 
-         SET \`previous_balance\` = \`previous_balance\` - ?,
-             \`running_balance\` = \`previous_balance\` + \`net_pay_in\` - \`net_pay_out\`
+         SET \`running_balance\` = \`running_balance\` - ?
          WHERE \`id\` = ?`,
         [amountVal, sourceId]
       );
@@ -67,8 +66,7 @@ export async function POST(req: Request) {
     } else {
       await conn.query(
         `UPDATE \`agents\` 
-         SET \`previous_balance\` = \`previous_balance\` + ?,
-             \`running_balance\` = \`previous_balance\` + \`net_pay_in\` - \`net_pay_out\`
+         SET \`running_balance\` = \`running_balance\` + ?
          WHERE \`id\` = ?`,
         [amountVal, destId]
       );

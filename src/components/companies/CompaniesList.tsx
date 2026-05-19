@@ -92,6 +92,9 @@ function EditModal({ company, onClose, onSaved }: EditModalProps) {
 
   async function save() {
     setError(null);
+    if (!form.username.trim()) { setError("Username is required."); return; }
+    if (!form.brand_name.trim()) { setError("Brand name is required."); return; }
+    if (form.newPassword.trim() && form.newPassword.length < 6) { setError("New password must be at least 6 characters."); return; }
     setSaving(true);
     try {
       if (logoFile) {
@@ -170,12 +173,12 @@ function EditModal({ company, onClose, onSaved }: EditModalProps) {
             </div>
           )}
           <div className="sm:col-span-2">
-            <label className={labelCls}>Username</label>
-            <input value={form.username} onChange={set("username")} className={inputCls} disabled={saving} />
+            <label className={labelCls}>Username <span className="text-red-500">*</span></label>
+            <input value={form.username} onChange={set("username")} className={inputCls} disabled={saving} required />
           </div>
           <div className="sm:col-span-2">
-            <label className={labelCls}>Brand name</label>
-            <input value={form.brand_name} onChange={set("brand_name")} className={inputCls} disabled={saving} />
+            <label className={labelCls}>Brand name <span className="text-red-500">*</span></label>
+            <input value={form.brand_name} onChange={set("brand_name")} className={inputCls} disabled={saving} required />
           </div>
           <div>
             <label className={labelCls}>Company code</label>
@@ -232,7 +235,7 @@ function EditModal({ company, onClose, onSaved }: EditModalProps) {
               />
             </div> */}
           </div>
-          <div className="sm:col-span-2">
+          {/* <div className="sm:col-span-2">
             <label className={labelCls}>New password (optional)</label>
             <input
               type="password"
@@ -242,7 +245,7 @@ function EditModal({ company, onClose, onSaved }: EditModalProps) {
               placeholder="Leave blank to keep current"
               disabled={saving}
             />
-          </div>
+          </div> */}
         </div>
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50">
           <button
@@ -295,10 +298,7 @@ export default function CompaniesList() {
   const [loading, setLoading] = useState(true);
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
   const [removeSubmitting, setRemoveSubmitting] = useState(false);
-  const [dateRange, setDateRange] = useState<DateRange | null>(() => ({
-    from: new Date(daysAgoInputDate(30) + "T00:00:00"),
-    to: new Date(todayInputDate() + "T00:00:00"),
-  }));
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [periodMetrics, setPeriodMetrics] = useState(false);
 
   useEffect(() => {
@@ -315,6 +315,7 @@ export default function CompaniesList() {
     setLoading(true);
     setLoadError(null);
     try {
+      // When no date range selected, send empty strings so backend returns company table data directly
       const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
       const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
       const res = await fetch(appendDateRangeToUrl("/api/companies", from, to), {
@@ -491,9 +492,9 @@ export default function CompaniesList() {
                     }
                   />
                 </th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
+                {/* <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Net volume (In/Out) <InfoTip text="From database net_pay_in / net_pay_out" />
-                </th>
+                </th> */}
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Status <InfoTip text="Account status" />
                 </th>
@@ -550,7 +551,7 @@ export default function CompaniesList() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-5 py-4">
+                    {/* <td className="px-5 py-4">
                       <div className="flex flex-col gap-1 text-xs text-gray-600 dark:text-gray-300">
                         <span>
                           <span className="text-gray-400">PayIn:</span> {fmt(c.net_pay_in)}
@@ -559,7 +560,7 @@ export default function CompaniesList() {
                           <span className="text-gray-400">PayOut:</span> {fmt(c.net_pay_out)}
                         </span>
                       </div>
-                    </td>
+                    </td> */}
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center rounded-lg px-3 py-1 text-xs font-semibold ${statusBadgeClass(c.status)}`}>
                         {displayStatus(c.status)}

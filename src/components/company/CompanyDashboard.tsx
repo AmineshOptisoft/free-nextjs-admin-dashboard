@@ -76,6 +76,14 @@ export default function CompanyDashboard() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<{
+    totalPayInAmount: number;
+    totalPayOutAmount: number;
+    successPayInCount: number;
+    successPayOutCount: number;
+    totalPayInCount: number;
+    totalPayOutCount: number;
+  } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
@@ -99,9 +107,10 @@ export default function CompanyDashboard() {
       setLoading(true);
       setError(null);
       try {
-        const [piRes, poRes] = await Promise.all([
+        const [piRes, poRes, statsRes] = await Promise.all([
           fetch("/api/company/payins?limit=100", { credentials: "include" }),
           fetch("/api/company/payouts?limit=100", { credentials: "include" }),
+          fetch("/api/company/dashboard/stats", { credentials: "include" }),
         ]);
         const pi = (await piRes.json()) as {
           ok?: boolean;
@@ -129,6 +138,8 @@ export default function CompanyDashboard() {
           }[];
           error?: string;
         };
+        const statsData = (await statsRes.json()) as { ok?: boolean; stats?: any };
+        
         if (!mounted) return;
         if (!piRes.ok || !poRes.ok || !pi.ok || !po.ok) {
           setError(pi.error ?? po.error ?? "Could not load dashboard data.");
@@ -136,6 +147,9 @@ export default function CompanyDashboard() {
         }
         setPayIns(pi.payins ?? []);
         setPayOuts(po.payouts ?? []);
+        if (statsData.ok && statsData.stats) {
+          setDashboardStats(statsData.stats);
+        }
       } catch {
         if (mounted) setError("Network error.");
       } finally {
@@ -148,23 +162,18 @@ export default function CompanyDashboard() {
   }, [refreshTick, authLoading]);
 
   const liveCards = useMemo(() => {
-    if (!payIns.length && !payOuts.length) return cards;
-    const payInAmount = payIns.reduce((s, t) => s + (t.amount || 0), 0);
-    const payOutAmount = payOuts.reduce((s, t) => s + (t.amount || 0), 0);
-    const all = [...payIns, ...payOuts];
-    const success = all.filter((t) => {
-      const s = t.status.toUpperCase();
-      return s === "APPROVED" || s === "APPROVED_BY_ADMIN" || s === "APPROVED_BY_AGENT";
-    }).length;
-    const rate = all.length ? ((success / all.length) * 100).toFixed(2) : "0.00";
+    if (!dashboardStats) return cards;
+    const totalOps = dashboardStats.totalPayInCount + dashboardStats.totalPayOutCount;
+    const successOps = dashboardStats.successPayInCount + dashboardStats.successPayOutCount;
+    const rate = totalOps > 0 ? ((successOps / totalOps) * 100).toFixed(2) : "0.00";
     return [
-      { title: "Total Payin Operations", value: String(payIns.length), sub: "Operations" },
-      { title: "Total Payout Operations", value: String(payOuts.length), sub: "Operations" },
-      { title: "Total Payin", value: `₹${Math.round(payInAmount).toLocaleString("en-IN")}`, sub: "Total Amount" },
-      { title: "Total PayOut", value: `₹${Math.round(payOutAmount).toLocaleString("en-IN")}`, sub: "Total Amount" },
+      { title: "Total Payin Operations", value: String(dashboardStats.totalPayInCount), sub: "Operations" },
+      { title: "Total Payout Operations", value: String(dashboardStats.totalPayOutCount), sub: "Operations" },
+      { title: "Total Payin", value: `₹${Math.round(dashboardStats.totalPayInAmount).toLocaleString("en-IN")}`, sub: "Total Amount" },
+      { title: "Total PayOut", value: `₹${Math.round(dashboardStats.totalPayOutAmount).toLocaleString("en-IN")}`, sub: "Total Amount" },
       { title: "Success Rate", value: `${rate}%`, sub: "Completion Rate" },
     ];
-  }, [payIns, payOuts]);
+  }, [dashboardStats]);
 
   const recentRows = useMemo(() => {
     type M = { at: number; row: TxnRow };

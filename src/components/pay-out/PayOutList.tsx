@@ -98,11 +98,11 @@ const showAssign = (item: PayOutItem) =>
     item.status === "PENDING" ||
     item.status === "EXPIRED");
 
-const showApprove = (item: PayOutItem) => 
+const showApprove = (item: PayOutItem) =>
   (item.status === "PROCESSING" || item.status === "PENDING" || item.status === "EXPIRED") && !!item.assignedAgentId;
 
 /** Agent: DB stays PENDING after admin assign; approve after proof or from processing. */
-const showApproveAgent = (item: PayOutItem) => 
+const showApproveAgent = (item: PayOutItem) =>
   (item.status === "PENDING" || item.status === "PROCESSING" || item.status === "EXPIRED") && !!item.assignedAgentId;
 
 const showReject = (s: PayOutStatus) => s === "PENDING" || s === "PROCESSING" || s === "EXPIRED";
@@ -845,11 +845,10 @@ function CompanyPayOutView() {
                 <button
                   key={tab.value}
                   onClick={() => setActiveTab(tab.value)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                    isActive
-                      ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                      : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                  }`}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${isActive
+                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                    : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    }`}
                 >
                   {tab.label}
                   {count !== undefined && count > 0 && !isActive && (
@@ -1445,8 +1444,8 @@ export default function PayOutList() {
             return (
               <button key={tab.value} onClick={() => { setActiveTab(tab.value); setPage(1); }}
                 className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${isActive
-                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                    : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
                   }`}
               >
                 {tab.label}
@@ -1462,8 +1461,8 @@ export default function PayOutList() {
 
         <button onClick={() => setShowFilter((v) => !v)}
           className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors ${showFilter
-              ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+            ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
             }`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1487,7 +1486,7 @@ export default function PayOutList() {
               busy={actionBusyId === item.id}
               onOpenAction={openActionModal}
               onOpenProof={(url) => setProofPreviewUrl(url)}
-              onView={resolvedRole === "admin" ? () => (window.location.href = `/transactions/${item.id}`) : undefined}
+              //onView={resolvedRole === "admin" ? () => (window.location.href = `/transactions/${item.id}`) : undefined}
               allowAssign={resolvedRole === "admin"}
               isAdmin={resolvedRole === "admin"}
               isAgent={resolvedRole === "agent"}
@@ -1588,7 +1587,7 @@ export default function PayOutList() {
                     </div>
                   </div>
                 </div>
-                
+
                 {selectedItem?.hasReceipt && !modalProofDataUrl && (
                   <div className="flex items-center gap-2 rounded-lg bg-blue-50/80 px-3 py-2.5 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
                     <svg className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

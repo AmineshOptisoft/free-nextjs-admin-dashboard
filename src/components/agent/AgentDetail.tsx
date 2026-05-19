@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import EditAgentModal from "./EditAgentModal";
 import ResetAgentPasswordModal from "./ResetAgentPasswordModal";
 import CreateUserModal, { PaymentMethodEditPayload } from "../users/CreateUserModal";
@@ -479,6 +480,7 @@ function AgentPayMethodCard({ pm, onDelete, onEdit, onTogglePayIn, onTogglePayOu
 }
 
 export default function AgentDetail({ id }: { id: string }) {
+  const router = useRouter();
   const [detail, setDetail] = useState<AgentDetailApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -494,14 +496,8 @@ export default function AgentDetail({ id }: { id: string }) {
   const [txError, setTxError] = useState<string | null>(null);
   const [payMethods, setPayMethods] = useState<PayMethodStaffApi[]>([]);
   const [accountsError, setAccountsError] = useState<string | null>(null);
-  const [dateRangeTx, setDateRangeTx] = useState<DateRange | null>(() => ({
-    from: new Date(daysAgoInputDate(30) + "T00:00:00"),
-    to: new Date(todayInputDate() + "T00:00:00"),
-  }));
-  const [dateRangeAccounts, setDateRangeAccounts] = useState<DateRange | null>(() => ({
-    from: new Date(daysAgoInputDate(90) + "T00:00:00"),
-    to: new Date(todayInputDate() + "T00:00:00"),
-  }));
+  const [dateRangeTx, setDateRangeTx] = useState<DateRange | null>(null);
+  const [dateRangeAccounts, setDateRangeAccounts] = useState<DateRange | null>(null);
 
   useEffect(() => {
     setActPage(1);
@@ -528,16 +524,19 @@ export default function AgentDetail({ id }: { id: string }) {
       return;
     }
     try {
-      const txFrom = dateRangeTx?.from ? dateRangeTx.from.toISOString().slice(0, 10) : "";
-      const txTo = dateRangeTx?.to ? dateRangeTx.to.toISOString().slice(0, 10) : "";
-      const pmFrom = dateRangeAccounts?.from ? dateRangeAccounts.from.toISOString().slice(0, 10) : "";
-      const pmTo = dateRangeAccounts?.to ? dateRangeAccounts.to.toISOString().slice(0, 10) : "";
+      // Default to last 10 days when no date range is selected
+      const fallbackFrom = daysAgoInputDate(10);
+      const fallbackTo = todayInputDate();
+      const txFrom = dateRangeTx?.from ? dateRangeTx.from.toISOString().slice(0, 10) : fallbackFrom;
+      const txTo = dateRangeTx?.to ? dateRangeTx.to.toISOString().slice(0, 10) : fallbackTo;
+      const pmFrom = dateRangeAccounts?.from ? dateRangeAccounts.from.toISOString().slice(0, 10) : fallbackFrom;
+      const pmTo = dateRangeAccounts?.to ? dateRangeAccounts.to.toISOString().slice(0, 10) : fallbackTo;
       const [agentRes, txRes, pmRes] = await Promise.all([
         fetch(`/api/agents/${id}`, { credentials: "include" }),
         fetch(appendDateRangeToUrl(`/api/admin/agents/${id}/transactions`, txFrom, txTo), {
           credentials: "include",
         }),
-        fetch(appendDateRangeToUrl(`/api/admin/agents/${id}/pay-methods`, pmFrom, pmTo) + `&_t=${Date.now()}`, { 
+        fetch(appendDateRangeToUrl(`/api/admin/agents/${id}/pay-methods`, pmFrom, pmTo) + `&_t=${Date.now()}`, {
           credentials: "include",
           cache: "no-store",
           headers: { "Pragma": "no-cache", "Cache-Control": "no-cache" }
@@ -721,12 +720,14 @@ export default function AgentDetail({ id }: { id: string }) {
       {/* ── Page header ── */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
-          <Link href="/agent"
+          <button
+            type="button"
+            onClick={() => router.back()}
             className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
             </svg>
-          </Link>
+          </button>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">
             Vendor Details — <span className="text-blue-500">{agent.username}</span>
           </h1>
@@ -795,8 +796,10 @@ export default function AgentDetail({ id }: { id: string }) {
               hint="Extra PayIn headroom on top of the security pool: even if deposit-backed room is tight, this much additional PayIn exposure is still allowed."
             />
             <InfoRow label="Net (PayIn − PayOut)" value={agent.net >= 0 ? fmt(agent.net) : `₹-${Math.abs(agent.net).toLocaleString("en-IN")}`} />
-            <InfoRow label="Prev (Last Running)" value={fmt(agent.prevLastRunning)} />
-            <InfoRow label="Running (Today)" value={fmt(agent.runningToday)} />
+            <InfoRow label="Prev (Last Running)" value={agent.prevLastRunning >= 0 ? fmt(agent.prevLastRunning) : `₹-${Math.abs(agent.prevLastRunning).toLocaleString("en-IN")}`}
+              valueClass={agent.prevLastRunning < 0 ? "text-red-500 dark:text-red-400" : ""} />
+            <InfoRow label="Running (Today)" value={agent.runningToday >= 0 ? fmt(agent.runningToday) : `₹-${Math.abs(agent.runningToday).toLocaleString("en-IN")}`}
+              valueClass={agent.runningToday < 0 ? "text-red-500 dark:text-red-400" : ""} />
             <InfoRow label="Final" value={`₹${agent.final < 0 ? "-" : ""}${Math.abs(agent.final).toLocaleString("en-IN")}`}
               valueClass={agent.final < 0 ? "text-red-500 dark:text-red-400" : ""} />
             <InfoRow
@@ -817,14 +820,14 @@ export default function AgentDetail({ id }: { id: string }) {
             <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Performance Summary</p>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "Success Rate", value: agent.perf.successRate.toString() },
-                { label: "Total Volume", value: fmt(agent.perf.totalVolume) },
-                { label: "Today", value: fmt(agent.perf.today) },
-                { label: "This Week", value: fmt(agent.perf.thisWeek) },
+                { label: "Success Rate", value: `${stats.totalTx ? ((stats.completed / stats.totalTx) * 100).toFixed(2) : "0.00"}%`, neg: false },
+                { label: "Total PayIn", value: agent.perf.totalVolume >= 0 ? fmt(agent.perf.totalVolume) : `₹-${Math.abs(agent.perf.totalVolume).toLocaleString("en-IN")}`, neg: agent.perf.totalVolume < 0 },
+                { label: "Today Running", value: agent.perf.today >= 0 ? fmt(agent.perf.today) : `₹-${Math.abs(agent.perf.today).toLocaleString("en-IN")}`, neg: agent.perf.today < 0 },
+                { label: "This Week", value: agent.perf.thisWeek >= 0 ? fmt(agent.perf.thisWeek) : `₹-${Math.abs(agent.perf.thisWeek).toLocaleString("en-IN")}`, neg: agent.perf.thisWeek < 0 },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl bg-gray-50 dark:bg-gray-800/60 px-3 py-2">
                   <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">{item.label}</p>
-                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{item.value}</p>
+                  <p className={`text-sm font-bold ${item.neg ? "text-red-500" : "text-gray-800 dark:text-gray-200"}`}>{item.value}</p>
                 </div>
               ))}
             </div>
@@ -1115,12 +1118,12 @@ export default function AgentDetail({ id }: { id: string }) {
                         }}
                         onTogglePayIn={async (pmRow) => {
                           const originalState = pmRow.pay_in_enabled;
-                          
+
                           // Optimistic update
-                          setPayMethods(prev => prev.map(p => 
+                          setPayMethods(prev => prev.map(p =>
                             p.id === pmRow.id ? { ...p, pay_in_enabled: !originalState } : p
                           ));
-                          
+
                           try {
                             const res = await fetch(`/api/admin/agents/${id}/pay-methods/${pmRow.id}`, {
                               method: "PATCH",
@@ -1131,20 +1134,20 @@ export default function AgentDetail({ id }: { id: string }) {
                             const d = await res.json().catch(() => ({}));
                             if (!res.ok || !d.ok) {
                               // Revert on error
-                              setPayMethods(prev => prev.map(p => 
+                              setPayMethods(prev => prev.map(p =>
                                 p.id === pmRow.id ? { ...p, pay_in_enabled: originalState } : p
                               ));
                               setAccountsError(d.error ?? "Could not update account.");
                               return;
                             }
                             if (d.payment_method) {
-                              setPayMethods(prev => prev.map(p => 
+                              setPayMethods(prev => prev.map(p =>
                                 p.id === pmRow.id ? d.payment_method : p
                               ));
                             }
                           } catch {
                             // Revert on error
-                            setPayMethods(prev => prev.map(p => 
+                            setPayMethods(prev => prev.map(p =>
                               p.id === pmRow.id ? { ...p, pay_in_enabled: originalState } : p
                             ));
                             setAccountsError("Network error.");
@@ -1152,12 +1155,12 @@ export default function AgentDetail({ id }: { id: string }) {
                         }}
                         onTogglePayOut={async (pmRow) => {
                           const originalState = pmRow.pay_out_enabled;
-                          
+
                           // Optimistic update
-                          setPayMethods(prev => prev.map(p => 
+                          setPayMethods(prev => prev.map(p =>
                             p.id === pmRow.id ? { ...p, pay_out_enabled: !originalState } : p
                           ));
-                          
+
                           try {
                             const res = await fetch(`/api/admin/agents/${id}/pay-methods/${pmRow.id}`, {
                               method: "PATCH",
@@ -1168,20 +1171,20 @@ export default function AgentDetail({ id }: { id: string }) {
                             const d = await res.json().catch(() => ({}));
                             if (!res.ok || !d.ok) {
                               // Revert on error
-                              setPayMethods(prev => prev.map(p => 
+                              setPayMethods(prev => prev.map(p =>
                                 p.id === pmRow.id ? { ...p, pay_out_enabled: originalState } : p
                               ));
                               setAccountsError(d.error ?? "Could not update account.");
                               return;
                             }
                             if (d.payment_method) {
-                              setPayMethods(prev => prev.map(p => 
+                              setPayMethods(prev => prev.map(p =>
                                 p.id === pmRow.id ? d.payment_method : p
                               ));
                             }
                           } catch {
                             // Revert on error
-                            setPayMethods(prev => prev.map(p => 
+                            setPayMethods(prev => prev.map(p =>
                               p.id === pmRow.id ? { ...p, pay_out_enabled: originalState } : p
                             ));
                             setAccountsError("Network error.");

@@ -40,7 +40,7 @@ export function sqlCreatedAtRange(alias: string, from: Date | null, to: Date | n
 
 export function appendDateRangeToUrl(base: string, from: string, to: string): string {
   const q = new URLSearchParams();
-  if (from) q.set("from", new Date(from).toISOString());
+  if (from) q.set("from", new Date(`${from}T00:00:00`).toISOString());
   if (to) q.set("to", new Date(`${to}T23:59:59`).toISOString());
   const qs = q.toString();
   if (!qs) return base;

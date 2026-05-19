@@ -175,7 +175,7 @@ CREATE TABLE `transactions` (
   `user_upi` varchar(255) DEFAULT NULL,
   `company_id` bigint(20) UNSIGNED DEFAULT NULL,
   `confirmed_by` bigint(20) UNSIGNED DEFAULT NULL,
-  `payment_image` text DEFAULT NULL,
+  `payment_image` LONGTEXT DEFAULT NULL,
   `confirmed_at` datetime DEFAULT NULL,
   `updated_at_custom` datetime DEFAULT NULL,
   `expires_at` datetime DEFAULT NULL,

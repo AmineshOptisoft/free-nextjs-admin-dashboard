@@ -91,10 +91,7 @@ export default function AgentList() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
-  const [dateRange, setDateRange] = useState<DateRange | null>(() => ({
-    from: new Date(daysAgoInputDate(30) + "T00:00:00"),
-    to: new Date(todayInputDate() + "T00:00:00"),
-  }));
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [periodMetrics, setPeriodMetrics] = useState(false);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
@@ -104,6 +101,7 @@ export default function AgentList() {
       setLoadError(null);
     }
     try {
+      // When no date range selected, send empty strings so backend returns agent table data directly
       const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
       const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
       const res = await fetch(appendDateRangeToUrl("/api/agents", from, to), {
@@ -158,7 +156,7 @@ export default function AgentList() {
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Vendors</h1>
       </div>
 
-      <DateRangePicker
+      {/* <DateRangePicker
         value={dateRange}
         onChange={(r) => {
           setDateRange(r);
@@ -170,7 +168,7 @@ export default function AgentList() {
         <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
           Pay-in / Pay-out totals show selected date range only.
         </p>
-      )}
+      )} */}
 
       {/* ── Toolbar ── */}
       <div className="flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-4 py-3">

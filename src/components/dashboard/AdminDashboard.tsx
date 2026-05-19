@@ -258,15 +258,15 @@ const FIN_STATS_COLUMNS: { key: StatsColKey; label: string }[] = [
   { key: "unsettlePayout", label: "Unsettle Payout" },
   { key: "settlement", label: "Settlement" },
   { key: "net", label: "Net" },
+  { key: "payInCommission", label: "PayIn %" },
+  { key: "payOutCommission", label: "PayOut %" },
+  { key: "referralCommission", label: "Referral %" },
   { key: "running", label: "Running" },
   { key: "runningUnsettled", label: "Running Unsettled" },
   { key: "credit", label: "Credit" },
   { key: "finalBalance", label: "Final Balance" },
   { key: "remainingBalance", label: "Remaining Balance" },
   { key: "prevBalance", label: "Previous Balance" },
-  { key: "payInCommission", label: "PayIn %" },
-  { key: "payOutCommission", label: "PayOut %" },
-  { key: "referralCommission", label: "Referral %" },
   { key: "actions", label: "Actions" },
 ];
 
@@ -461,7 +461,13 @@ export default function AdminDashboard() {
   const [showTotalsRow, setShowTotalsRow] = useState(true);
   const [hideHeaderFilters, setHideHeaderFilters] = useState(false);
   const [rowActivityFilter, setRowActivityFilter] = useState<"all" | "active" | "inactive">("all");
-  const [colVisible, setColVisible] = useState<Record<StatsColKey, boolean>>(() => defaultColBoolMap(true));
+  const HIGHLIGHT_ONLY_COLS = new Set<StatsColKey>(["payInCommission", "payOutCommission", "referralCommission"]);
+  const [colVisible, setColVisible] = useState<Record<StatsColKey, boolean>>(() => ({
+    ...defaultColBoolMap(true),
+    payInCommission: false,
+    payOutCommission: false,
+    referralCommission: false,
+  }));
   const [colHighlight, setColHighlight] = useState<Record<StatsColKey, boolean>>(() => defaultColBoolMap(false));
   const [sortKey, setSortKey] = useState<StatsColKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -773,7 +779,10 @@ export default function AdminDashboard() {
       : getActionLabelSpace(tableToolbarHoverLabel(hoveredTableActionIndex));
 
   const xh = (k: StatsColKey) => (colHighlight[k] ? " bg-amber-50/90 dark:bg-amber-950/35" : "");
-  const xv = (k: StatsColKey) => (colVisible[k] ? "" : " hidden");
+  const xv = (k: StatsColKey) => {
+    if (HIGHLIGHT_ONLY_COLS.has(k)) return colHighlight[k] ? "" : " hidden";
+    return colVisible[k] ? "" : " hidden";
+  };
   const visibleColCount = FIN_STATS_COLUMNS.filter((c) => colVisible[c.key]).length;
 
   return (
@@ -965,11 +974,20 @@ export default function AdminDashboard() {
                           type="checkbox"
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500/30 dark:border-gray-600 dark:bg-gray-800"
                           checked={colHighlight[c.key]}
-                          onChange={() =>
-                            setColHighlight((prev) => ({ ...prev, [c.key]: !prev[c.key] }))
-                          }
+                          onChange={() => {
+                            const next = !colHighlight[c.key];
+                            setColHighlight((prev) => ({ ...prev, [c.key]: next }));
+                            if (HIGHLIGHT_ONLY_COLS.has(c.key)) {
+                              setColVisible((prev) => ({ ...prev, [c.key]: next }));
+                            }
+                          }}
                         />
-                        <span className="truncate">{c.label}</span>
+                        <span className="truncate">
+                          {c.label}
+                          {HIGHLIGHT_ONLY_COLS.has(c.key) && (
+                            <span className="ml-1 text-[9px] font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-wide">highlight to show</span>
+                          )}
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -1061,6 +1079,9 @@ export default function AdminDashboard() {
                   <td className={`${colCell} font-bold text-red-500${xh("unsettlePayout")}${xv("unsettlePayout")}`}>{fmt(totals.unsettlePayout)}</td>
                   <td className={`${colCell}${xh("settlement")}${xv("settlement")}`}>{totals.settlement.toLocaleString("en-IN")}</td>
                   <td className={`${colCell} font-bold text-red-500${xh("net")}${xv("net")}`}>{fmt(totals.net)}</td>
+                  <td className={`${colCell} text-gray-400${xh("payInCommission")}${xv("payInCommission")}`}>—</td>
+                  <td className={`${colCell} text-gray-400${xh("payOutCommission")}${xv("payOutCommission")}`}>—</td>
+                  <td className={`${colCell} text-gray-400${xh("referralCommission")}${xv("referralCommission")}`}>—</td>
                   <td className={`${colCell}${xh("running")}${xv("running")}`}>
                     <div className="flex flex-col gap-0.5">
                       <span className="text-green-600 dark:text-green-400 font-semibold">{(totals.running / 1000).toFixed(0)}K</span>
@@ -1077,9 +1098,6 @@ export default function AdminDashboard() {
                   <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("finalBalance")}${xv("finalBalance")}`}>{totals.finalBalance.toLocaleString("en-IN")}</td>
                   <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("remainingBalance")}${xv("remainingBalance")}`}>{totals.remainingBalance.toLocaleString("en-IN")}</td>
                   <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{totals.prevBalance}</td>
-                  <td className={`${colCell} text-gray-400${xh("payInCommission")}${xv("payInCommission")}`}>—</td>
-                  <td className={`${colCell} text-gray-400${xh("payOutCommission")}${xv("payOutCommission")}`}>—</td>
-                  <td className={`${colCell} text-gray-400${xh("referralCommission")}${xv("referralCommission")}`}>—</td>
                   <td className={`${colCell} ${colActions}${xh("actions")}${xv("actions")}`}></td>
                 </tr>
               )}
@@ -1109,6 +1127,9 @@ export default function AdminDashboard() {
                     <td className={`${colCell}${xh("unsettlePayout")}${xv("unsettlePayout")}`}>{colorVal(row.unsettlePayout, true)}</td>
                     <td className={`${colCell}${xh("settlement")}${xv("settlement")}`}>{colorVal(row.settlement, true)}</td>
                     <td className={`${colCell}${xh("net")}${xv("net")}`}>{colorVal(row.net, true)}</td>
+                    <td className={`${colCell}${xh("payInCommission")}${xv("payInCommission")}`}>{fmtPct(row.payInCommission)}</td>
+                    <td className={`${colCell}${xh("payOutCommission")}${xv("payOutCommission")}`}>{fmtPct(row.payOutCommission)}</td>
+                    <td className={`${colCell}${xh("referralCommission")}${xv("referralCommission")}`}>{fmtPct(row.referralCommission)}</td>
 
                     {/* Running — badge */}
                     <td className={`${colCell}${xh("running")}${xv("running")}`}>
@@ -1131,9 +1152,6 @@ export default function AdminDashboard() {
                     <td className={`${colCell}${xh("remainingBalance")}${xv("remainingBalance")}`}>{colorVal(row.remainingBalance, true)}</td>
 
                     <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{row.prevBalance}</td>
-                    <td className={`${colCell}${xh("payInCommission")}${xv("payInCommission")}`}>{fmtPct(row.payInCommission)}</td>
-                    <td className={`${colCell}${xh("payOutCommission")}${xv("payOutCommission")}`}>{fmtPct(row.payOutCommission)}</td>
-                    <td className={`${colCell}${xh("referralCommission")}${xv("referralCommission")}`}>{fmtPct(row.referralCommission)}</td>
 
                     {/* Actions — same label-from-behind + sibling shift as Financial Statistics toolbar */}
                     <td className={`${colCell} ${colActions}${xh("actions")}${xv("actions")}`}>

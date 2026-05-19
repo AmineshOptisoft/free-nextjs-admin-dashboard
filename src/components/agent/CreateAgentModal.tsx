@@ -45,10 +45,14 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
     setError(null);
     const username = localPartFromEmail(form.email).trim();
     const password = form.password;
-    if (!username || !password) {
-      setError("Valid email (with @) is required — login username is the part before @. Password is required.");
-      return;
-    }
+
+    if (!form.name.trim()) { setError("Name is required."); return; }
+    if (!form.email.trim() || !username) { setError("Valid email (with @) is required."); return; }
+    if (!password) { setError("Password is required."); return; }
+    if (form.securityDeposit === "") { setError("Security Deposit is required."); return; }
+    if (form.payinCommission === "") { setError("PayIn Commission is required."); return; }
+    if (form.payoutCommission === "") { setError("PayOut Commission is required."); return; }
+    if (referralEntered && form.referralCommission.trim() === "") { setError("Referral Commission is required when a referral is entered."); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/agents", {
@@ -120,12 +124,12 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
           )}
 
           <div>
-            <label className={labelCls}>Name</label>
-            <input type="text" value={form.name} onChange={set("name")} placeholder="Enter name" className={inputCls} disabled={saving} />
+            <label className={labelCls}>Name <span className="text-red-500">*</span></label>
+            <input type="text" value={form.name} onChange={set("name")} placeholder="Enter name" className={inputCls} disabled={saving} required />
           </div>
 
           <div>
-            <label className={labelCls}>Email</label>
+            <label className={labelCls}>Email <span className="text-red-500">*</span></label>
             <input
               type="email"
               value={form.email}
@@ -133,11 +137,12 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
               placeholder="agent@example.com"
               className={inputCls}
               disabled={saving}
+              required
             />
           </div>
 
           <div className="sm:col-span-2">
-            <label className={labelCls}>Password</label>
+            <label className={labelCls}>Password <span className="text-red-500">*</span></label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
@@ -146,6 +151,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
                 placeholder="Enter password"
                 className={`${inputCls} pr-12`}
                 disabled={saving}
+                required
               />
               <button
                 type="button"
@@ -167,8 +173,8 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
           </div>
 
           <div>
-            <label className={labelCls}>Security Deposit</label>
-            <input type="number" value={form.securityDeposit} onChange={set("securityDeposit")} placeholder="Amount" className={inputCls} disabled={saving} />
+            <label className={labelCls}>Security Deposit <span className="text-red-500">*</span></label>
+            <input type="number" value={form.securityDeposit} onChange={set("securityDeposit")} placeholder="Amount" className={inputCls} disabled={saving} required />
           </div>
 
           <div>
@@ -187,13 +193,13 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
           </div>
 
           <div>
-            <label className={labelCls}>PayIn Commission (%)</label>
-            <input type="text" value={form.payinCommission} onChange={set("payinCommission")} placeholder="e.g. 0.6, 2, 3" className={inputCls} disabled={saving} />
+            <label className={labelCls}>PayIn Commission (%) <span className="text-red-500">*</span></label>
+            <input type="text" value={form.payinCommission} onChange={set("payinCommission")} placeholder="e.g. 0.6, 2, 3" className={inputCls} disabled={saving} required />
           </div>
 
           <div>
-            <label className={labelCls}>PayOut Commission (%)</label>
-            <input type="text" value={form.payoutCommission} onChange={set("payoutCommission")} placeholder="e.g. 0.1, 1.5" className={inputCls} disabled={saving} />
+            <label className={labelCls}>PayOut Commission (%) <span className="text-red-500">*</span></label>
+            <input type="text" value={form.payoutCommission} onChange={set("payoutCommission")} placeholder="e.g. 0.1, 1.5" className={inputCls} disabled={saving} required />
           </div>
 
           <div className="sm:col-span-2">
@@ -222,7 +228,9 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
 
           {referralEntered && (
             <div className="sm:col-span-2">
-              <label className={labelCls}>Referral commission (%)</label>
+              <label className={labelCls}>
+                Referral Commission (%) <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 value={form.referralCommission}
@@ -230,6 +238,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
                 placeholder="e.g. 0, 1, 2.5"
                 className={inputCls}
                 disabled={saving}
+                required
               />
             </div>
           )}

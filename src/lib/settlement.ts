@@ -155,8 +155,8 @@ export function signedSettlementFromManual(
 type DbExec = Pick<PoolConnection, "execute">;
 
 /**
- * Apply settled amount to agent balances. Updates previous_balance + running_balance (ledger formula).
- * Does not modify pay_in_commission, pay_out_commission, or referral_commission.
+ * Apply settled amount to agent balances. Updates settlement_amount + running_balance.
+ * Does NOT modify previous_balance — that is only set by the midnight cron (yesterday's running).
  */
 export async function applyAgentSettlementBalances(
   exec: DbExec,
@@ -169,12 +169,10 @@ export async function applyAgentSettlementBalances(
 
   const [result] = await exec.execute<ResultSetHeader>(
     `UPDATE \`agents\`
-     SET \`previous_balance\` = \`previous_balance\` + ?,
-         \`running_balance\` = \`previous_balance\` + \`net_pay_in\` - \`net_pay_out\`,
-         \`settlement_amount\` = \`settlement_amount\` + ?,
+     SET \`settlement_amount\` = \`settlement_amount\` + ?,
          \`settlement_date\` = UNIX_TIMESTAMP()
      WHERE \`id\` = ?`,
-    [signed, absSettled, agentId],
+    [absSettled, agentId],
   );
   if (result.affectedRows !== 1) {
     throw new Error("AGENT_SETTLEMENT_BALANCE_UPDATE_FAILED");

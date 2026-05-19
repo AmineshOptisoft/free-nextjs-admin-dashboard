@@ -53,10 +53,9 @@ function SectionHeading({ icon, title }: { icon: React.ReactNode; title: string 
 }
 
 const inputCls = (active?: boolean) =>
-  `w-full rounded-full border px-4 py-2.5 text-sm outline-none transition-colors ${
-    active
-      ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20 text-gray-800 dark:text-gray-200"
-      : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+  `w-full rounded-full border px-4 py-2.5 text-sm outline-none transition-colors ${active
+    ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20 text-gray-800 dark:text-gray-200"
+    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
   }`;
 
 const selectCls =
@@ -129,8 +128,8 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
       setRole("Peer User");
       setUsername("");
       setPassword("");
-      setEnablePayIn(false);
-      setEnablePayOut(false);
+      setEnablePayIn(true);
+      setEnablePayOut(true);
       setOpType("PayIn & PayOut");
       setMethodChannel("UPI");
       setUpiAccountName("");
@@ -233,11 +232,11 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
       if (editPaymentMethod) {
         const body: Record<string, unknown> = { ...payload };
         if (password) body.password = password;
-        
-        const endpoint = adminAgentId 
+
+        const endpoint = adminAgentId
           ? `/api/admin/agents/${adminAgentId}/pay-methods/${editPaymentMethod.id}`
           : `/api/agent/staff/${editPaymentMethod.id}`;
-          
+
         const res = await fetch(endpoint, {
           method: "PATCH",
           credentials: "include",
@@ -253,7 +252,7 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
         const endpoint = adminAgentId
           ? `/api/admin/agents/${adminAgentId}/pay-methods`
           : "/api/agent/staff";
-          
+
         const res = await fetch(endpoint, {
           method: "POST",
           credentials: "include",
@@ -300,11 +299,10 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
           {STEPS.map((s, i) => (
             <React.Fragment key={s}>
               <div className="flex items-center gap-2">
-                <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold transition-colors ${
-                  i < step ? "bg-green-500 text-white"
-                  : i === step ? "bg-blue-500 text-white"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-                }`}>
+                <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold transition-colors ${i < step ? "bg-green-500 text-white"
+                    : i === step ? "bg-blue-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                  }`}>
                   {i < step ? (
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -442,11 +440,10 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
                         setMethodChannel(opt.id);
                         setErr(null);
                       }}
-                      className={`rounded-2xl border px-5 py-3 text-left transition-colors ${
-                        methodChannel === opt.id
+                      className={`rounded-2xl border px-5 py-3 text-left transition-colors ${methodChannel === opt.id
                           ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-400"
                           : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300"
-                      }`}
+                        }`}
                     >
                       <p className="text-sm font-bold text-gray-900 dark:text-white">{opt.label}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{opt.sub}</p>
@@ -508,14 +505,14 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
                 </div>
               ) : (
                 <div className="space-y-4">
-                <SectionHeading
-                  icon={
-                    <svg className="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  }
-                  title="Bank details"
-                />
+                  <SectionHeading
+                    icon={
+                      <svg className="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    }
+                    title="Bank details"
+                  />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Bank name <span className="text-red-500">*</span></label>
@@ -568,16 +565,16 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
                   { label: "Method", value: methodChannel === "UPI" ? "UPI" : "Bank transfer" },
                   ...(methodChannel === "UPI"
                     ? [
-                        { label: "Name on UPI", value: upiAccountName || "—" },
-                        { label: "UPI ID", value: upiId || "—" },
-                      ]
+                      { label: "Name on UPI", value: upiAccountName || "—" },
+                      { label: "UPI ID", value: upiId || "—" },
+                    ]
                     : [
-                        { label: "Bank", value: bankName || "—" },
-                        { label: "Account holder", value: bankAccountHolder || "—" },
-                        { label: "Account no.", value: accountNo || "—" },
-                        { label: "IFSC", value: ifscCode || "—" },
-                        { label: "Branch", value: branchName || "—" },
-                      ]),
+                      { label: "Bank", value: bankName || "—" },
+                      { label: "Account holder", value: bankAccountHolder || "—" },
+                      { label: "Account no.", value: accountNo || "—" },
+                      { label: "IFSC", value: ifscCode || "—" },
+                      { label: "Branch", value: branchName || "—" },
+                    ]),
                 ].map((r, i) => (
                   <div key={r.label} className={`flex items-center justify-between px-5 py-3 ${i % 2 === 0 ? "" : "bg-gray-50 dark:bg-gray-700/30"}`}>
                     <span className="text-sm text-gray-500 dark:text-gray-400">{r.label}</span>
@@ -594,11 +591,10 @@ export default function CreateUserModal({ onClose, onSuccess, editPaymentMethod,
             type="button"
             onClick={() => canPrev && !saving && setStep((s) => s - 1)}
             disabled={!canPrev || saving}
-            className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors ${
-              canPrev
+            className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors ${canPrev
                 ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
                 : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed"
-            }`}
+              }`}
           >
             Previous
           </button>

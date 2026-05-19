@@ -42,10 +42,12 @@ export default function CreateCompanyModal({ onClose, onCreated }: Props) {
 
   async function handleCreate() {
     setError(null);
-    if (!form.username.trim() || !form.password) {
-      setError("Username and password are required.");
-      return;
-    }
+    if (!form.username.trim()) { setError("Company username is required."); return; }
+    if (!form.password) { setError("Password is required."); return; }
+    if (form.password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (!form.brandName.trim()) { setError("Brand name is required."); return; }
+    if (!form.commission.trim()) { setError("Commission is required."); return; }
+    if (!logoFile) { setError("Logo is required."); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/company/create", {
@@ -130,7 +132,7 @@ export default function CreateCompanyModal({ onClose, onCreated }: Props) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <label className={labelCls}>Company username</label>
+              <label className={labelCls}>Company username <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={form.username}
@@ -141,7 +143,7 @@ export default function CreateCompanyModal({ onClose, onCreated }: Props) {
               />
             </div>
             <div>
-              <label className={labelCls}>Login password</label>
+              <label className={labelCls}>Login password <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -161,7 +163,7 @@ export default function CreateCompanyModal({ onClose, onCreated }: Props) {
               </div>
             </div>
             <div>
-              <label className={labelCls}>Brand name</label>
+              <label className={labelCls}>Brand name <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={form.brandName}
@@ -172,7 +174,7 @@ export default function CreateCompanyModal({ onClose, onCreated }: Props) {
               />
             </div>
             <div className="sm:col-span-2">
-              <label className={labelCls}>Commission (%)</label>
+              <label className={labelCls}>Commission (%) <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={form.commission}
@@ -185,7 +187,7 @@ export default function CreateCompanyModal({ onClose, onCreated }: Props) {
           </div>
 
           <div>
-            <label className={labelCls}>Logo</label>
+            <label className={labelCls}>Logo <span className="text-red-500">*</span></label>
             <LogoImagePicker
               compact
               previewSrc={pickerDisplay}

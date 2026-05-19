@@ -66,10 +66,7 @@ export default function TransactionReport() {
   const [payOuts, setPayOuts] = useState<Tx[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState<DateRange | null>(() => ({
-    from: new Date(daysAgoInputDate(30) + "T00:00:00"),
-    to: new Date(todayInputDate() + "T00:00:00"),
-  }));
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const { loading: authLoading } = useAuth();
 
   const role = user?.role || "admin";
@@ -81,9 +78,13 @@ export default function TransactionReport() {
       setLoading(true);
       setError(null);
       try {
+        // Default to last 10 days when no date range is selected
+        const fallbackFrom = daysAgoInputDate(10);
+        const fallbackTo = todayInputDate();
+        const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : fallbackFrom;
+        const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : fallbackTo;
+
         if (role === "admin") {
-          const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
-          const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
           const res = await fetch(appendDateRangeToUrl("/api/admin/transaction-report?limit=5000", from, to), {
             credentials: "include",
           });
@@ -97,8 +98,6 @@ export default function TransactionReport() {
           setPayIns(data.payins ?? []);
           setPayOuts(data.payouts ?? []);
         } else if (role === "company") {
-          const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
-          const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
           const [piRes, poRes] = await Promise.all([
             fetch(appendDateRangeToUrl("/api/company/payins?limit=5000", from, to), { credentials: "include" }),
             fetch(appendDateRangeToUrl("/api/company/payouts?limit=5000", from, to), { credentials: "include" }),

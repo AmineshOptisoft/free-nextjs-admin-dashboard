@@ -138,7 +138,7 @@ export default function DashboardMetrics() {
         }
       />
       <MetricCard
-        title="Net Settlement"
+        title="Net"
         value={money(netSettlement)}
         subValue="After fees & taxes"
         change={undefined}

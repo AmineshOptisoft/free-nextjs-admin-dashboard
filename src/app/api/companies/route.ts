@@ -43,7 +43,6 @@ export async function GET(req: Request) {
   const hasRange = Boolean(from || to);
   const range = sqlCreatedAtRange("t", from, to);
 
-  const includeCommission = await hasCommissionColumn();
 
   const txSubquery = hasRange
     ? `
@@ -67,7 +66,7 @@ export async function GET(req: Request) {
 
   let sql = `
     SELECT c.\`id\`, c.\`username\`, c.\`brand_name\`, c.\`logo\`, c.\`status\`, c.\`company_code\`,
-           ${includeCommission ? "c.`commission`," : ""}
+           c.\`commission\`,
            ${
              hasRange
                ? "COALESCE(tx.period_pay_in, 0) AS net_pay_in, COALESCE(tx.period_pay_out, 0) AS net_pay_out, COALESCE(tx.period_pay_in, 0) AS today_pay_in, COALESCE(tx.period_pay_out, 0) AS today_pay_out,"
@@ -93,7 +92,7 @@ export async function GET(req: Request) {
     logo: r.logo,
     status: r.status,
     company_code: r.company_code,
-    commission: num(includeCommission ? r.commission : 0),
+    commission: num(r.commission),
     net_pay_in: num(r.net_pay_in),
     net_pay_out: num(r.net_pay_out),
     settlement_amount: num(r.settlement_amount),
