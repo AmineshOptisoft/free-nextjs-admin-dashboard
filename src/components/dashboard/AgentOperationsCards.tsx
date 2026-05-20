@@ -25,6 +25,7 @@ const FALLBACK = {
   active_methods: 0,
   payin_enabled_methods: 0,
   payout_enabled_methods: 0,
+  success_rate: 0,
 };
 
 function money(n: number) {
@@ -179,7 +180,7 @@ function buildCards(data: typeof FALLBACK): OpsCard[] {
   },
     {
       title: "Success Rate",
-      value: "—",
+      value: pct(Number(data.success_rate.toFixed(2))),
       subText: "Live on metrics section",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -212,9 +213,19 @@ export default function AgentOperationsCards() {
     (async () => {
       try {
         const res = await fetch("/api/agent/dashboard", { credentials: "include" });
-        const json = (await res.json()) as { ok?: boolean; operations?: Partial<typeof FALLBACK> };
+        const json = (await res.json()) as {
+          ok?: boolean;
+          operations?: Partial<typeof FALLBACK>;
+          metrics?: {
+            payin_txn_count?: number;
+            payin_success_count?: number;
+          };
+        };
         if (!mounted || !res.ok || !json.ok || !json.operations) return;
-        setOps((prev) => ({ ...prev, ...json.operations }));
+        const total = Number(json.metrics?.payin_txn_count ?? 0);
+        const success = Number(json.metrics?.payin_success_count ?? 0);
+        const success_rate = total > 0 ? (success / total) * 100 : 0;
+        setOps((prev) => ({ ...prev, ...json.operations, success_rate }));
       } catch {
         // keep fallback
       }

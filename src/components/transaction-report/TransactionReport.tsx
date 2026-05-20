@@ -13,7 +13,7 @@ import {
 } from ".";
 import { GrTransaction } from "react-icons/gr";
 import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
-import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
+import { appendDateRangeToUrl, daysAgoInputDate, toInputDate, todayInputDate } from "@/lib/date-range";
 import { TransactionReportIcon } from "@/icons/nav-icons";
 import { useAuth } from "@/context/AuthContext";
 
@@ -23,6 +23,7 @@ type Tx = {
   status: string;
   assignedAgentName?: string;
   assignedAgentId?: string | null;
+  processingSeconds?: number | null;
   /** Company payin/payout list uses this label; keep in sync for vendor performance. */
   assignedToLabel?: string;
 };
@@ -31,6 +32,22 @@ type ApiResponse = { ok?: boolean; payins?: Tx[]; payouts?: Tx[]; error?: string
 
 function inr(v: number): string {
   return `₹${Math.round(v).toLocaleString("en-IN")}`;
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`;
+}
+
+function averageProcessingLabel(items: Tx[]): string {
+  const valid = items
+    .map((t) => t.processingSeconds)
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+  if (!valid.length) return "—";
+  const avg = Math.round(valid.reduce((sum, v) => sum + v, 0) / valid.length);
+  return formatDuration(avg);
 }
 
 function aggregateByStatus(payIns: Tx[], payOuts: Tx[]): TransactionStatusDistributionRow[] {
@@ -81,8 +98,8 @@ export default function TransactionReport() {
         // Default to last 10 days when no date range is selected
         const fallbackFrom = daysAgoInputDate(10);
         const fallbackTo = todayInputDate();
-        const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : fallbackFrom;
-        const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : fallbackTo;
+        const from = dateRange?.from ? toInputDate(dateRange.from) : fallbackFrom;
+        const to = dateRange?.to ? toInputDate(dateRange.to) : fallbackTo;
 
         if (role === "admin") {
           const res = await fetch(appendDateRangeToUrl("/api/admin/transaction-report?limit=5000", from, to), {
@@ -133,7 +150,6 @@ export default function TransactionReport() {
     const poVolume = payOuts.reduce((s, t) => s + (t.amount || 0), 0);
     return { all, completed, totalVolume, completedVolume, completionRate, avg, piVolume, poVolume };
   }, [payIns, payOuts]);
-
   const agentPerformanceRows: AgentPerformanceRow[] = useMemo(() => {
     const all = [...payIns, ...payOuts];
     const grouped = new Map<
@@ -144,6 +160,8 @@ export default function TransactionReport() {
         totalAmount: number;
         completedAmount: number;
         completedCount: number;
+        processingSecondsTotal: number;
+        processingSamples: number;
       }
     >();
     for (const t of all) {
@@ -161,6 +179,8 @@ export default function TransactionReport() {
         totalAmount: 0,
         completedAmount: 0,
         completedCount: 0,
+        processingSecondsTotal: 0,
+        processingSamples: 0,
       };
       if (!row.agentId && aid) row.agentId = aid;
       row.totalTransactions += 1;
@@ -169,6 +189,10 @@ export default function TransactionReport() {
       if (s.includes("APPROVED")) {
         row.completedCount += 1;
         row.completedAmount += t.amount || 0;
+      }
+      if (typeof t.processingSeconds === "number" && Number.isFinite(t.processingSeconds) && t.processingSeconds > 0) {
+        row.processingSecondsTotal += t.processingSeconds;
+        row.processingSamples += 1;
       }
       grouped.set(key, row);
     }
@@ -179,11 +203,10 @@ export default function TransactionReport() {
       totalAmount: inr(r.totalAmount),
       completed: inr(r.completedAmount),
       completionRate: `${r.totalTransactions ? ((r.completedCount / r.totalTransactions) * 100).toFixed(2) : "0.00"}%`,
-      avgProcessingTime: "—",
+      avgProcessingTime: r.processingSamples ? formatDuration(Math.round(r.processingSecondsTotal / r.processingSamples)) : "—",
     }));
     return rows;
   }, [payIns, payOuts]);
-
   const summaryCards: TransactionSummaryCard[] = [
     { title: "Total Transactions", value: String(totals.all.length), accent: "blue", icon: <span /> },
     { title: "PayIn Transactions", value: String(payIns.length), accent: "green", icon: <span /> },
@@ -206,7 +229,7 @@ export default function TransactionReport() {
           ).toFixed(2)}%`,
         },
         { label: "Average Transaction", value: inr(payIns.length ? totals.piVolume / payIns.length : 0) },
-        { label: "Average Processing Time", value: "—" },
+        { label: "Average Processing Time", value: averageProcessingLabel(payIns) },
       ],
     },
     {
@@ -223,8 +246,8 @@ export default function TransactionReport() {
           ).toFixed(2)}%`,
         },
         { label: "Average Transaction", value: inr(payOuts.length ? totals.poVolume / payOuts.length : 0) },
-        { label: "Average Processing Time", value: "—" },
-      ],
+        { label: "Average Processing Time", value: averageProcessingLabel(payOuts) },
+        ],
     },
   ];
 

@@ -55,7 +55,7 @@ function mapAgent(r: AgentRow) {
   const payout = payoutVolume > 0 ? payoutVolume : ledgerPayout;
 
   const net = netPayIn - ledgerPayout;
-  const running = prevBalance + netPayIn - ledgerPayout;
+  const running = num(r.running_balance);
   const finalBalance = running - security;
   const remainingBalance = credit - finalBalance;
 

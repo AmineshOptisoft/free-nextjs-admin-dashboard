@@ -11,6 +11,9 @@ export type AgentPayInListItem = {
   clientId?: string;
   clientUpi: string;
   assignedUpi: string;
+  bankName?: string;
+  accountNo?: string;
+  ifsc?: string;
   createdOn: string;
   createdAtIso?: string;
   /** When set, open requests auto-expire at this instant (server `expires_at`). */
@@ -126,6 +129,20 @@ function toIso(v: Date | string | null | undefined): string | undefined {
   return d.toISOString();
 }
 
+function payInAssignedToLabel(r: TxRow): string {
+  const upi = (r.assigned_upi ?? "").trim();
+  if (upi) return upi;
+  const bank = (r.bank_name ?? "").trim();
+  const account = (r.bank_account_number ?? "").trim();
+  if (bank && account) {
+    const tail = account.length > 4 ? account.slice(-4) : account;
+    return `${bank} · ${tail}`;
+  }
+  if (bank) return bank;
+  if (account) return account;
+  return "—";
+}
+
 export function mapDbStatusToPayInUi(status: string): AgentPayInListItem["status"] {
   switch (status) {
     case "NOT_ASSIGNED":
@@ -195,13 +212,16 @@ export function rowToPayInItem(r: TxRow): AgentPayInListItem {
     orderId: r.order_id,
     clientName: (r.client_name ?? "").trim() || "—",
     clientId: (r.client_id ?? "").trim() || undefined,
-    clientUpi: (r.client_upi ?? r.user_upi ?? "").trim() || "—",
+    clientUpi: (r.client_upi ?? r.user_upi ?? "").trim() || "SKIP_UPI",
     assignedUpi,
+    bankName: (r.bank_name ?? "").trim() || "—",
+    accountNo: (r.bank_account_number ?? "").trim() || "—",
+    ifsc: (r.ifsc_code ?? "").trim() || "—",
     createdOn: formatDt(r.created_at),
     createdAtIso: toIso(r.created_at),
     totalAmount: amt,
     discountAmount: 0,
-    assignedTo: "—",
+    assignedTo: payInAssignedToLabel(r),
     assignedOn: formatDt(r.assigned_date),
     remarks: (r.user_note ?? "").trim() || "—",
     hasReceipt: Boolean(r.payment_image && String(r.payment_image).length > 0),

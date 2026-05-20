@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid body" }, { status: 400 });
   }
 
-  const { subadminId, amount, remarks } = body;
+  const { subadminId, amount, remarks, txType, date } = body;
 
   if (!subadminId || !amount) {
     return NextResponse.json({ ok: false, error: "Missing required fields" }, { status: 400 });
@@ -25,10 +25,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 });
   }
 
+  // If txType is debit, we deduct. If credit, we add. 
+  // Depending on accounting, usually Credit = add to balance, Debit = deduct from balance.
+  const diff = txType === "debit" ? -amountVal : amountVal;
+
   try {
     const [result] = await pool.query<ResultSetHeader>(
       `UPDATE \`agents\` SET \`security_deposit\` = \`security_deposit\` + ? WHERE \`id\` = ?`,
-      [amountVal, subadminId]
+      [diff, subadminId]
     );
 
     if (result.affectedRows === 0) {

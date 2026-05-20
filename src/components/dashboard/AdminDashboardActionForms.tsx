@@ -419,15 +419,19 @@ export function SecurityDepositModal({
   subadmins: SubadminOption[];
 }) {
   const [subadminId, setSubadminId] = useState("");
+  const [depositDate, setDepositDate] = useState(() => todayInputDate());
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [txType, setTxType] = useState<"debit" | "credit">("credit");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleClose = () => {
     setSubadminId("");
+    setDepositDate(todayInputDate());
     setAmount("");
     setRemarks("");
+    setTxType("credit");
     setError(null);
     onClose();
   };
@@ -443,7 +447,7 @@ export function SecurityDepositModal({
       const res = await fetch("/api/admin/security-deposit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subadminId, amount, remarks }),
+        body: JSON.stringify({ subadminId, amount, remarks, txType, date: depositDate }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -476,6 +480,15 @@ export function SecurityDepositModal({
           />
         </div>
         <div>
+          <label className={fieldLabel}>Deposit Date</label>
+          <input
+            type="date"
+            value={depositDate}
+            onChange={(e) => setDepositDate(e.target.value)}
+            className={fieldInput}
+          />
+        </div>
+        <div>
           <label className={fieldLabel}>Amount</label>
           <AgentBalanceInfo agent={subadmins.find(s => s.id === subadminId)} />
           <input
@@ -486,9 +499,6 @@ export function SecurityDepositModal({
             placeholder="Enter deposit amount"
             className={fieldInput}
           />
-          <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-            Enter the security deposit amount in dollars
-          </p>
         </div>
         <div>
           <label className={fieldLabel}>Remarks (optional)</label>
@@ -499,6 +509,10 @@ export function SecurityDepositModal({
             className={fieldTextarea}
             rows={3}
           />
+        </div>
+        <div>
+          <label className={fieldLabel}>Transaction Type</label>
+          <TxTypeRadios value={txType} onChange={setTxType} />
         </div>
       </FormShell>
       <ModalFooter onCancel={handleClose} submitLabel={busy ? "Processing..." : "Submit Deposit"} onSubmit={handleSubmit} />
@@ -520,6 +534,8 @@ export function SettlementModal({
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
   const [txType, setTxType] = useState<"debit" | "credit">("debit");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleClose = () => {
     setSubadminId("");
@@ -527,12 +543,66 @@ export function SettlementModal({
     setAmount("");
     setRemarks("");
     setTxType("debit");
+    setError(null);
     onClose();
+  };
+
+  const handleSubmit = async () => {
+    if (!subadminId) {
+      setError("Please select a subadmin.");
+      return;
+    }
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setError("Please enter a valid amount.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const dayStart = new Date(settlementDate);
+      const dayEnd = new Date(settlementDate + "T23:59:59");
+      const res = await fetch("/api/admin/settlements", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          partyType: "AGENT",
+          partyId: Number(subadminId),
+          settlementDate,
+          periodFrom: dayStart.toISOString(),
+          periodTo: dayEnd.toISOString(),
+          remark: remarks,
+          settlementType: "NET",
+          commissionHead: "ALL",
+          transactionType: txType.toUpperCase(),
+          settlementFrequency: "manual",
+          settlementStatus: "settled",
+          finalSettlementAmount: amt,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data.error || "Failed to add settlement.");
+        setBusy(false);
+        return;
+      }
+      handleClose();
+    } catch (err) {
+      setError("Network error occurred.");
+      setBusy(false);
+    }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} className="max-w-lg p-6 lg:p-8">
       <FormShell title="Add Settlement">
+        {error && (
+          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-900/40">
+            {error}
+          </div>
+        )}
         <div>
           <label className={fieldLabel}>Subadmin</label>
           <SubadminSelect
@@ -553,7 +623,6 @@ export function SettlementModal({
         </div>
         <div>
           <label className={fieldLabel}>Amount</label>
-          <AgentBalanceInfo agent={subadmins.find(s => s.id === subadminId)} />
           <input
             type="text"
             inputMode="decimal"
@@ -578,7 +647,7 @@ export function SettlementModal({
           <TxTypeRadios value={txType} onChange={setTxType} />
         </div>
       </FormShell>
-      <ModalFooter onCancel={handleClose} submitLabel="Submit Settlement" onSubmit={handleClose} />
+      <ModalFooter onCancel={handleClose} submitLabel={busy ? "Processing..." : "Submit Settlement"} onSubmit={handleSubmit} />
     </Modal>
   );
 }

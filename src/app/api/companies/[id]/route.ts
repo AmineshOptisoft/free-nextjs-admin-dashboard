@@ -22,6 +22,8 @@ type CompanyRow = RowDataPacket & {
   settlement_date: Date | string | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
+  calc_net_pay_in?: string | number | null;
+  calc_net_pay_out?: string | number | null;
 };
 
 type ColumnRow = RowDataPacket & { Field: string };
@@ -39,6 +41,8 @@ async function hasCommissionColumn(): Promise<boolean> {
 }
 
 function mapPublic(r: CompanyRow) {
+  const computedPayIn = num(r.calc_net_pay_in);
+  const computedPayOut = num(r.calc_net_pay_out);
   return {
     id: String(r.id),
     username: r.username,
@@ -47,8 +51,9 @@ function mapPublic(r: CompanyRow) {
     status: r.status,
     company_code: r.company_code,
     commission: num(r.commission),
-    net_pay_in: num(r.net_pay_in),
-    net_pay_out: num(r.net_pay_out),
+    // Prefer live totals from transactions; fall back to companies table values.
+    net_pay_in: computedPayIn || num(r.net_pay_in),
+    net_pay_out: computedPayOut || num(r.net_pay_out),
     settlement_amount: num(r.settlement_amount),
     settlement_date: r.settlement_date,
     created_at: r.created_at,
@@ -78,8 +83,20 @@ export async function GET(
     `SELECT \`id\`, \`username\`, \`brand_name\`, \`logo\`, \`status\`, \`company_code\`,
             ${includeCommission ? "`commission`," : ""}
             \`net_pay_in\`, \`net_pay_out\`, \`settlement_amount\`, \`settlement_date\`,
+            COALESCE(tx.\`calc_net_pay_in\`, 0) AS \`calc_net_pay_in\`,
+            COALESCE(tx.\`calc_net_pay_out\`, 0) AS \`calc_net_pay_out\`,
             \`created_at\`, \`updated_at\`
-     FROM \`companies\` WHERE \`id\` = ? LIMIT 1`,
+     FROM \`companies\`
+     LEFT JOIN (
+       SELECT
+         t.\`company_id\`,
+         COALESCE(SUM(CASE WHEN t.\`type\` = 'PAYIN' THEN CAST(t.\`amount\` AS DECIMAL(18,2)) ELSE 0 END), 0) AS \`calc_net_pay_in\`,
+         COALESCE(SUM(CASE WHEN t.\`type\` = 'PAYOUT' THEN CAST(t.\`amount\` AS DECIMAL(18,2)) ELSE 0 END), 0) AS \`calc_net_pay_out\`
+       FROM \`transactions\` t
+       WHERE t.\`company_id\` IS NOT NULL
+       GROUP BY t.\`company_id\`
+     ) tx ON tx.\`company_id\` = \`companies\`.\`id\`
+     WHERE \`companies\`.\`id\` = ? LIMIT 1`,
     [id],
   );
 

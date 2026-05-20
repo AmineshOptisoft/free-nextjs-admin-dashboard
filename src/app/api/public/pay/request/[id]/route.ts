@@ -33,6 +33,10 @@ function num(v: string | number): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function isValidUtrCode(v: string): boolean {
+  return /^\d{12}$/.test(v);
+}
+
 function expiresAtToIso(v: Date | string | null | undefined): string | undefined {
   if (v == null) return undefined;
   const d = typeof v === "string" ? new Date(v) : v;
@@ -129,6 +133,9 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   const userUpi = typeof body.user_upi === "string" ? body.user_upi.trim() : "";
   if (!utr && !image) {
     return NextResponse.json({ ok: false, error: "Provide utr_code or payment_image" }, { status: 400 });
+  }
+  if (!isValidUtrCode(utr)) {
+    return NextResponse.json({ ok: false, error: "UTR must be exactly 12 digits." }, { status: 400 });
   }
 
   const proofCheck = validatePaymentProofPayload({ utr_code: utr, payment_image: image, user_upi: userUpi });

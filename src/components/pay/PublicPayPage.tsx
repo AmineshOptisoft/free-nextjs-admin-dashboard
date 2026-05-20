@@ -54,6 +54,7 @@ const TARGET_MAX_PROOF_DATA_URL_CHARS = 480_000;
 const MAX_PROOF_IMAGE_RAW_BYTES = 20 * 1024 * 1024;
 /** PDF proof is sent as data URL (~4/3 size); keep small. */
 const MAX_PROOF_PDF_RAW_BYTES = 380 * 1024;
+const UTR_12_DIGIT_REGEX = /^\d{12}$/;
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -421,6 +422,10 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
     if (!request) return;
     const utr = utrInput.trim();
     const image = proofDataUrl?.trim() ?? "";
+    if (!UTR_12_DIGIT_REGEX.test(utr)) {
+      setProofError("UTR must be exactly 12 digits.");
+      return;
+    }
     if (!image) {
       setProofError("Upload a screenshot or proof of payment (required).");
       return;
@@ -812,6 +817,8 @@ export default function PublicPayPage({ companyKey }: { companyKey: string }) {
                       value={utrInput}
                       onChange={(e) => setUtrInput(e.target.value)}
                       placeholder="Enter Ref / UTR No. (12 digits)"
+                      inputMode="numeric"
+                      maxLength={12}
                       className="h-11 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-200 dark:border-gray-600 dark:bg-gray-800"
                     />
                   </div>

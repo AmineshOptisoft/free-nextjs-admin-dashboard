@@ -170,9 +170,10 @@ export async function applyAgentSettlementBalances(
   const [result] = await exec.execute<ResultSetHeader>(
     `UPDATE \`agents\`
      SET \`settlement_amount\` = \`settlement_amount\` + ?,
+         \`running_balance\` = \`running_balance\` - ?,
          \`settlement_date\` = UNIX_TIMESTAMP()
      WHERE \`id\` = ?`,
-    [absSettled, agentId],
+    [absSettled, signed, agentId],
   );
   if (result.affectedRows !== 1) {
     throw new Error("AGENT_SETTLEMENT_BALANCE_UPDATE_FAILED");

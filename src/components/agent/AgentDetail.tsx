@@ -9,7 +9,7 @@ import CreateUserModal, { PaymentMethodEditPayload } from "../users/CreateUserMo
 import Pagination from "../ui/Pagination";
 import type { Agent, AgentDetailApi } from "./types";
 import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
-import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
+import { appendDateRangeToUrl, daysAgoInputDate, toInputDate, todayInputDate } from "@/lib/date-range";
 
 function statusBadgeClass(s: string) {
   const x = s.toLowerCase();
@@ -527,10 +527,10 @@ export default function AgentDetail({ id }: { id: string }) {
       // Default to last 10 days when no date range is selected
       const fallbackFrom = daysAgoInputDate(10);
       const fallbackTo = todayInputDate();
-      const txFrom = dateRangeTx?.from ? dateRangeTx.from.toISOString().slice(0, 10) : fallbackFrom;
-      const txTo = dateRangeTx?.to ? dateRangeTx.to.toISOString().slice(0, 10) : fallbackTo;
-      const pmFrom = dateRangeAccounts?.from ? dateRangeAccounts.from.toISOString().slice(0, 10) : fallbackFrom;
-      const pmTo = dateRangeAccounts?.to ? dateRangeAccounts.to.toISOString().slice(0, 10) : fallbackTo;
+      const txFrom = dateRangeTx?.from ? toInputDate(dateRangeTx.from) : fallbackFrom;
+      const txTo = dateRangeTx?.to ? toInputDate(dateRangeTx.to) : fallbackTo;
+      const pmFrom = dateRangeAccounts?.from ? toInputDate(dateRangeAccounts.from) : fallbackFrom;
+      const pmTo = dateRangeAccounts?.to ? toInputDate(dateRangeAccounts.to) : fallbackTo;
       const [agentRes, txRes, pmRes] = await Promise.all([
         fetch(`/api/agents/${id}`, { credentials: "include" }),
         fetch(appendDateRangeToUrl(`/api/admin/agents/${id}/transactions`, txFrom, txTo), {
@@ -788,7 +788,7 @@ export default function AgentDetail({ id }: { id: string }) {
           {/* Info rows */}
           <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800">
             <InfoRow label="Email / contact" value={agent.whatsapp} />
-            <InfoRow label="Current Usage" value={fmt(agent.currentUsage)} />
+            {/* <InfoRow label="Current Usage" value={fmt(agent.currentUsage)} /> */}
             <InfoRow label="Security Deposit" value={fmt(agent.securityDeposit)} />
             <InfoRow
               label="Credit Limit"
@@ -831,7 +831,7 @@ export default function AgentDetail({ id }: { id: string }) {
                 </div>
               ))}
             </div>
-            <button
+            {/* <button
               type="button"
               className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm"
               onClick={() => {
@@ -845,7 +845,7 @@ export default function AgentDetail({ id }: { id: string }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               View Full Transaction History
-            </button>
+            </button> */}
           </div>
         </div>
 

@@ -36,6 +36,11 @@ function mapDbStatusToTxStatus(raw: string): TxStatus {
   return "PENDING";
 }
 
+function toMoney(value: unknown): string {
+  const n = Number(value);
+  return `₹${(Number.isFinite(n) ? n : 0).toLocaleString("en-IN")}`;
+}
+
 const txStatusStyle: Record<TxStatus, string> = {
   NOT_ASSIGNED: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
   PENDING:      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
@@ -224,6 +229,11 @@ export default function CompanyDetail({ id }: { id: string }) {
     return `${window.location.origin}/pay/${key}`;
   }, [apiCompany?.company_code]);
 
+  const securityKey = useMemo(() => {
+    const code = apiCompany?.company_code?.trim() ?? "";
+    return code ? encodeCompanyKey(code) : "—";
+  }, [apiCompany?.company_code]);
+
   const qrImageUrl = paymentLink
     ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(paymentLink)}`
     : "";
@@ -300,8 +310,8 @@ export default function CompanyDetail({ id }: { id: string }) {
               { label: "Status", value: company.status },
               { label: "Company code", value: company.company_code || "—" },
               { label: "Commission", value: `${Number(company.commission) || 0}%` },
-              { label: "Net pay-in", value: `₹${company.net_pay_in.toLocaleString("en-IN")}` },
-              { label: "Net pay-out", value: `₹${company.net_pay_out.toLocaleString("en-IN")}` },
+              { label: "Net pay-in", value: toMoney(company.net_pay_in) },
+              { label: "Net pay-out", value: toMoney(company.net_pay_out) },
             ].map(({ label, value }) => (
               <div key={label}>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">{label}</p>
@@ -311,7 +321,7 @@ export default function CompanyDetail({ id }: { id: string }) {
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">Security Key</p>
               <p className="text-sm font-mono font-semibold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2 tracking-widest break-all">
-                —
+                {securityKey}
               </p>
             </div>
           </div>

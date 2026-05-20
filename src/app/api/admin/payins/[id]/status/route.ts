@@ -24,6 +24,10 @@ function num(v: string | number): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function isValidUtrCode(v: string): boolean {
+  return /^\d{12}$/.test(v);
+}
+
 export async function PATCH(req: Request, context: { params: { id: string } | Promise<{ id: string }> }) {
   const auth = await requireAdminSession();
   if (!auth.ok) return auth.response;
@@ -100,6 +104,10 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
 
     const existingProof = String(tx.payment_image ?? "").trim().length > 0;
     const proofToStore = paymentImage || (existingProof ? String(tx.payment_image ?? "").trim() : "");
+  if ((toStatus === "APPROVED_BY_ADMIN" || toStatus === "EXPIRED_APPROVED_BY_ADMIN") && !isValidUtrCode(utrCode)) {
+    await conn.rollback();
+    return NextResponse.json({ ok: false, error: "UTR must be exactly 12 digits for approval." }, { status: 400 });
+  }
     if ((toStatus === "APPROVED_BY_ADMIN" || toStatus === "EXPIRED_APPROVED_BY_ADMIN") && !proofToStore) {
       await conn.rollback();
       return NextResponse.json(

@@ -9,6 +9,8 @@ type TxRow = RowDataPacket & {
   amount: string | number;
   status: string;
   type: string;
+  created_at: Date | string | null;
+  updated_at: Date | string | null;
   /** Effective agent for this txn: direct assignment or via `pay_methods.agent_id`. */
   resolved_agent_id: number | null;
   assigned_agent_name: string | null;
@@ -19,6 +21,14 @@ function num(v: string | number | null | undefined): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   const n = Number.parseFloat(String(v));
   return Number.isFinite(n) ? n : 0;
+}
+
+function processingSeconds(createdAt: Date | string | null, updatedAt: Date | string | null): number | null {
+  if (!createdAt || !updatedAt) return null;
+  const start = new Date(createdAt).getTime();
+  const end = new Date(updatedAt).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return Math.round((end - start) / 1000);
 }
 
 export async function GET(req: Request) {
@@ -37,6 +47,8 @@ export async function GET(req: Request) {
        t.\`amount\`,
        t.\`status\`,
        t.\`type\`,
+       t.\`created_at\`,
+       t.\`updated_at\`,
        COALESCE(NULLIF(t.\`assigned_agent_id\`, 0), NULLIF(pm.\`agent_id\`, 0)) AS resolved_agent_id,
        COALESCE(NULLIF(TRIM(a.\`fullname\`), ''), a.\`username\`) AS assigned_agent_name
      FROM \`transactions\` t
@@ -54,6 +66,7 @@ export async function GET(req: Request) {
     status: string;
     assignedAgentName: string;
     assignedAgentId: string | null;
+    processingSeconds: number | null;
   }> = [];
   const payouts: Array<{
     id: string;
@@ -61,6 +74,7 @@ export async function GET(req: Request) {
     status: string;
     assignedAgentName: string;
     assignedAgentId: string | null;
+    processingSeconds: number | null;
   }> = [];
 
   for (const r of rows) {
@@ -73,6 +87,7 @@ export async function GET(req: Request) {
       status: String(r.status || "").toUpperCase(),
       assignedAgentName: (r.assigned_agent_name ?? "").trim() || (aid ? `Agent #${aid}` : "Unassigned"),
       assignedAgentId: aid,
+      processingSeconds: processingSeconds(r.created_at, r.updated_at),
     };
     if (String(r.type).toUpperCase() === "PAYIN") payins.push(item);
     else payouts.push(item);

@@ -418,19 +418,22 @@ function roleFilterMatch(roleFilter: string, u: User): boolean {
 }
 
 function opFilterMatch(opFilter: string, u: User): boolean {
-  const t = u.operationType;
+  const hasPayIn = Boolean(u.payInEnabled);
+  const hasPayOut = Boolean(u.payOutEnabled);
   if (opFilter === "All") return true;
-  if (opFilter === "PayIn") return t === "PayIn Only" || t === "PayIn & PayOut";
-  if (opFilter === "PayOut") return t === "PayOut Only" || t === "PayIn & PayOut";
-  if (opFilter === "PayIn & PayOut") return t === "PayIn & PayOut";
+  if (opFilter === "PayIn") return hasPayIn;
+  if (opFilter === "PayOut") return hasPayOut;
+  if (opFilter === "PayIn & PayOut") return hasPayIn && hasPayOut;
   return true;
 }
 
 function gwFilterMatch(gwFilter: string, u: User): boolean {
-  const g = u.gateway;
+  const g = (u.gateway || "").trim().toLowerCase().replace(/[_-]/g, " ");
+  const hasUpi = g.includes("upi");
+  const hasBank = g.includes("bank");
   if (gwFilter === "All") return true;
-  if (gwFilter === "UPI") return g === "UPI Only" || g === "UPI & Bank Transfer";
-  if (gwFilter === "Bank Transfer") return g === "Bank Transfer Only" || g === "UPI & Bank Transfer";
+  if (gwFilter === "UPI") return hasUpi;
+  if (gwFilter === "Bank Transfer") return hasBank;
   return true;
 }
 
@@ -707,7 +710,7 @@ export default function UsersList() {
       {filtersOpen && (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.03] px-5 py-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <div>
+            {/* <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
                 User Role
               </label>
@@ -725,7 +728,7 @@ export default function UsersList() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
-            </div>
+            </div> */}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
                 Operation Type

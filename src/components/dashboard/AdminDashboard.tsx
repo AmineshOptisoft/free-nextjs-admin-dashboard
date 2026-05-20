@@ -823,8 +823,7 @@ export default function AdminDashboard() {
                     }`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (idx === 2) router.push("/settlement-log");
-                    else if (idx === 3) exportFinancialCsv({ visibleColumnsOnly: false });
+                    if (idx === 3) exportFinancialCsv({ visibleColumnsOnly: false });
                     else if (idx === 4) {
                       downloadCsv(`manual-payin-template-${csvExportTimestamp()}.csv`, [
                         ["order_id", "amount", "client_name", "client_upi", "utr", "remarks"],

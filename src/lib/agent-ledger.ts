@@ -55,9 +55,9 @@ export async function applyAgentLedgerForTransactionStatusChange(
     `UPDATE \`agents\`
      SET \`net_pay_in\` = \`net_pay_in\` + ?,
          \`net_pay_out\` = \`net_pay_out\` + ?,
-         \`running_balance\` = \`previous_balance\` + \`net_pay_in\` - \`net_pay_out\`
+         \`running_balance\` = \`running_balance\` + ?
      WHERE \`id\` = ?`,
-    [dNetPayIn, dNetPayOut, agentId],
+    [dNetPayIn, dNetPayOut, dNetPayIn - dNetPayOut, agentId],
   );
   if (result.affectedRows !== 1) {
     throw new Error("AGENT_LEDGER_UPDATE_FAILED");

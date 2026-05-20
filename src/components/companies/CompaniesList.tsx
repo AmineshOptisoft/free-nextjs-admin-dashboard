@@ -6,7 +6,7 @@ import LogoImagePicker from "./LogoImagePicker";
 import Pagination from "../ui/Pagination";
 import { GoOrganization } from "react-icons/go";
 import DateRangePicker, { DateRange } from "@/components/dashboard/DateRangePicker";
-import { appendDateRangeToUrl, daysAgoInputDate, todayInputDate } from "@/lib/date-range";
+import { appendDateRangeToUrl, toInputDate } from "@/lib/date-range";
 import { CompaniesIcon } from "@/icons/nav-icons";
 
 export type Company = {
@@ -316,8 +316,8 @@ export default function CompaniesList() {
     setLoadError(null);
     try {
       // When no date range selected, send empty strings so backend returns company table data directly
-      const from = dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : "";
-      const to = dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : "";
+      const from = dateRange?.from ? toInputDate(dateRange.from) : "";
+      const to = dateRange?.to ? toInputDate(dateRange.to) : "";
       const res = await fetch(appendDateRangeToUrl("/api/companies", from, to), {
         credentials: "include",
       });
@@ -413,6 +413,16 @@ export default function CompaniesList() {
           <CompaniesIcon />
           <h1 className="text-xl font-bold">Companies Management</h1>
         </div>
+        <div className="w-full sm:w-1/2 md:w-1/3 lg:w-1/4 ml-auto flex items-center justify-end">
+        <DateRangePicker
+          value={dateRange}
+          onChange={(r) => {
+            setDateRange(r);
+            setPage(1);
+          }}
+          fullWidth
+        />
+      </div>
         <button
           type="button"
           onClick={() => setShowCreate(true)}
@@ -424,6 +434,7 @@ export default function CompaniesList() {
           </svg>
           Add New Company
         </button>
+        
       </div>
 
       {loadError && (
@@ -434,16 +445,7 @@ export default function CompaniesList() {
           </Link>
         </div>
       )}
-      <div className="w-full sm:w-1/2 md:w-1/3 lg:w-1/4 ml-auto flex items-center justify-end">
-        <DateRangePicker
-          value={dateRange}
-          onChange={(r) => {
-            setDateRange(r);
-            setPage(1);
-          }}
-          fullWidth
-        />
-      </div>
+    
       {periodMetrics && (
         <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
           In/Out column shows pay-in and pay-out totals for the selected date range.
@@ -472,6 +474,7 @@ export default function CompaniesList() {
               className="w-full rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-9 pr-4 py-2 text-sm text-gray-700 dark:text-gray-300 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
             />
           </div>
+          
         </div>
 
         <div className="overflow-x-auto">

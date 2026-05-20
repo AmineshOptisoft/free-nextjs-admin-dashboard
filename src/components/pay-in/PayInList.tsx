@@ -15,6 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 const PAGE_SIZE = 10;
 
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+const UTR_12_DIGIT_REGEX = /^\d{12}$/;
 
 type PayInStatus = "PENDING" | "APPROVED" | "EXPIRED" | "RECEIPT_PENDING" | "UNASSIGNED" | "PROCESSING" | "EXPIRED_APPROVED_BY_ADMIN" | "EXPIRED_APPROVED_BY_AGENT" | "DECLINED";
 
@@ -165,6 +166,17 @@ function proofIsPdf(url: string): boolean {
   if (u.startsWith("data:") && u.includes("application/pdf")) return true;
   const path = u.split("?")[0] ?? u;
   return path.endsWith(".pdf");
+}
+
+function hasBankDetails(item: PayInItem): boolean {
+  return Boolean(
+    item.bankName &&
+    item.bankName !== "—" &&
+    item.accountNo &&
+    item.accountNo !== "—" &&
+    item.ifsc &&
+    item.ifsc !== "—",
+  );
 }
 
 function DeclineMenu({
@@ -334,10 +346,9 @@ function PayInCard({
 
       {/* ── DESKTOP: always-visible primary detail rows ── */}
       <div className="hidden lg:block border-t border-gray-100 dark:border-gray-800 px-5 py-4">
-        {/* Row 1: ORDER ID · CLIENT ID · CLIENT NAME · CLIENT UPI */}
-        <div className="grid grid-cols-4 gap-x-8 gap-y-1 mb-4">
+        {/* Row 1: ORDER ID · CLIENT NAME · CLIENT UPI */}
+        <div className="grid grid-cols-3 gap-x-8 gap-y-1 mb-4">
           <DetailField label="Order ID" value={item.orderId} />
-          <DetailField label="Client ID" value={item.clientId || "—"} />
           <DetailField label="Client Name" value={item.clientName} />
           <DetailField label="Client UPI" value={item.clientUpi} />
         </div>
@@ -349,9 +360,23 @@ function PayInCard({
               <DetailField label="UTR Code" value={item.utrCode} />
             </div>
           )}
-          <div className="shrink-0">
-            <DetailField label="Assigned UPI" value={item.assignedUpi} isLink={item.assignedUpi !== "—"} />
-          </div>
+          {hasBankDetails(item) ? (
+            <>
+              <div className="shrink-0">
+                <DetailField label="Bank Name" value={item.bankName!} />
+              </div>
+              <div className="shrink-0">
+                <DetailField label="Account No" value={item.accountNo!} />
+              </div>
+              <div className="shrink-0">
+                <DetailField label="IFSC" value={item.ifsc!} />
+              </div>
+            </>
+          ) : (
+            <div className="shrink-0">
+              <DetailField label="Assigned UPI" value={item.assignedUpi} isLink={item.assignedUpi !== "—"} />
+            </div>
+          )}
           <div className="shrink-0">
             <DetailField label="Created On" value={item.createdOn} />
           </div>
@@ -379,7 +404,6 @@ function PayInCard({
         <div className="lg:hidden border-t border-gray-100 dark:border-gray-800 px-4 py-4">
           <div className="grid grid-cols-1 gap-4 mb-4">
             <DetailField label="Order ID" value={item.orderId} />
-            <DetailField label="Client ID" value={item.clientId || "—"} />
             <DetailField label="Client Name" value={item.clientName} />
             <DetailField label="Client UPI" value={item.clientUpi} />
           </div>
@@ -389,7 +413,15 @@ function PayInCard({
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 mb-4">
-            <DetailField label="Assigned UPI" value={item.assignedUpi} isLink={item.assignedUpi !== "—"} />
+            {hasBankDetails(item) ? (
+              <>
+                <DetailField label="Bank Name" value={item.bankName!} />
+                <DetailField label="Account No" value={item.accountNo!} />
+                <DetailField label="IFSC" value={item.ifsc!} />
+              </>
+            ) : (
+              <DetailField label="Assigned UPI" value={item.assignedUpi} isLink={item.assignedUpi !== "—"} />
+            )}
             <DetailField label="Created On" value={item.createdOn} />
             <DetailField label="Total Amount" value={`${item.totalAmount} INR`} />
             <DetailField label="Discount Amount" value={`${item.discountAmount} INR`} />
@@ -403,7 +435,7 @@ function PayInCard({
   );
 }
 
-const STATUS_FILTER_OPTIONS = ["All", "PENDING", "APPROVED", "EXPIRED", "RECEIPT_PENDING", "UNASSIGNED", "PROCESSING"];
+const STATUS_FILTER_OPTIONS = ["All", "PENDING", "APPROVED", "EXPIRED", "RECEIPT_PENDING", "UNASSIGNED", "PROCESSING",'DECLINED' ,"EXPIRED_APPROVED_BY_ADMIN", "EXPIRED_APPROVED_BY_AGENT"];
 
 type ActionType = "approve" | "reject" | "cancel";
 
@@ -566,9 +598,22 @@ export default function PayInList() {
     if (search && !d.orderId.toLowerCase().includes(search.toLowerCase()) &&
       !d.clientName.toLowerCase().includes(search.toLowerCase()) &&
       !d.assignedUpi.toLowerCase().includes(search.toLowerCase()) &&
+      !(d.bankName ?? "").toLowerCase().includes(search.toLowerCase()) &&
+      !(d.accountNo ?? "").toLowerCase().includes(search.toLowerCase()) &&
+      !(d.ifsc ?? "").toLowerCase().includes(search.toLowerCase()) &&
       !(d.utrCode ?? "").includes(search)) return false;
     if (amount && d.amount !== Number(amount)) return false;
     if (filterStatus !== "All" && d.status !== filterStatus) return false;
+    if (dateRange?.from && dateRange?.to) {
+      if (!d.createdAtIso) return false;
+      const createdAt = new Date(d.createdAtIso);
+      if (Number.isNaN(createdAt.getTime())) return false;
+      const from = new Date(dateRange.from);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(dateRange.to);
+      to.setHours(23, 59, 59, 999);
+      if (createdAt < from || createdAt > to) return false;
+    }
     return true;
   });
 
@@ -586,6 +631,9 @@ export default function PayInList() {
       "client_name",
       "client_upi",
       "assigned_upi",
+      "bank_name",
+      "account_no",
+      "ifsc",
       "utr",
       "created_on",
       "created_at_iso",
@@ -607,6 +655,9 @@ export default function PayInList() {
       d.clientName,
       d.clientUpi,
       d.assignedUpi,
+      d.bankName ?? "",
+      d.accountNo ?? "",
+      d.ifsc ?? "",
       d.utrCode ?? "",
       d.createdOn,
       d.createdAtIso ?? "",
@@ -643,6 +694,12 @@ export default function PayInList() {
       normalizedProof = (opts?.paymentImage ?? "").trim();
       if (normalizedProof.startsWith("data:image/")) {
         normalizedProof = (await compressImageDataUrlIfLarge(normalizedProof)).trim();
+      }
+      const utr = (opts?.utr ?? "").trim();
+      if (!UTR_12_DIGIT_REGEX.test(utr)) {
+        setModalError("UTR must be exactly 12 digits.");
+        setActionBusyId(null);
+        return;
       }
       if (!item.hasReceipt && !normalizedProof) {
         setModalError("Upload payment proof (screenshot) before approving.");
@@ -957,12 +1014,14 @@ export default function PayInList() {
               <>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    UTR code (optional)
+                    UTR code (12 digits) <span className="text-red-500">*</span>
                   </label>
                   <input
                     value={modalUtr}
                     onChange={(e) => setModalUtr(e.target.value)}
-                    placeholder="Enter UTR if missing"
+                    placeholder="Enter 12-digit UTR"
+                    inputMode="numeric"
+                    maxLength={12}
                     className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
                   />
                 </div>

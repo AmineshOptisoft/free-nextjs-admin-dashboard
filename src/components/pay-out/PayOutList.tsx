@@ -13,6 +13,7 @@ import { PiContactlessPaymentFill } from "react-icons/pi";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 import { useAuth } from "@/context/AuthContext";
 import { PayOutIcon } from "@/icons/nav-icons";
+import { toInputDate } from "@/lib/date-range";
 
 const PAGE_SIZE = 5;
 
@@ -1126,26 +1127,36 @@ export default function PayOutList() {
   }
 
   const baseData = items;
-  const totalOrders = baseData.length;
+  const dateFilteredBaseData = baseData.filter((d) => {
+    if (!dateRange?.from || !dateRange?.to) return true;
+    if (!d.createdAtIso) return false;
+    const createdAt = new Date(d.createdAtIso);
+    if (Number.isNaN(createdAt.getTime())) return false;
+    const createdDate = toInputDate(createdAt);
+    const fromDate = toInputDate(dateRange.from);
+    const toDate = toInputDate(dateRange.to);
+    return createdDate >= fromDate && createdDate <= toDate;
+  });
+  const totalOrders = dateFilteredBaseData.length;
 
   const counts: Partial<Record<PayOutStatus | "ALL", number>> = {
-    ALL: baseData.length,
-    CREATED: baseData.filter((d) => d.status === "CREATED").length,
-    UNASSIGNED: baseData.filter((d) => d.status === "UNASSIGNED").length,
-    PENDING: baseData.filter((d) => d.status === "PENDING").length,
-    ASSIGNED: baseData.filter((d) => d.status === "ASSIGNED").length,
-    PROCESSING: baseData.filter((d) => d.status === "PROCESSING").length,
-    EXPIRED: baseData.filter((d) => d.status === "EXPIRED").length,
-    APPROVED: baseData.filter((d) => d.status === "APPROVED").length,
-    DECLINED: baseData.filter((d) => d.status === "DECLINED").length,
-    EXPIRED_APPROVED_BY_ADMIN: baseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_ADMIN").length,
-    EXPIRED_APPROVED_BY_AGENT: baseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_AGENT").length,
+    ALL: dateFilteredBaseData.length,
+    CREATED: dateFilteredBaseData.filter((d) => d.status === "CREATED").length,
+    UNASSIGNED: dateFilteredBaseData.filter((d) => d.status === "UNASSIGNED").length,
+    PENDING: dateFilteredBaseData.filter((d) => d.status === "PENDING").length,
+    ASSIGNED: dateFilteredBaseData.filter((d) => d.status === "ASSIGNED").length,
+    PROCESSING: dateFilteredBaseData.filter((d) => d.status === "PROCESSING").length,
+    EXPIRED: dateFilteredBaseData.filter((d) => d.status === "EXPIRED").length,
+    APPROVED: dateFilteredBaseData.filter((d) => d.status === "APPROVED").length,
+    DECLINED: dateFilteredBaseData.filter((d) => d.status === "DECLINED").length,
+    EXPIRED_APPROVED_BY_ADMIN: dateFilteredBaseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_ADMIN").length,
+    EXPIRED_APPROVED_BY_AGENT: dateFilteredBaseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_AGENT").length,
   };
 
   const statusTabsVisible =
     resolvedRole === "admin" ? STATUS_TABS : STATUS_TABS.filter((t) => t.value !== "ASSIGNED");
 
-  const filtered = baseData.filter((d) => {
+  const filtered = dateFilteredBaseData.filter((d) => {
     if (activeTab !== "ALL" && d.status !== activeTab) return false;
     if (search &&
       !d.orderId.toLowerCase().includes(search.toLowerCase()) &&
@@ -1155,6 +1166,15 @@ export default function PayOutList() {
       !d.accountNo.includes(search)) return false;
     if (amount && d.amount !== Number(amount)) return false;
     if (filterStatus !== "All" && d.status !== filterStatus) return false;
+    if (dateRange?.from && dateRange?.to) {
+      if (!d.createdAtIso) return false;
+      const createdAt = new Date(d.createdAtIso);
+      if (Number.isNaN(createdAt.getTime())) return false;
+      const createdDate = toInputDate(createdAt);
+      const fromDate = toInputDate(dateRange.from);
+      const toDate = toInputDate(dateRange.to);
+      if (createdDate < fromDate || createdDate > toDate) return false;
+    }
     return true;
   });
 
@@ -1419,7 +1439,14 @@ export default function PayOutList() {
               </svg>
               <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Date Range</span>
             </div>
-            <DateRangePicker value={dateRange} onChange={setDateRange} fullWidth />
+            <DateRangePicker
+              value={dateRange}
+              onChange={(r) => {
+                setDateRange(r);
+                setPage(1);
+              }}
+              fullWidth
+            />
           </div>
 
           {/* Footer */}
