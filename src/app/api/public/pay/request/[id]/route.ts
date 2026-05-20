@@ -3,8 +3,11 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
 import { payInDisplayStatus, publicPayInDisplayMethod, sqlFieldToUtf8 } from "@/lib/payin-lifecycle";
 import { isMysqlPacketTooLarge, validatePaymentProofPayload } from "@/lib/payment-proof-limits";
+import { persistPaymentProofImage } from "@/lib/payment-proof-storage";
 import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
+import { sendPayinWebhookForTx } from "@/lib/integrations/speedpay/outbound-webhook";
 import { expireOpenRequestsPastDeadline } from "@/lib/request-expiry";
+import { fetchSpeedpayPayinStatus } from "@/lib/integrations/speedpay/controller";
 
 type TxRow = RowDataPacket & {
   id: number;
@@ -87,6 +90,41 @@ function mapTx(tx: TxRow) {
 
 export async function GET(_req: Request, context: { params: { id: string } | Promise<{ id: string }> }) {
   const { id: idRaw } = await Promise.resolve(context.params);
+  if (String(idRaw).startsWith("sp_")) {
+    const providerId = Number(String(idRaw).slice(3));
+    if (!Number.isInteger(providerId) || providerId < 1) {
+      return NextResponse.json({ ok: false, error: "Invalid id" }, { status: 400 });
+    }
+    try {
+      const s = await fetchSpeedpayPayinStatus(providerId);
+      return NextResponse.json({
+        ok: true as const,
+        request: {
+          id: `sp_${s.providerId}`,
+          orderId: s.transactionNumber,
+          amount: s.amount,
+          status: s.providerStatus,
+          displayStatus: s.displayStatus,
+          clientName: "",
+          clientUpi: "",
+          assignedUpi: s.upi,
+          bankName: "",
+          accountNo: "",
+          ifsc: "",
+          hasReceipt: false,
+          utrCode: s.referenceNumber ?? "",
+          paymentMethod: "UPI",
+          accountHolderName: "",
+          waitForAgent: false,
+          proofSubmitted: false,
+          qrCodeUrl: "",
+        },
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not fetch request";
+      return NextResponse.json({ ok: false, error: message }, { status: 502 });
+    }
+  }
   const txId = Number(idRaw);
   if (!Number.isInteger(txId) || txId < 1) {
     return NextResponse.json({ ok: false, error: "Invalid id" }, { status: 400 });
@@ -99,6 +137,12 @@ export async function GET(_req: Request, context: { params: { id: string } | Pro
 
 export async function PATCH(req: Request, context: { params: { id: string } | Promise<{ id: string }> }) {
   const { id: idRaw } = await Promise.resolve(context.params);
+  if (String(idRaw).startsWith("sp_")) {
+    return NextResponse.json(
+      { ok: false, error: "Hosted provider flow: submit payment on provider page and rely on status/webhook updates." },
+      { status: 409 },
+    );
+  }
   const txId = Number(idRaw);
   if (!Number.isInteger(txId) || txId < 1) {
     return NextResponse.json({ ok: false, error: "Invalid id" }, { status: 400 });
@@ -143,6 +187,8 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     return NextResponse.json({ ok: false, error: proofCheck.error }, { status: proofCheck.status });
   }
 
+  const storedImage = image ? await persistPaymentProofImage(image, txId) : "";
+
   let res: ResultSetHeader;
   try {
     const [r] = await pool.execute<ResultSetHeader>(
@@ -152,7 +198,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
            \`user_upi\` = COALESCE(NULLIF(?, ''), \`user_upi\`)
        WHERE \`id\` = ? AND \`type\` = 'PAYIN' AND \`status\` = 'PENDING'
          AND \`pay_method_id\` IS NOT NULL AND \`assigned_agent_id\` IS NOT NULL`,
-      [utr, image, userUpi, txId],
+      [utr, storedImage, userUpi, txId],
     );
     res = r;
   } catch (e: unknown) {
@@ -177,5 +223,6 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
   const updated = await loadTx(txId);
   if (!updated) return NextResponse.json({ ok: false, error: "Request not found" }, { status: 404 });
   emitTransactionRealtime(txId, "proof");
+  void sendPayinWebhookForTx(txId, { event: "payin.in_process" });
   return NextResponse.json({ ok: true as const, request: mapTx(updated) });
 }

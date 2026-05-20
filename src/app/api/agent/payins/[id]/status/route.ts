@@ -3,8 +3,10 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { applyAgentLedgerForTransactionStatusChange } from "@/lib/agent-ledger";
 import { pool } from "@/lib/db";
 import { paymentImageDbLimitMessage, paymentImageExceedsDbLimit } from "@/lib/payment-image-db-limit";
+import { persistPaymentProofImage } from "@/lib/payment-proof-storage";
 import { DISPUTE_BLOCKS_ACTION_MSG, isOpenDispute } from "@/lib/dispute";
 import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
+import { sendPayinWebhookForTxStatusChange } from "@/lib/integrations/speedpay/outbound-webhook";
 import { canAgentVerifyPayIn } from "@/lib/payin-lifecycle";
 import { requireAgentSession } from "@/lib/require-agent-api";
 
@@ -55,6 +57,8 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     return NextResponse.json({ ok: false, error: paymentImageDbLimitMessage() }, { status: 400 });
   }
 
+  const storedPaymentImage = paymentImage ? await persistPaymentProofImage(paymentImage, txId) : "";
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -104,7 +108,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     }
 
     const existingProof = String(tx.payment_image ?? "").trim().length > 0;
-    const proofToStore = paymentImage || (existingProof ? String(tx.payment_image ?? "").trim() : "");
+    const proofToStore = storedPaymentImage || (existingProof ? String(tx.payment_image ?? "").trim() : "");
   if ((toStatus === "APPROVED_BY_AGENT" || toStatus === "EXPIRED_APPROVED_BY_AGENT") && !isValidUtrCode(utrCode)) {
     await conn.rollback();
     return NextResponse.json({ ok: false, error: "UTR must be exactly 12 digits for approval." }, { status: 400 });
@@ -129,9 +133,9 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     const params: unknown[] = [toStatus];
     setParts.push("`utr_code` = COALESCE(NULLIF(?, ''), `utr_code`)");
     params.push(utrCode);
-    if (paymentImage) {
+    if (storedPaymentImage) {
       setParts.push("`payment_image` = ?");
-      params.push(paymentImage);
+      params.push(storedPaymentImage);
     }
     params.push(txId, auth.agentId, tx.status);
 
@@ -147,6 +151,13 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
 
     await conn.commit();
     emitTransactionRealtime(txId, "status");
+    const rejectReason =
+      typeof body.reason === "string"
+        ? body.reason.trim()
+        : typeof body.reject_reason === "string"
+          ? body.reject_reason.trim()
+          : undefined;
+    void sendPayinWebhookForTxStatusChange(txId, toStatus, rejectReason);
   } catch (e) {
     await conn.rollback();
     console.error(e);

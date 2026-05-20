@@ -11,6 +11,7 @@ import { PayInIcon } from "@/icons/nav-icons";
 import CompanyPayInView from "./CompanyPayInView";
 import { useTransactionRealtimeRefresh } from "@/hooks/useTransactionRealtimeRefresh";
 import { useAuth } from "@/context/AuthContext";
+import { toInputDate } from "@/lib/date-range";
 
 const PAGE_SIZE = 10;
 
@@ -580,20 +581,31 @@ export default function PayInList() {
 
   const baseData = items;
 
+  const dateFilteredBaseData = baseData.filter((d) => {
+    if (!dateRange?.from || !dateRange?.to) return true;
+    if (!d.createdAtIso) return false;
+    const createdAt = new Date(d.createdAtIso);
+    if (Number.isNaN(createdAt.getTime())) return false;
+    const createdDate = toInputDate(createdAt);
+    const fromDate = toInputDate(dateRange.from);
+    const toDate = toInputDate(dateRange.to);
+    return createdDate >= fromDate && createdDate <= toDate;
+  });
+
   const counts: Partial<Record<PayInStatus | "ALL", number>> = {
-    ALL: baseData.length,
-    PENDING: baseData.filter((d) => d.status === "PENDING").length,
-    APPROVED: baseData.filter((d) => d.status === "APPROVED").length,
-    EXPIRED: baseData.filter((d) => d.status === "EXPIRED").length,
-    DECLINED: baseData.filter((d) => d.status === "DECLINED").length,
-    RECEIPT_PENDING: baseData.filter((d) => d.status === "RECEIPT_PENDING").length,
-    UNASSIGNED: baseData.filter((d) => d.status === "UNASSIGNED").length,
-    PROCESSING: baseData.filter((d) => d.status === "PROCESSING").length,
-    EXPIRED_APPROVED_BY_ADMIN: baseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_ADMIN").length,
-    EXPIRED_APPROVED_BY_AGENT: baseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_AGENT").length,
+    ALL: dateFilteredBaseData.length,
+    PENDING: dateFilteredBaseData.filter((d) => d.status === "PENDING").length,
+    APPROVED: dateFilteredBaseData.filter((d) => d.status === "APPROVED").length,
+    EXPIRED: dateFilteredBaseData.filter((d) => d.status === "EXPIRED").length,
+    DECLINED: dateFilteredBaseData.filter((d) => d.status === "DECLINED").length,
+    RECEIPT_PENDING: dateFilteredBaseData.filter((d) => d.status === "RECEIPT_PENDING").length,
+    UNASSIGNED: dateFilteredBaseData.filter((d) => d.status === "UNASSIGNED").length,
+    PROCESSING: dateFilteredBaseData.filter((d) => d.status === "PROCESSING").length,
+    EXPIRED_APPROVED_BY_ADMIN: dateFilteredBaseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_ADMIN").length,
+    EXPIRED_APPROVED_BY_AGENT: dateFilteredBaseData.filter((d) => d.status === "EXPIRED_APPROVED_BY_AGENT").length,
   };
 
-  const filtered = baseData.filter((d) => {
+  const filtered = dateFilteredBaseData.filter((d) => {
     if (activeTab !== "ALL" && d.status !== activeTab) return false;
     if (search && !d.orderId.toLowerCase().includes(search.toLowerCase()) &&
       !d.clientName.toLowerCase().includes(search.toLowerCase()) &&
@@ -604,16 +616,6 @@ export default function PayInList() {
       !(d.utrCode ?? "").includes(search)) return false;
     if (amount && d.amount !== Number(amount)) return false;
     if (filterStatus !== "All" && d.status !== filterStatus) return false;
-    if (dateRange?.from && dateRange?.to) {
-      if (!d.createdAtIso) return false;
-      const createdAt = new Date(d.createdAtIso);
-      if (Number.isNaN(createdAt.getTime())) return false;
-      const from = new Date(dateRange.from);
-      from.setHours(0, 0, 0, 0);
-      const to = new Date(dateRange.to);
-      to.setHours(23, 59, 59, 999);
-      if (createdAt < from || createdAt > to) return false;
-    }
     return true;
   });
 

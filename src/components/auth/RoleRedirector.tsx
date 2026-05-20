@@ -24,7 +24,7 @@ export default function RoleRedirector({ role }: { role: "admin" | "agent" | "co
         router.replace("/agent-dashboard");
       }
     } else if (role === "company") {
-      const allowed = ["/company-dashboard", "/company-settings", "/pay-in", "/pay-out", "/my-account", "/transactions", "/notifications"];
+      const allowed = ["/company-dashboard", "/company-settings", "/pay-in", "/pay-out", "/my-account", "/transactions", "/notifications" , "/reports"];
       if (pathname === "/" || (!allowed.some((a) => pathname.startsWith(a)))) {
         router.replace("/company-dashboard");
       }

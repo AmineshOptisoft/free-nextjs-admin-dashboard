@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/db";
 import { isMysqlPacketTooLarge, validatePaymentProofPayload } from "@/lib/payment-proof-limits";
+import { persistPaymentProofImage } from "@/lib/payment-proof-storage";
 import { emitTransactionRealtime } from "@/lib/realtime/broadcast-transaction";
 import { requireCompanySession } from "@/lib/require-company-api";
 
@@ -45,6 +46,8 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
     return NextResponse.json({ ok: false, error: proofCheck.error }, { status: proofCheck.status });
   }
 
+  const storedPaymentImage = paymentImage ? await persistPaymentProofImage(paymentImage, txId) : "";
+
   const [rows] = await pool.execute<TxRow[]>(
     `SELECT \`id\`, \`status\`, \`assigned_agent_id\`, \`pay_method_id\`
      FROM \`transactions\`
@@ -76,7 +79,7 @@ export async function PATCH(req: Request, context: { params: { id: string } | Pr
            \`user_upi\` = COALESCE(NULLIF(?, ''), \`user_upi\`)
        WHERE \`id\` = ? AND \`company_id\` = ? AND \`type\` = 'PAYIN' AND \`status\` = 'PENDING'
          AND \`pay_method_id\` IS NOT NULL AND \`assigned_agent_id\` IS NOT NULL`,
-      [utrCode, paymentImage, userUpi, txId, auth.companyId],
+      [utrCode, storedPaymentImage, userUpi, txId, auth.companyId],
     );
     res = r;
   } catch (e: unknown) {

@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 import Pagination from "../ui/Pagination";
 import LogoImagePicker from "./LogoImagePicker";
+import CompanyApiKeysSection from "./CompanyApiKeysSection";
 
 /* ── Types ── */
 type TxStatus = "NOT_ASSIGNED" | "PENDING" | "APPROVED" | "EXPIRED" | "FAILED";
@@ -540,6 +541,8 @@ export default function CompanyDetail({ id }: { id: string }) {
         </div>
 
       </div>
+
+      <CompanyApiKeysSection companyId={id} />
     </div>
   );
 }

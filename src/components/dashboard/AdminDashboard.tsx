@@ -19,21 +19,20 @@ interface VendorRow {
   id: string;
   name: string;
   security: number;
-  manualPayIn: number;
-  approvedPayIn: number;
-  discounted: number;
-  netPayIn: number;
-  payout: number;
-  unsettlePayout: number;
-  settlement: number;
-  net: number;
-  prevBalance: number;
-  payInCommission: number;
-  payOutCommission: number;
-  referralCommission: number;
-  running: number;
-  runningUnsettled: number;
   credit: number;
+  totalPayIn: number;
+  totalPayout: number;
+  payInToday: number;
+  payoutToday: number;
+  running: number;
+  totalSettlement: number;
+  lastSettlement: number;
+  payInCommissionPct: number;
+  payOutCommissionPct: number;
+  referralCommissionPct: number;
+  payInCommissionAmount: number;
+  payOutCommissionAmount: number;
+  referralCommissionAmount: number;
   finalBalance: number;
   remainingBalance: number;
 }
@@ -144,7 +143,6 @@ const fmt = (n: number) => {
   return n < 0 ? `-${abs}` : abs;
 };
 
-/** Percent fields from `agents` (e.g. 2.5 → 2.5%). */
 const fmtPct = (n: number) => {
   if (!Number.isFinite(n) || n === 0) return "0%";
   const t = (Math.round(n * 100) / 100).toString().replace(/\.0+$/, "");
@@ -228,45 +226,39 @@ const TABLE_TOOLBAR_ICONS: { id: "menu" | "totals" | "highlight" | "inactive" | 
 type StatsColKey =
   | "vendor"
   | "security"
-  | "manualPayIn"
-  | "approvedPayIn"
-  | "discounted"
-  | "netPayIn"
-  | "payout"
-  | "unsettlePayout"
-  | "settlement"
-  | "net"
+  | "totalPayIn"
+  | "totalPayout"
+  | "payInToday"
+  | "payoutToday"
   | "running"
-  | "runningUnsettled"
+  | "totalSettlement"
+  | "lastSettlement"
+  | "payInCommissionPct"
+  | "payInCommissionAmount"
+  | "payOutCommissionPct"
+  | "payOutCommissionAmount"
+  | "referralCommissionPct"
+  | "referralCommissionAmount"
   | "credit"
-  | "finalBalance"
-  | "remainingBalance"
-  | "prevBalance"
-  | "payInCommission"
-  | "payOutCommission"
-  | "referralCommission"
   | "actions";
 
 const FIN_STATS_COLUMNS: { key: StatsColKey; label: string }[] = [
   { key: "vendor", label: "Vendor" },
   { key: "security", label: "Security" },
-  { key: "manualPayIn", label: "Manual PayIn" },
-  { key: "approvedPayIn", label: "Approved PayIn" },
-  { key: "discounted", label: "Discounted" },
-  { key: "netPayIn", label: "Net PayIn" },
-  { key: "payout", label: "Payout" },
-  { key: "unsettlePayout", label: "Unsettle Payout" },
-  { key: "settlement", label: "Settlement" },
-  { key: "net", label: "Net" },
-  { key: "payInCommission", label: "PayIn %" },
-  { key: "payOutCommission", label: "PayOut %" },
-  { key: "referralCommission", label: "Referral %" },
+  { key: "totalPayIn", label: "Total PayIn" },
+  { key: "totalPayout", label: "Total Payout" },
+  { key: "payInToday", label: "PayIn (today)" },
+  { key: "payoutToday", label: "Payout (today)" },
   { key: "running", label: "Running" },
-  { key: "runningUnsettled", label: "Running Unsettled" },
+  { key: "totalSettlement", label: "Total Settlement" },
+  { key: "lastSettlement", label: "Last Settlement" },
+  { key: "payInCommissionPct", label: "PayIn Commission (%)" },
+  { key: "payInCommissionAmount", label: "PayIn Commission (amount)" },
+  { key: "payOutCommissionPct", label: "PayOut Commission (%)" },
+  { key: "payOutCommissionAmount", label: "PayOut Commission (amount)" },
+  { key: "referralCommissionPct", label: "Referral Commission (%)" },
+  { key: "referralCommissionAmount", label: "Referral Commission (amount)" },
   { key: "credit", label: "Credit" },
-  { key: "finalBalance", label: "Final Balance" },
-  { key: "remainingBalance", label: "Remaining Balance" },
-  { key: "prevBalance", label: "Previous Balance" },
   { key: "actions", label: "Actions" },
 ];
 
@@ -277,12 +269,10 @@ function defaultColBoolMap(value: boolean): Record<StatsColKey, boolean> {
 /** Rows treated as “inactive” for the toolbar filter (no meaningful pay-in / payout / running flow). */
 function isInactiveVendorRow(r: VendorRow): boolean {
   return (
-    r.approvedPayIn === 0 &&
-    r.manualPayIn === 0 &&
-    r.payout === 0 &&
-    r.unsettlePayout === 0 &&
+    r.totalPayIn === 0 &&
+    r.totalPayout === 0 &&
     r.running === 0 &&
-    r.netPayIn === 0 &&
+    r.payInToday === 0 &&
     r.security === 0
   );
 }
@@ -300,18 +290,27 @@ type SortDir = "asc" | "desc";
 const COLUMN_HEADER_TITLES: Partial<Record<StatsColKey, string>> = {
   credit:
     "Extra PayIn headroom beyond the security pool: allowed exposure even when deposit-backed room is used up.",
-  payInCommission: "Pay-in commission % (agent)",
-  payOutCommission: "Pay-out commission % (agent)",
-  referralCommission: "Referral commission % (agent)",
+  payInCommissionAmount: "PayIn (today) × PayIn commission %",
+  payOutCommissionAmount: "Payout (today) × PayOut commission %",
+  referralCommissionAmount: "PayIn (today) × Referral commission %",
+  payInCommissionPct: "Agent PayIn commission rate",
+  payOutCommissionPct: "Agent PayOut commission rate",
+  referralCommissionPct: "Agent referral commission rate",
+  lastSettlement: "Amount from the agent's most recent settled settlement record",
 };
 
 const COLUMNS_WITH_INFO_ICON = new Set<StatsColKey>([
-  "manualPayIn",
-  "approvedPayIn",
-  "net",
-  "payInCommission",
-  "payOutCommission",
-  "referralCommission",
+  "totalPayIn",
+  "totalPayout",
+  "payInToday",
+  "payoutToday",
+  "payInCommissionPct",
+  "payInCommissionAmount",
+  "payOutCommissionPct",
+  "payOutCommissionAmount",
+  "referralCommissionPct",
+  "referralCommissionAmount",
+  "lastSettlement",
 ]);
 
 function compareVendorRows(a: VendorRow, b: VendorRow, key: StatsColKey, dir: SortDir): number {
@@ -461,13 +460,7 @@ export default function AdminDashboard() {
   const [showTotalsRow, setShowTotalsRow] = useState(true);
   const [hideHeaderFilters, setHideHeaderFilters] = useState(false);
   const [rowActivityFilter, setRowActivityFilter] = useState<"all" | "active" | "inactive">("all");
-  const HIGHLIGHT_ONLY_COLS = new Set<StatsColKey>(["payInCommission", "payOutCommission", "referralCommission"]);
-  const [colVisible, setColVisible] = useState<Record<StatsColKey, boolean>>(() => ({
-    ...defaultColBoolMap(true),
-    payInCommission: false,
-    payOutCommission: false,
-    referralCommission: false,
-  }));
+  const [colVisible, setColVisible] = useState<Record<StatsColKey, boolean>>(() => defaultColBoolMap(true));
   const [colHighlight, setColHighlight] = useState<Record<StatsColKey, boolean>>(() => defaultColBoolMap(false));
   const [sortKey, setSortKey] = useState<StatsColKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -489,7 +482,7 @@ export default function AdminDashboard() {
         setRows([]);
         return;
       }
-      setRows(data.rows.map((r) => ({ ...r, manualPayIn: 0 })));
+      setRows(data.rows);
     } catch {
       setLoadError("Network error.");
       setRows([]);
@@ -505,42 +498,40 @@ export default function AdminDashboard() {
   const totals = useMemo(() => {
     const z: Omit<VendorRow, "id" | "name"> = {
       security: 0,
-      manualPayIn: 0,
-      approvedPayIn: 0,
-      discounted: 0,
-      netPayIn: 0,
-      payout: 0,
-      unsettlePayout: 0,
-      settlement: 0,
-      net: 0,
-      prevBalance: 0,
-      payInCommission: 0,
-      payOutCommission: 0,
-      referralCommission: 0,
-      running: 0,
-      runningUnsettled: 0,
       credit: 0,
+      totalPayIn: 0,
+      totalPayout: 0,
+      payInToday: 0,
+      payoutToday: 0,
+      running: 0,
+      totalSettlement: 0,
+      lastSettlement: 0,
+      payInCommissionPct: 0,
+      payOutCommissionPct: 0,
+      referralCommissionPct: 0,
+      payInCommissionAmount: 0,
+      payOutCommissionAmount: 0,
+      referralCommissionAmount: 0,
       finalBalance: 0,
       remainingBalance: 0,
     };
     return rows.reduce(
       (acc, r) => ({
         security: acc.security + r.security,
-        manualPayIn: acc.manualPayIn + r.manualPayIn,
-        approvedPayIn: acc.approvedPayIn + r.approvedPayIn,
-        discounted: acc.discounted + r.discounted,
-        netPayIn: acc.netPayIn + r.netPayIn,
-        payout: acc.payout + r.payout,
-        unsettlePayout: acc.unsettlePayout + r.unsettlePayout,
-        settlement: acc.settlement + r.settlement,
-        net: acc.net + r.net,
-        prevBalance: acc.prevBalance + r.prevBalance,
-        payInCommission: acc.payInCommission,
-        payOutCommission: acc.payOutCommission,
-        referralCommission: acc.referralCommission,
-        running: acc.running + r.running,
-        runningUnsettled: acc.runningUnsettled + r.runningUnsettled,
         credit: acc.credit + r.credit,
+        totalPayIn: acc.totalPayIn + r.totalPayIn,
+        totalPayout: acc.totalPayout + r.totalPayout,
+        payInToday: acc.payInToday + r.payInToday,
+        payoutToday: acc.payoutToday + r.payoutToday,
+        running: acc.running + r.running,
+        totalSettlement: acc.totalSettlement + r.totalSettlement,
+        lastSettlement: acc.lastSettlement + r.lastSettlement,
+        payInCommissionPct: acc.payInCommissionPct,
+        payOutCommissionPct: acc.payOutCommissionPct,
+        referralCommissionPct: acc.referralCommissionPct,
+        payInCommissionAmount: acc.payInCommissionAmount + r.payInCommissionAmount,
+        payOutCommissionAmount: acc.payOutCommissionAmount + r.payOutCommissionAmount,
+        referralCommissionAmount: acc.referralCommissionAmount + r.referralCommissionAmount,
         finalBalance: acc.finalBalance + r.finalBalance,
         remainingBalance: acc.remainingBalance + r.remainingBalance,
       }),
@@ -779,10 +770,7 @@ export default function AdminDashboard() {
       : getActionLabelSpace(tableToolbarHoverLabel(hoveredTableActionIndex));
 
   const xh = (k: StatsColKey) => (colHighlight[k] ? " bg-amber-50/90 dark:bg-amber-950/35" : "");
-  const xv = (k: StatsColKey) => {
-    if (HIGHLIGHT_ONLY_COLS.has(k)) return colHighlight[k] ? "" : " hidden";
-    return colVisible[k] ? "" : " hidden";
-  };
+  const xv = (k: StatsColKey) => (colVisible[k] ? "" : " hidden");
   const visibleColCount = FIN_STATS_COLUMNS.filter((c) => colVisible[c.key]).length;
 
   return (
@@ -973,20 +961,9 @@ export default function AdminDashboard() {
                           type="checkbox"
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500/30 dark:border-gray-600 dark:bg-gray-800"
                           checked={colHighlight[c.key]}
-                          onChange={() => {
-                            const next = !colHighlight[c.key];
-                            setColHighlight((prev) => ({ ...prev, [c.key]: next }));
-                            if (HIGHLIGHT_ONLY_COLS.has(c.key)) {
-                              setColVisible((prev) => ({ ...prev, [c.key]: next }));
-                            }
-                          }}
+                          onChange={() => setColHighlight((prev) => ({ ...prev, [c.key]: !prev[c.key] }))}
                         />
-                        <span className="truncate">
-                          {c.label}
-                          {HIGHLIGHT_ONLY_COLS.has(c.key) && (
-                            <span className="ml-1 text-[9px] font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-wide">highlight to show</span>
-                          )}
-                        </span>
+                        <span className="truncate">{c.label}</span>
                       </label>
                     ))}
                   </div>
@@ -1047,7 +1024,7 @@ export default function AdminDashboard() {
 
         {/* Table (horizontal scroll) */}
         <div className="overflow-x-auto">
-          <table className="w-full text-xs" style={{ minWidth: "2000px" }}>
+          <table className="w-full text-xs" style={{ minWidth: "1680px" }}>
             <thead>
               <tr className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-gray-800">
                 {FIN_STATS_COLUMNS.map((col) => (
@@ -1070,33 +1047,20 @@ export default function AdminDashboard() {
                 <tr className="border-b-2 border-gray-200 dark:border-gray-700 bg-gray-100/60 dark:bg-white/[0.04]">
                   <td className={`${colCell} sticky left-0 z-10 bg-gray-100 dark:bg-gray-900 font-bold text-gray-600 dark:text-gray-300${xh("vendor")}${xv("vendor")}`}>Vendor</td>
                   <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("security")}${xv("security")}`}>{totals.security.toLocaleString("en-IN")}</td>
-                  <td className={`${colCell}${xh("manualPayIn")}${xv("manualPayIn")}`}>{totals.manualPayIn}</td>
-                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("approvedPayIn")}${xv("approvedPayIn")}`}>{totals.approvedPayIn.toLocaleString("en-IN")}</td>
-                  <td className={`${colCell}${xh("discounted")}${xv("discounted")}`}>{totals.discounted}</td>
-                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("netPayIn")}${xv("netPayIn")}`}>{totals.netPayIn.toLocaleString("en-IN")}</td>
-                  <td className={`${colCell} font-bold text-orange-500${xh("payout")}${xv("payout")}`}>{totals.payout.toLocaleString("en-IN")}</td>
-                  <td className={`${colCell} font-bold text-red-500${xh("unsettlePayout")}${xv("unsettlePayout")}`}>{fmt(totals.unsettlePayout)}</td>
-                  <td className={`${colCell}${xh("settlement")}${xv("settlement")}`}>{totals.settlement.toLocaleString("en-IN")}</td>
-                  <td className={`${colCell} font-bold text-red-500${xh("net")}${xv("net")}`}>{fmt(totals.net)}</td>
-                  <td className={`${colCell} text-gray-400${xh("payInCommission")}${xv("payInCommission")}`}>—</td>
-                  <td className={`${colCell} text-gray-400${xh("payOutCommission")}${xv("payOutCommission")}`}>—</td>
-                  <td className={`${colCell} text-gray-400${xh("referralCommission")}${xv("referralCommission")}`}>—</td>
-                  <td className={`${colCell}${xh("running")}${xv("running")}`}>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-green-600 dark:text-green-400 font-semibold">{(totals.running / 1000).toFixed(0)}K</span>
-                      <span className="text-blue-500 font-semibold text-[10px]">{totals.runningUnsettled.toLocaleString("en-IN")}</span>
-                    </div>
-                  </td>
-                  <td className={`${colCell}${xh("runningUnsettled")}${xv("runningUnsettled")}`}>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-green-600 dark:text-green-400 font-semibold">{totals.runningUnsettled.toLocaleString("en-IN")}</span>
-                      <span className="text-orange-500 font-semibold text-[10px]">{(totals.runningUnsettled * 0.87).toFixed(0)}</span>
-                    </div>
-                  </td>
+                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("totalPayIn")}${xv("totalPayIn")}`}>{totals.totalPayIn.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} font-bold text-orange-500${xh("totalPayout")}${xv("totalPayout")}`}>{totals.totalPayout.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("payInToday")}${xv("payInToday")}`}>{totals.payInToday.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} font-bold text-orange-500${xh("payoutToday")}${xv("payoutToday")}`}>{totals.payoutToday.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell}${xh("running")}${xv("running")}`}>{badge(totals.running)}</td>
+                  <td className={`${colCell}${xh("totalSettlement")}${xv("totalSettlement")}`}>{totals.totalSettlement.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell}${xh("lastSettlement")}${xv("lastSettlement")}`}>{totals.lastSettlement.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} text-gray-400${xh("payInCommissionPct")}${xv("payInCommissionPct")}`}>—</td>
+                  <td className={`${colCell} font-semibold text-emerald-600 dark:text-emerald-400${xh("payInCommissionAmount")}${xv("payInCommissionAmount")}`}>{totals.payInCommissionAmount.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} text-gray-400${xh("payOutCommissionPct")}${xv("payOutCommissionPct")}`}>—</td>
+                  <td className={`${colCell} font-semibold text-emerald-600 dark:text-emerald-400${xh("payOutCommissionAmount")}${xv("payOutCommissionAmount")}`}>{totals.payOutCommissionAmount.toLocaleString("en-IN")}</td>
+                  <td className={`${colCell} text-gray-400${xh("referralCommissionPct")}${xv("referralCommissionPct")}`}>—</td>
+                  <td className={`${colCell} font-semibold text-emerald-600 dark:text-emerald-400${xh("referralCommissionAmount")}${xv("referralCommissionAmount")}`}>{totals.referralCommissionAmount.toLocaleString("en-IN")}</td>
                   <td className={`${colCell} font-bold text-blue-600 dark:text-blue-400${xh("credit")}${xv("credit")}`}>{totals.credit.toLocaleString("en-IN")}</td>
-                  <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("finalBalance")}${xv("finalBalance")}`}>{totals.finalBalance.toLocaleString("en-IN")}</td>
-                  <td className={`${colCell} font-bold text-green-600 dark:text-green-400${xh("remainingBalance")}${xv("remainingBalance")}`}>{totals.remainingBalance.toLocaleString("en-IN")}</td>
-                  <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{totals.prevBalance}</td>
                   <td className={`${colCell} ${colActions}${xh("actions")}${xv("actions")}`}></td>
                 </tr>
               )}
@@ -1118,39 +1082,22 @@ export default function AdminDashboard() {
                     </td>
 
                     <td className={`${colCell}${xh("security")}${xv("security")}`}>{row.security > 0 ? row.security.toLocaleString("en-IN") : "0"}</td>
-                    <td className={`${colCell}${xh("manualPayIn")}${xv("manualPayIn")}`}>{row.manualPayIn}</td>
-                    <td className={`${colCell}${xh("approvedPayIn")}${xv("approvedPayIn")}`}>{row.approvedPayIn > 0 ? row.approvedPayIn.toLocaleString("en-IN") : "0"}</td>
-                    <td className={`${colCell}${xh("discounted")}${xv("discounted")}`}>{row.discounted}</td>
-                    <td className={`${colCell}${xh("netPayIn")}${xv("netPayIn")}`}>{row.netPayIn > 0 ? row.netPayIn.toLocaleString("en-IN") : "0"}</td>
-                    <td className={`${colCell}${xh("payout")}${xv("payout")}`}>{row.payout > 0 ? row.payout.toLocaleString("en-IN") : "0"}</td>
-                    <td className={`${colCell}${xh("unsettlePayout")}${xv("unsettlePayout")}`}>{colorVal(row.unsettlePayout, true)}</td>
-                    <td className={`${colCell}${xh("settlement")}${xv("settlement")}`}>{colorVal(row.settlement, true)}</td>
-                    <td className={`${colCell}${xh("net")}${xv("net")}`}>{colorVal(row.net, true)}</td>
-                    <td className={`${colCell}${xh("payInCommission")}${xv("payInCommission")}`}>{fmtPct(row.payInCommission)}</td>
-                    <td className={`${colCell}${xh("payOutCommission")}${xv("payOutCommission")}`}>{fmtPct(row.payOutCommission)}</td>
-                    <td className={`${colCell}${xh("referralCommission")}${xv("referralCommission")}`}>{fmtPct(row.referralCommission)}</td>
-
-                    {/* Running — badge */}
-                    <td className={`${colCell}${xh("running")}${xv("running")}`}>
-                      {badge(row.running)}
-                    </td>
-
-                    {/* Running Unsettled — badge */}
-                    <td className={`${colCell}${xh("runningUnsettled")}${xv("runningUnsettled")}`}>
-                      {badge(row.runningUnsettled)}
-                    </td>
-
+                    <td className={`${colCell}${xh("totalPayIn")}${xv("totalPayIn")}`}>{row.totalPayIn > 0 ? row.totalPayIn.toLocaleString("en-IN") : "0"}</td>
+                    <td className={`${colCell}${xh("totalPayout")}${xv("totalPayout")}`}>{row.totalPayout > 0 ? row.totalPayout.toLocaleString("en-IN") : "0"}</td>
+                    <td className={`${colCell}${xh("payInToday")}${xv("payInToday")}`}>{row.payInToday > 0 ? row.payInToday.toLocaleString("en-IN") : "0"}</td>
+                    <td className={`${colCell}${xh("payoutToday")}${xv("payoutToday")}`}>{row.payoutToday > 0 ? row.payoutToday.toLocaleString("en-IN") : "0"}</td>
+                    <td className={`${colCell}${xh("running")}${xv("running")}`}>{badge(row.running)}</td>
+                    <td className={`${colCell}${xh("totalSettlement")}${xv("totalSettlement")}`}>{colorVal(row.totalSettlement, true)}</td>
+                    <td className={`${colCell}${xh("lastSettlement")}${xv("lastSettlement")}`}>{row.lastSettlement > 0 ? row.lastSettlement.toLocaleString("en-IN") : "0"}</td>
+                    <td className={`${colCell}${xh("payInCommissionPct")}${xv("payInCommissionPct")}`}>{fmtPct(row.payInCommissionPct)}</td>
+                    <td className={`${colCell}${xh("payInCommissionAmount")}${xv("payInCommissionAmount")}`}>{colorVal(row.payInCommissionAmount, true)}</td>
+                    <td className={`${colCell}${xh("payOutCommissionPct")}${xv("payOutCommissionPct")}`}>{fmtPct(row.payOutCommissionPct)}</td>
+                    <td className={`${colCell}${xh("payOutCommissionAmount")}${xv("payOutCommissionAmount")}`}>{colorVal(row.payOutCommissionAmount, true)}</td>
+                    <td className={`${colCell}${xh("referralCommissionPct")}${xv("referralCommissionPct")}`}>{fmtPct(row.referralCommissionPct)}</td>
+                    <td className={`${colCell}${xh("referralCommissionAmount")}${xv("referralCommissionAmount")}`}>{colorVal(row.referralCommissionAmount, true)}</td>
                     <td className={`${colCell}${xh("credit")}${xv("credit")}`}>
                       <EditableCreditCell rowId={row.id} value={row.credit} onSave={saveRowCredit} />
                     </td>
-
-                    {/* Final Balance */}
-                    <td className={`${colCell}${xh("finalBalance")}${xv("finalBalance")}`}>{colorVal(row.finalBalance, true)}</td>
-
-                    {/* Remaining Balance */}
-                    <td className={`${colCell}${xh("remainingBalance")}${xv("remainingBalance")}`}>{colorVal(row.remainingBalance, true)}</td>
-
-                    <td className={`${colCell}${xh("prevBalance")}${xv("prevBalance")}`}>{row.prevBalance}</td>
 
                     {/* Actions — same label-from-behind + sibling shift as Financial Statistics toolbar */}
                     <td className={`${colCell} ${colActions}${xh("actions")}${xv("actions")}`}>

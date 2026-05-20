@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { copyTextToClipboard } from "@/lib/copy-clipboard";
 import { SettingsIcon } from "@/icons/nav-icons";
+import CompanyApiKeysSection from "@/components/companies/CompanyApiKeysSection";
 
 type CompanyMe = {
   id: string;
@@ -171,6 +172,8 @@ export default function CompanySettings() {
           </div>
         </div>
       </div>
+
+      <CompanyApiKeysSection />
     </div>
   );
 }
